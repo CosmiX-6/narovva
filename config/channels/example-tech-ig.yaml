@@ -39,6 +39,7 @@ credentials:
   instagram_app_id_env: "IG_APP_ID__example_tech_ig"
   instagram_app_secret_env: "IG_APP_SECRET__example_tech_ig"
   openai_api_key_env: "OPENAI_API_KEY"
+  gemini_api_key_env: "GOOGLE_API_KEY"
 
-text_provider: openai
-image_provider: openai
+text_provider: gemini
+image_provider: gemini

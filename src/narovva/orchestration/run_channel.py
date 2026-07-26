@@ -139,29 +139,34 @@ def run_channel(
 def _process_one(
     article: FeedArticle, genre_setting: GenreSetting, channel: ChannelConfig, *, dry_run: bool
 ) -> _Outcome:
-    llm = _build_llm(channel)
-    pipeline = Pipeline(
-        PipelineConfig(
-            text_provider=channel.text_provider,
-            image_provider=channel.image_provider,
-            output_dir=f"/tmp/narovva/{channel.id}",
-            brand=channel.brand.to_poster_core(),
-        ),
-        llm=llm,
-    )
-
-    article_full, brief = pipeline.analyze(article.url)
-    asset_types = [AssetType(t) for t in genre_setting.asset_types] if genre_setting.asset_types else None
-    assets = pipeline.run_from_brief(
-        article_full, brief,
-        asset_types=asset_types,
-        platform=render_platform_for(PublishPlatform(channel.platform)),
-    )
-    asset_type_values = [a.asset_type.value for a in assets]
-
-    caption = generate_caption(
-        brief, publish_platform=PublishPlatform(channel.platform), tone=channel.caption, llm=llm,
-    )
+    try:
+        llm = _build_llm(channel)
+        pipeline = Pipeline(
+            PipelineConfig(
+                text_provider=channel.text_provider,
+                image_provider=channel.image_provider,
+                output_dir=f"/tmp/narovva/{channel.id}",
+                brand=channel.brand.to_poster_core(),
+            ),
+            llm=llm,
+        )
+        article_full, brief = pipeline.analyze(article.url)
+        asset_types = [AssetType(t) for t in genre_setting.asset_types] if genre_setting.asset_types else None
+        assets = pipeline.run_from_brief(
+            article_full, brief,
+            asset_types=asset_types,
+            platform=render_platform_for(PublishPlatform(channel.platform)),
+        )
+        asset_type_values = [a.asset_type.value for a in assets]
+        caption = generate_caption(
+            brief, publish_platform=PublishPlatform(channel.platform), tone=channel.caption, llm=llm,
+        )
+    except Exception as exc:
+        # A bad article (unextractable page, transient LLM/network error)
+        # must not crash the whole channel run -- record it as a failed
+        # attempt and let the caller move on to the next article.
+        logger.warning("channel %s: failed to process %s: %s", channel.id, article.url, exc)
+        return _Outcome(status="failed", caption_text="", hashtags=[], asset_types=[], error=str(exc))
 
     if dry_run:
         return _Outcome(
