@@ -30,4 +30,15 @@ def ensure_schema(conn: psycopg.Connection) -> None:
 
 
 def _split_statements(sql: str) -> list[str]:
-    return [s.strip() for s in sql.split(";") if s.strip() and not s.strip().startswith("--")]
+    """Split on top-level semicolons. A leading-comment-only chunk (e.g. the
+    file's header comment glued to the first real statement) is fine to send
+    as-is -- Postgres ignores SQL comments -- so this only drops chunks that
+    are *entirely* comments/whitespace once comment lines are stripped."""
+    statements = []
+    for chunk in sql.split(";"):
+        code_lines = [
+            line for line in chunk.splitlines() if line.strip() and not line.strip().startswith("--")
+        ]
+        if code_lines:
+            statements.append(chunk.strip())
+    return statements
