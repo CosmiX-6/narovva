@@ -1,0 +1,10 @@
+# Mirror of pyproject.toml's [project.dependencies], for Vercel's pip-based
+# Python build. Keep in sync by hand when pyproject.toml changes.
+pydantic>=2.5
+pyyaml>=6.0
+httpx>=0.27
+psycopg[binary]>=3.1
+vercel_blob>=0.4
+cryptography>=42.0
+poster-core[all] @ git+https://github.com/CosmiX-6/poster-core.git@19b61c782e9b6b2a23e42cef14e350730716a4f9
+info-snipe @ git+https://github.com/CosmiX-6/info-snipe.git@31dfd1da5ef96ccaeeb5266cfd3101c38793502d

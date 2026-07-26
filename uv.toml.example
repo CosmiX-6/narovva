@@ -1,0 +1,7 @@
+# Copy to uv.toml (git-ignored) for local development against live sibling
+# checkouts instead of the pinned git commits in pyproject.toml. Never
+# committed: Vercel's build has no sibling checkout, so it must resolve the
+# git+https pins in pyproject.toml/requirements.txt unmodified.
+[sources]
+poster-core = { path = "../poster-core", editable = true, extras = ["all"] }
+info-snipe = { path = "../info-snipe", editable = true }

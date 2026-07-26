@@ -1,0 +1,44 @@
+# Example channel: an Instagram account covering tech + AI news.
+# Copy this file, rename it (the filename becomes the channel id unless you
+# set `id` explicitly), and adjust the fields below.
+
+enabled: true
+platform: instagram
+
+# Instagram Business Account id (found via the Graph API Explorer, or
+# GET /me/accounts -> instagram_business_account on the linked Facebook Page)
+ig_business_account_id: "REPLACE_WITH_IG_BUSINESS_ACCOUNT_ID"
+ig_page_id: "REPLACE_WITH_FACEBOOK_PAGE_ID"
+
+genres:
+  - genre: tech
+    country: us
+    limit: 10
+    cadence_minutes: 480 # at most once every 8 hours
+  - genre: ai
+    limit: 10
+    cadence_minutes: 720 # at most once every 12 hours
+    asset_types: [cover, carousel]
+
+brand:
+  name: "Example Tech Daily"
+  accent_color: "#38BDF8"
+  footer: "exampletechdaily.example"
+  font_path_bold: "assets/fonts/Inter-Bold.ttf"
+  font_path_regular: "assets/fonts/Inter-Regular.ttf"
+
+caption:
+  voice: "sharp, informative, no clickbait, written for a tech-savvy audience"
+  emoji: true
+  max_hashtags: 6
+  hashtag_style: footer
+  extra_hashtags: ["#tech", "#ai"]
+
+credentials:
+  instagram_access_token_env: "IG_ACCESS_TOKEN__example_tech_ig"
+  instagram_app_id_env: "IG_APP_ID__example_tech_ig"
+  instagram_app_secret_env: "IG_APP_SECRET__example_tech_ig"
+  openai_api_key_env: "OPENAI_API_KEY"
+
+text_provider: openai
+image_provider: openai

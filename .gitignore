@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.egg-info/
+.env
+uv.toml
+uv.lock
+.narovva/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.vercel/
