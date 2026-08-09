@@ -25,7 +25,7 @@ genres:
 brand:
   name: "Example Tech Daily"
   accent_color: "#38BDF8"
-  footer: "exampletechdaily.example"
+  footer: null
   font_path_bold: "assets/fonts/Inter-Bold.ttf"
   font_path_regular: "assets/fonts/Inter-Regular.ttf"
 
