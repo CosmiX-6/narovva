@@ -5,10 +5,12 @@
 enabled: true
 platform: instagram
 
-# Instagram Business Account id (found via the Graph API Explorer, or
-# GET /me/accounts -> instagram_business_account on the linked Facebook Page)
-ig_business_account_id: "REPLACE_WITH_IG_BUSINESS_ACCOUNT_ID"
-ig_page_id: "REPLACE_WITH_FACEBOOK_PAGE_ID"
+# Instagram-scoped user id from Instagram API with Instagram Login (not the
+# Facebook-Page-linked Business Account id -- different namespace). Get it
+# with: curl "https://graph.instagram.com/v21.0/me?fields=id,username&access_token=..."
+ig_business_account_id: "27851606094524604"
+# Unused by the Instagram Login flow (no Facebook Page involved); left unset.
+ig_page_id: null
 
 genres:
   - genre: tech

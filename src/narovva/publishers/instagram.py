@@ -1,4 +1,8 @@
-"""Instagram Graph API publisher: single-image and carousel flows.
+"""Instagram publisher: single-image and carousel flows via Instagram API
+with Instagram Login (tokens generated through a "narovva-IG"-style
+sub-app, scoped to graph.instagram.com -- not the Facebook-Page-linked
+Business Login flow, which lives at graph.facebook.com and uses a
+different ig-user-id namespace).
 
 https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/content-publishing
 """
@@ -14,7 +18,7 @@ from ..platforms import PublishPlatform
 from ..tokens.instagram_token_store import get_valid_token
 from .base import PostResult, PublishAsset
 
-_GRAPH_BASE = "https://graph.facebook.com/v21.0"
+_GRAPH_BASE = "https://graph.instagram.com/v21.0"
 _POLL_INTERVAL_SECONDS = 2.0
 _POLL_MAX_ATTEMPTS = 15
 _REQUEST_RETRY_ATTEMPTS = 3

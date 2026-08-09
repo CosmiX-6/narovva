@@ -5,6 +5,11 @@ refresh) first, falling back to the seeded env-var token from the channel's
 config. Mutating a running function's own env var isn't practical on
 Vercel, so a refreshed token's new home is Postgres, with the env var
 staying as the disaster-recovery seed.
+
+Tokens here come from Instagram API with Instagram Login (a per-app
+"narovva-IG"-style Instagram app, not the Facebook-Page-linked Business
+Login flow), so refresh uses Instagram's own ig_refresh_token grant --
+no app id/secret involved, just the current token itself.
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ from ..db.engine import get_connection
 from ..db.repo import Repo
 from ..settings import get_settings, resolve_env
 
-_GRAPH_BASE = "https://graph.facebook.com/v21.0"
+_GRAPH_BASE = "https://graph.instagram.com"
 
 
 class InstagramTokenError(RuntimeError):
@@ -71,24 +76,17 @@ def store_refreshed_token(channel: ChannelConfig, *, access_token: str, expires_
 
 def refresh_token(channel: ChannelConfig) -> None:
     """Exchange the current long-lived token for a fresh ~60-day one. Meant
-    to be called periodically (e.g. weekly), well before expiry."""
+    to be called periodically (e.g. weekly), well before expiry.
+
+    Instagram API with Instagram Login refreshes via its own
+    ig_refresh_token grant against graph.instagram.com -- the current
+    token itself is the only credential required, no app id/secret.
+    """
     current = get_valid_token(channel)
-    app_id = resolve_env(channel.credentials.instagram_app_id_env)
-    app_secret = resolve_env(channel.credentials.instagram_app_secret_env)
-    if not app_id or not app_secret:
-        raise InstagramTokenError(
-            f"channel {channel.id!r} is missing instagram_app_id_env/instagram_app_secret_env, "
-            "required to refresh its long-lived token"
-        )
 
     resp = httpx.get(
-        f"{_GRAPH_BASE}/oauth/access_token",
-        params={
-            "grant_type": "fb_exchange_token",
-            "client_id": app_id,
-            "client_secret": app_secret,
-            "fb_exchange_token": current,
-        },
+        f"{_GRAPH_BASE}/refresh_access_token",
+        params={"grant_type": "ig_refresh_token", "access_token": current},
         timeout=20.0,
     )
     try:
