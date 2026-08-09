@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "api/cron/run_due_channels.py": {
-      "maxDuration": 60
-    }
-  }
-}
