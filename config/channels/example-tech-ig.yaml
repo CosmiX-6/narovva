@@ -15,19 +15,19 @@ ig_page_id: null
 genres:
   - genre: tech
     country: us
-    limit: 10
-    cadence_minutes: 480 # at most once every 8 hours
+    limit: 3
+    cadence_minutes: 60 # up to once per hour
   - genre: ai
-    limit: 10
-    cadence_minutes: 720 # at most once every 12 hours
+    limit: 3
+    cadence_minutes: 60 # up to once per hour
     asset_types: [cover, carousel]
 
 brand:
   name: "Example Tech Daily"
   accent_color: "#38BDF8"
   footer: null
-  font_path_bold: "assets/fonts/Inter-Bold.ttf"
-  font_path_regular: "assets/fonts/Inter-Regular.ttf"
+  font_path_bold: "assets/fonts/DejaVuSans-Bold.ttf"
+  font_path_regular: "assets/fonts/DejaVuSans-Regular.ttf"
 
 caption:
   voice: "sharp, informative, no clickbait, written for a tech-savvy audience"

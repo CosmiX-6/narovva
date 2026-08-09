@@ -52,7 +52,13 @@ def run_channel(
     *,
     genres_filter: list[str] | None = None,
     dry_run: bool = False,
+    max_posts_per_genre: int | None = None,
 ) -> ChannelRunResult:
+    """Run one channel's genres. `max_posts_per_genre` bounds how many
+    successful publishes a single genre can produce in this call -- unset
+    (the CLI default) processes every fetched article, which is what you
+    want for a manual/testing run; a scheduled/cron run should pass 1 so
+    an hourly trigger can't dump a backlog of posts in one invocation."""
     settings = get_settings()
     repo = _open_repo(settings)
     run_id = repo.start_run(channel.id) if repo else None
@@ -76,7 +82,10 @@ def run_channel(
                 limit=genre_setting.limit,
                 mark_seen=False,
             )
+            genre_posted = 0
             for article in articles:
+                if max_posts_per_genre is not None and genre_posted >= max_posts_per_genre:
+                    break
                 result.considered += 1
 
                 if repo and repo.attempts_exhausted(
@@ -115,6 +124,7 @@ def run_channel(
                 if outcome.status == "success":
                     store.mark_seen(article)
                     result.posted += 1
+                    genre_posted += 1
                 else:
                     result.failed += 1
                     result.errors.append(f"{article.url}: {outcome.error}")

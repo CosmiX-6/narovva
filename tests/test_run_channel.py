@@ -69,3 +69,47 @@ def test_process_one_failure_in_render_is_caught(monkeypatch):
 
     assert outcome.status == "failed"
     assert "bad article extraction" in outcome.error
+
+
+def test_max_posts_per_genre_caps_publishes_within_one_run(monkeypatch):
+    articles = [
+        FeedArticle(
+            content_id=f"id-{i}", title=f"Story {i}", url=f"https://example.com/{i}",
+            source_name="Example", genre="tech",
+        )
+        for i in range(5)
+    ]
+
+    class _FakeFetcher:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def fetch(self, genre, country, limit, mark_seen):
+            return articles
+
+    class _FakeStore:
+        def mark_seen(self, article):
+            pass
+
+    monkeypatch.setattr(run_channel_module, "NewsFetcher", _FakeFetcher)
+    monkeypatch.setattr(run_channel_module, "get_store_for_channel", lambda channel_id: _FakeStore())
+    monkeypatch.setattr(
+        run_channel_module, "get_settings",
+        lambda: run_channel_module.Settings(database_url=None, newsapi_key=None),
+    )
+    monkeypatch.setattr(
+        run_channel_module,
+        "_process_one",
+        lambda article, genre_setting, channel, dry_run: run_channel_module._Outcome(
+            status="success", caption_text="caption", hashtags=[], asset_types=["cover"],
+            platform_post_id="fake-id",
+        ),
+    )
+
+    result = run_channel_module.run_channel(
+        _channel(genres=[GenreSetting(genre="tech", limit=5)]),
+        max_posts_per_genre=1,
+    )
+
+    assert result.posted == 1
+    assert result.considered == 1
