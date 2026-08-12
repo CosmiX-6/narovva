@@ -21,6 +21,9 @@ from .base import PostResult, PublishAsset
 _GRAPH_BASE = "https://graph.instagram.com/v21.0"
 _POLL_INTERVAL_SECONDS = 2.0
 _POLL_MAX_ATTEMPTS = 15
+# Video containers (Reels) take much longer to process than image containers.
+_VIDEO_POLL_INTERVAL_SECONDS = 3.0
+_VIDEO_POLL_MAX_ATTEMPTS = 60
 _REQUEST_RETRY_ATTEMPTS = 3
 _RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
 
@@ -54,11 +57,18 @@ class InstagramGraphPublisher:
 
         ig_user_id = channel.ig_business_account_id
         try:
-            if len(hosted) == 1:
+            if len(hosted) == 1 and hosted[0].asset_type == "reel":
+                creation_id = self._create_reel_container(ig_user_id, hosted[0].hosted_url, caption, token)
+                self._wait_until_finished(
+                    creation_id, token,
+                    interval=_VIDEO_POLL_INTERVAL_SECONDS, max_attempts=_VIDEO_POLL_MAX_ATTEMPTS,
+                )
+            elif len(hosted) == 1:
                 creation_id = self._create_single_container(ig_user_id, hosted[0].hosted_url, caption, token)
+                self._wait_until_finished(creation_id, token)
             else:
                 creation_id = self._create_carousel_container(ig_user_id, hosted, caption, token)
-            self._wait_until_finished(creation_id, token)
+                self._wait_until_finished(creation_id, token)
             media_id = self._publish_container(ig_user_id, creation_id, token)
         except _GraphAPIError as exc:
             return PostResult(status="failed", error=str(exc), raw_response=exc.response)
@@ -92,15 +102,31 @@ class InstagramGraphPublisher:
         )
         return data["id"]
 
-    def _wait_until_finished(self, creation_id: str, token: str) -> None:
-        for _ in range(_POLL_MAX_ATTEMPTS):
+    def _create_reel_container(self, ig_user_id: str, video_url: str, caption: str, token: str) -> str:
+        data = self._post(
+            f"/{ig_user_id}/media",
+            {
+                "media_type": "REELS",
+                "video_url": video_url,
+                "caption": caption,
+                "share_to_feed": "true",
+                "access_token": token,
+            },
+        )
+        return data["id"]
+
+    def _wait_until_finished(
+        self, creation_id: str, token: str,
+        *, interval: float = _POLL_INTERVAL_SECONDS, max_attempts: int = _POLL_MAX_ATTEMPTS,
+    ) -> None:
+        for _ in range(max_attempts):
             data = self._get(f"/{creation_id}", {"fields": "status_code", "access_token": token})
             status = data.get("status_code")
             if status == "FINISHED":
                 return
             if status in ("ERROR", "EXPIRED"):
                 raise _GraphAPIError(f"media container {creation_id} failed to process: {data}", data)
-            time.sleep(_POLL_INTERVAL_SECONDS)
+            time.sleep(interval)
         # Give up polling and attempt publish anyway -- Instagram sometimes
         # finishes processing between the last poll and the publish call,
         # and media_publish itself returns a clear error if it truly isn't

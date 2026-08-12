@@ -40,6 +40,11 @@ class GenreSetting(BaseModel):
     limit: int = 10
     asset_types: list[str] | None = None
     cadence_minutes: int = 720
+    # Jamendo search tags used to pick background music for this genre's
+    # posts when the channel's publish_format is "reel" (e.g. ["technology",
+    # "corporate", "inspiring"]). Falls back to a genre-keyed default in
+    # narovva.music.jamendo if unset.
+    music_tags: list[str] | None = None
 
 
 class CredentialRefs(BaseModel):
@@ -51,6 +56,7 @@ class CredentialRefs(BaseModel):
     instagram_app_secret_env: str | None = None
     openai_api_key_env: str | None = None
     gemini_api_key_env: str | None = None
+    jamendo_client_id_env: str | None = None
 
 
 class ChannelConfig(BaseModel):
@@ -69,6 +75,10 @@ class ChannelConfig(BaseModel):
     credentials: CredentialRefs = Field(default_factory=CredentialRefs)
     text_provider: Literal["openai", "gemini"] = "openai"
     image_provider: Literal["openai", "gemini", "none"] = "openai"
+    # "carousel" (default): post poster-core's rendered images directly.
+    # "reel": assemble those same images into a short Ken-Burns video with
+    # a genre-matched royalty-free music track and publish as a Reel.
+    publish_format: Literal["carousel", "reel"] = "carousel"
 
     @field_validator("genres")
     @classmethod

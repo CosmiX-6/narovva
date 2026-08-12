@@ -30,4 +30,5 @@ jobs:
           IG_ACCESS_TOKEN__example_tech_ig: ${{ secrets.IG_ACCESS_TOKEN__EXAMPLE_TECH_IG }}
           IG_APP_ID__example_tech_ig: ${{ secrets.IG_APP_ID__EXAMPLE_TECH_IG }}
           IG_APP_SECRET__example_tech_ig: ${{ secrets.IG_APP_SECRET__EXAMPLE_TECH_IG }}
+          JAMENDO_CLIENT_ID__example_tech_ig: ${{ secrets.JAMENDO_CLIENT_ID__EXAMPLE_TECH_IG }}
         run: narovva run-due

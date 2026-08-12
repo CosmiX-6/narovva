@@ -12,6 +12,7 @@ from pathlib import Path
 from info_snipe import NewsAPISource, NewsFetcher, RSSSource
 from info_snipe.models import Article as FeedArticle
 from poster_core import AssetType, Pipeline, PipelineConfig
+from poster_core import Platform as RenderPlatform
 from poster_core.analysis.llm import GeminiChat, LLMClient, OpenAIChat
 
 from ..captions import generate_caption
@@ -20,9 +21,11 @@ from ..db.engine import ensure_schema, get_connection
 from ..db.repo import Repo
 from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
+from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for_genre
 from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
 from ..settings import Settings, get_settings, resolve_env
+from ..video import VideoAssemblyError, assemble_reel
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +152,7 @@ def run_channel(
 def _process_one(
     article: FeedArticle, genre_setting: GenreSetting, channel: ChannelConfig, *, dry_run: bool
 ) -> _Outcome:
+    is_reel = channel.publish_format == "reel"
     try:
         llm = _build_llm(channel)
         pipeline = Pipeline(
@@ -162,11 +166,12 @@ def _process_one(
         )
         article_full, brief = pipeline.analyze(article.url)
         asset_types = [AssetType(t) for t in genre_setting.asset_types] if genre_setting.asset_types else None
-        assets = pipeline.run_from_brief(
-            article_full, brief,
-            asset_types=asset_types,
-            platform=render_platform_for(PublishPlatform(channel.platform)),
+        # Reels are full-screen 9:16 video, so source frames are rendered at
+        # Instagram's story size rather than the 4:5 feed-post size.
+        render_platform = (
+            RenderPlatform.INSTAGRAM_STORY if is_reel else render_platform_for(PublishPlatform(channel.platform))
         )
+        assets = pipeline.run_from_brief(article_full, brief, asset_types=asset_types, platform=render_platform)
         asset_type_values = [a.asset_type.value for a in assets]
         caption = generate_caption(
             brief, publish_platform=PublishPlatform(channel.platform), tone=channel.caption, llm=llm,
@@ -187,22 +192,39 @@ def _process_one(
     host = VercelBlobImageHost()
     publish_assets: list[PublishAsset] = []
     hosted = []
+    caption_text = caption.text
     try:
-        for asset in assets:
-            for path in asset.paths:
-                h = host.upload(
-                    Path(path).read_bytes(),
-                    f"{channel.id}/{article.content_id}/{Path(path).name}",
-                )
-                hosted.append(h)
-                publish_assets.append(
-                    PublishAsset(asset_type=asset.asset_type.value, local_path=path, hosted_url=h.url)
-                )
+        if is_reel:
+            track = _pick_music_track(channel, genre_setting)
+            caption_text = f"{caption.text}\n\n{track.attribution}"
+            image_paths = [path for asset in assets for path in asset.paths]
+            video_path = assemble_reel(
+                image_paths, track.audio_bytes,
+                f"/tmp/narovva/{channel.id}/{article.content_id}_reel.mp4",
+            )
+            h = host.upload(
+                Path(video_path).read_bytes(),
+                f"{channel.id}/{article.content_id}/reel.mp4",
+                content_type="video/mp4",
+            )
+            hosted.append(h)
+            publish_assets.append(PublishAsset(asset_type="reel", local_path=video_path, hosted_url=h.url))
+        else:
+            for asset in assets:
+                for path in asset.paths:
+                    h = host.upload(
+                        Path(path).read_bytes(),
+                        f"{channel.id}/{article.content_id}/{Path(path).name}",
+                    )
+                    hosted.append(h)
+                    publish_assets.append(
+                        PublishAsset(asset_type=asset.asset_type.value, local_path=path, hosted_url=h.url)
+                    )
         publisher = get_publisher(PublishPlatform(channel.platform))
-        post_result = publisher.publish(publish_assets, caption.text, channel)
-    except ImageHostError as exc:
+        post_result = publisher.publish(publish_assets, caption_text, channel)
+    except (ImageHostError, JamendoError, VideoAssemblyError) as exc:
         return _Outcome(
-            status="failed", caption_text=caption.text, hashtags=caption.hashtags,
+            status="failed", caption_text=caption_text, hashtags=caption.hashtags,
             asset_types=asset_type_values, error=str(exc),
         )
     finally:
@@ -211,12 +233,23 @@ def _process_one(
 
     return _Outcome(
         status=post_result.status,
-        caption_text=caption.text,
+        caption_text=caption_text,
         hashtags=caption.hashtags,
         asset_types=asset_type_values,
         platform_post_id=post_result.platform_post_id,
         error=post_result.error,
     )
+
+
+def _pick_music_track(channel: ChannelConfig, genre_setting: GenreSetting) -> MusicTrack:
+    client_id = resolve_env(channel.credentials.jamendo_client_id_env)
+    if not client_id:
+        raise JamendoError(
+            f"channel {channel.id!r} has publish_format='reel' but credentials.jamendo_client_id_env "
+            "is unset (or the env var it names has no value)"
+        )
+    tags = genre_setting.music_tags or music_tags_for_genre(genre_setting.genre)
+    return JamendoMusicClient(client_id).pick_track(tags)
 
 
 def _build_llm(channel: ChannelConfig) -> LLMClient:
