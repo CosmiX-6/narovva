@@ -18,6 +18,13 @@ class _FakeResponse:
         return self._json_data
 
 
+@pytest.fixture(autouse=True)
+def _no_real_sleep(monkeypatch):
+    # pick_track retries with a real time.sleep backoff between attempts;
+    # tests exercise that path deliberately, so keep them fast.
+    monkeypatch.setattr(jamendo_module.time, "sleep", lambda s: None)
+
+
 def test_music_tags_for_genre_known_and_fallback():
     assert music_tags_for_genre("tech") == ["technology", "corporate", "inspiring"]
     assert music_tags_for_genre("some-unregistered-genre") == ["corporate", "inspiring"]
@@ -34,10 +41,7 @@ def test_pick_track_skips_tracks_without_download_permission(monkeypatch):
         ]
     }
 
-    calls = []
-
     def fake_get(url, **kwargs):
-        calls.append(url)
         if url.endswith("/tracks/"):
             return _FakeResponse(json_data=search_results)
         return _FakeResponse(content=b"fake-mp3-bytes")
@@ -55,32 +59,81 @@ def test_pick_track_skips_tracks_without_download_permission(monkeypatch):
     assert "Artist Two" in track.attribution
 
 
-def test_pick_track_raises_when_no_eligible_track(monkeypatch):
+def test_pick_track_retries_a_tag_before_giving_up_on_it(monkeypatch):
+    """Jamendo's search index is eventually-consistent -- the same query
+    can return zero results on one call and real results on the next."""
+    call_count = {"n": 0}
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/tracks/"):
+            call_count["n"] += 1
+            if call_count["n"] < 3:
+                return _FakeResponse(json_data={"results": []})
+            return _FakeResponse(json_data={
+                "results": [{
+                    "id": 9, "audiodownload_allowed": True, "audiodownload": "https://x/9.mp3",
+                    "name": "Eventually Found", "artist_name": "Artist", "license_ccurl": "https://cc/by/3.0",
+                }]
+            })
+        return _FakeResponse(content=b"bytes")
+
+    monkeypatch.setattr(jamendo_module.httpx, "get", fake_get)
+
+    track = JamendoMusicClient(client_id="fake-id").pick_track(["technology"])
+    assert track.name == "Eventually Found"
+    assert call_count["n"] == 3
+
+
+def test_pick_track_falls_back_to_untagged_search_when_all_tags_empty(monkeypatch):
+    seen_tags = []
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/tracks/"):
+            params = kwargs.get("params", {})
+            seen_tags.append(params.get("fuzzytags"))
+            if params.get("fuzzytags") is None:
+                return _FakeResponse(json_data={
+                    "results": [{
+                        "id": 1, "audiodownload_allowed": True, "audiodownload": "https://x/1.mp3",
+                        "name": "Generic Track", "artist_name": "Someone", "license_ccurl": "https://cc/by/3.0",
+                    }]
+                })
+            return _FakeResponse(json_data={"results": []})
+        return _FakeResponse(content=b"bytes")
+
+    monkeypatch.setattr(jamendo_module.httpx, "get", fake_get)
+
+    track = JamendoMusicClient(client_id="fake-id").pick_track(["technology", "corporate"])
+
+    assert track.name == "Generic Track"
+    assert seen_tags == ["technology", "technology", "technology", "technology",
+                          "corporate", "corporate", "corporate", "corporate", None]
+
+
+def test_pick_track_raises_when_nothing_found_anywhere(monkeypatch):
     def fake_get(url, **kwargs):
         return _FakeResponse(json_data={"results": []})
 
     monkeypatch.setattr(jamendo_module.httpx, "get", fake_get)
 
-    client = JamendoMusicClient(client_id="fake-id")
     with pytest.raises(JamendoError):
-        client.pick_track(["technology"])
+        JamendoMusicClient(client_id="fake-id").pick_track(["technology"])
 
 
 def test_pick_track_sends_commercial_and_derivative_safe_filters(monkeypatch):
-    captured_params = {}
+    captured = []
 
     def fake_get(url, **kwargs):
         if url.endswith("/tracks/"):
-            captured_params.update(kwargs.get("params", {}))
+            captured.append(kwargs.get("params", {}))
             return _FakeResponse(json_data={"results": []})
         return _FakeResponse(content=b"")
 
     monkeypatch.setattr(jamendo_module.httpx, "get", fake_get)
 
-    client = JamendoMusicClient(client_id="fake-id")
     with pytest.raises(JamendoError):
-        client.pick_track(["technology", "corporate"])
+        JamendoMusicClient(client_id="fake-id").pick_track(["technology"])
 
-    assert captured_params["ccnc"] == "false"
-    assert captured_params["ccnd"] == "false"
-    assert captured_params["tags"] == "technology+corporate"
+    assert all(p["ccnc"] == "false" for p in captured)
+    assert all(p["ccnd"] == "false" for p in captured)
+    assert captured[0]["fuzzytags"] == "technology"
