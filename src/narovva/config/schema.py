@@ -59,6 +59,10 @@ class ChannelConfig(BaseModel):
     platform: Literal["instagram", "x", "threads"] = "instagram"
     ig_business_account_id: str | None = None
     ig_page_id: str | None = None
+    # When set, overrides each genre's own cadence_minutes: the channel
+    # posts at most one item every rotation_minutes, cycling through
+    # `genres` in order so consecutive posts alternate genres.
+    rotation_minutes: int | None = None
     genres: list[GenreSetting]
     brand: BrandKitConfig
     caption: CaptionTone = Field(default_factory=CaptionTone)

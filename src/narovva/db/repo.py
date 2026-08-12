@@ -52,6 +52,19 @@ class Repo:
         ).fetchone()
         return row[0] if row else None
 
+    def last_successful_post(self, channel_id: str) -> Optional[tuple[str, datetime]]:
+        """Most recent successful post for the channel, across all genres --
+        used to drive rotation scheduling (narovva.orchestration.due)."""
+        row = self.conn.execute(
+            """
+            SELECT genre, published_at FROM post_history
+            WHERE channel_id = %s AND status = 'success'
+            ORDER BY published_at DESC LIMIT 1
+            """,
+            (channel_id,),
+        ).fetchone()
+        return (row[0], row[1]) if row else None
+
     # -- post history -----------------------------------------------------
 
     def get_attempt_count(self, channel_id: str, content_id: str) -> int:

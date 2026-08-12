@@ -1,5 +1,13 @@
-"""Which (channel, genre) pairs are due right now, given each genre's
-configured cadence and the last successful post for that channel+genre."""
+"""Which (channel, genre) pairs are due right now.
+
+Two scheduling modes per channel:
+- Rotation (channel.rotation_minutes is set): the channel posts at most one
+  item every rotation_minutes, cycling through channel.genres in configured
+  order so consecutive posts alternate genres.
+- Independent (legacy, rotation_minutes unset): each genre becomes due on
+  its own genre.cadence_minutes clock, independently of the others -- a
+  channel can post once per genre in the same run.
+"""
 
 from __future__ import annotations
 
@@ -25,13 +33,37 @@ def due_genres(channels: list[ChannelConfig]) -> list[DueGenre]:
     now = datetime.now(timezone.utc)
     due: list[DueGenre] = []
     for channel in channels:
-        if not channel.enabled:
+        if not channel.enabled or not channel.genres:
             continue
-        for genre_setting in channel.genres:
-            last = repo.last_successful_post_at(channel.id, genre_setting.genre) if repo else None
-            if last is None or now - last >= timedelta(minutes=genre_setting.cadence_minutes):
-                due.append(DueGenre(channel=channel, genre=genre_setting.genre))
+        if channel.rotation_minutes is not None:
+            genre = _next_rotation_genre(channel, repo, now)
+            if genre is not None:
+                due.append(DueGenre(channel=channel, genre=genre))
+        else:
+            for genre_setting in channel.genres:
+                last = repo.last_successful_post_at(channel.id, genre_setting.genre) if repo else None
+                if last is None or now - last >= timedelta(minutes=genre_setting.cadence_minutes):
+                    due.append(DueGenre(channel=channel, genre=genre_setting.genre))
     return due
+
+
+def _next_rotation_genre(channel: ChannelConfig, repo: Repo | None, now: datetime) -> str | None:
+    genre_order = [g.genre for g in channel.genres]
+    if repo is None:
+        # No persistence to check cadence against -- treat as always due,
+        # starting the rotation from the first configured genre.
+        return genre_order[0]
+
+    last = repo.last_successful_post(channel.id)
+    if last is None:
+        return genre_order[0]
+
+    last_genre, last_at = last
+    if now - last_at < timedelta(minutes=channel.rotation_minutes):
+        return None
+
+    idx = (genre_order.index(last_genre) + 1) % len(genre_order) if last_genre in genre_order else 0
+    return genre_order[idx]
 
 
 def due_channels_with_genres(channels: list[ChannelConfig]) -> list[tuple[ChannelConfig, list[str]]]:

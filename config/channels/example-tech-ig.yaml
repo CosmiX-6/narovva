@@ -12,14 +12,19 @@ ig_business_account_id: "27851606094524604"
 # Unused by the Instagram Login flow (no Facebook Page involved); left unset.
 ig_page_id: null
 
+# Post at most one item every 2 hours, alternating tech -> ai -> tech -> ...
+# in the order listed below. Overrides each genre's own cadence_minutes for
+# scheduling purposes (still used as each fetch's article-freshness window).
+rotation_minutes: 120
+
 genres:
   - genre: tech
     country: us
     limit: 3
-    cadence_minutes: 60 # up to once per hour
+    cadence_minutes: 60
   - genre: ai
     limit: 3
-    cadence_minutes: 60 # up to once per hour
+    cadence_minutes: 60
     asset_types: [cover, carousel]
 
 brand:
