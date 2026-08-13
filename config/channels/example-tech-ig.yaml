@@ -26,6 +26,7 @@ genres:
     country: us
     limit: 3
     cadence_minutes: 60
+    asset_types: [cover, carousel]
   - genre: ai
     limit: 3
     cadence_minutes: 60
