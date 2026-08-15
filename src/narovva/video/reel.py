@@ -43,7 +43,7 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
         zoom_expr = "min(zoom+0.0015,1.3)" if i % 2 == 0 else "if(eq(on,0),1.3,max(zoom-0.0015,1.0))"
         filter_parts.append(
             f"[{i}:v]scale={_WIDTH * 2}:{_HEIGHT * 2},"
-            f"zoompan=z='{zoom_expr}':d={frames_per_image}:s={_WIDTH}x{_HEIGHT}:fps={_FPS},"
+            f"zoompan=z='{zoom_expr}':d=1:s={_WIDTH}x{_HEIGHT}:fps={_FPS},"
             f"setsar=1[v{i}]"
         )
     concat_inputs = "".join(f"[v{i}]" for i in range(len(image_paths)))
@@ -53,7 +53,12 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
     audio_input_index = len(image_paths)
     cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y"]
     for img in image_paths:
-        cmd += ["-loop", "1", "-t", str(_SECONDS_PER_IMAGE), "-i", img]
+        # -framerate must match zoompan's fps below: with d=1 (one output
+        # frame per input frame, needed so the zoom expression advances
+        # once per real frame instead of zoompan re-multiplying an
+        # already-looped input), a framerate mismatch here desyncs each
+        # segment's real length from its intended _SECONDS_PER_IMAGE.
+        cmd += ["-loop", "1", "-framerate", str(_FPS), "-t", str(_SECONDS_PER_IMAGE), "-i", img]
     cmd += [
         "-i", str(audio_path),
         "-filter_complex", filter_complex,
