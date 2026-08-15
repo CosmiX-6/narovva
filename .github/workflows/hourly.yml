@@ -3,7 +3,12 @@ name: Hourly publish
 on:
   schedule:
     - cron: "0 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      genre:
+        description: "Force a specific genre now, bypassing the rotation cooldown (e.g. tech, ai). Leave blank for normal due-check behavior."
+        required: false
+        type: string
 
 jobs:
   run-due-channels:
@@ -31,4 +36,9 @@ jobs:
           IG_APP_ID__example_tech_ig: ${{ secrets.IG_APP_ID__EXAMPLE_TECH_IG }}
           IG_APP_SECRET__example_tech_ig: ${{ secrets.IG_APP_SECRET__EXAMPLE_TECH_IG }}
           JAMENDO_CLIENT_ID__example_tech_ig: ${{ secrets.JAMENDO_CLIENT_ID__EXAMPLE_TECH_IG }}
-        run: narovva run-due
+        run: |
+          if [ -n "${{ inputs.genre }}" ]; then
+            narovva run-channel config/channels/example-tech-ig.yaml --genre "${{ inputs.genre }}"
+          else
+            narovva run-due
+          fi
