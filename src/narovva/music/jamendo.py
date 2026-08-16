@@ -1,11 +1,13 @@
 """Background music selection via the Jamendo API v3
 (https://developer.jamendo.com/v3.0) -- searches Jamendo's Creative Commons
-catalog for a track matching a genre's mood tags, restricted to tracks whose
-license permits commercial use and modification (trimming/fading to fit a
-Reel), for genre-matched royalty-free soundtracks."""
+catalog for a track matching an article's topic and mood, restricted to
+tracks whose license permits commercial use and modification (trimming/
+fading to fit a Reel), for genre-and-sentiment-matched royalty-free
+soundtracks."""
 
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass
 
@@ -13,21 +15,45 @@ import httpx
 
 _API_BASE = "https://api.jamendo.com/v3.0"
 
-# Default Jamendo search tags per info-snipe genre key, used when a
-# channel's GenreSetting doesn't set its own music_tags.
-_DEFAULT_TAGS_BY_GENRE: dict[str, list[str]] = {
-    "tech": ["technology", "corporate", "inspiring"],
-    "ai": ["technology", "electronic", "inspiring"],
-    "gaming": ["electronic", "energetic"],
-    "world": ["cinematic", "ambient"],
-    "business": ["corporate", "inspiring"],
-    "science": ["ambient", "inspiring"],
+# One topical tag per info-snipe genre key, for search relevance -- paired
+# with a mood tag list below rather than driving the pick on its own, so
+# two articles in the same genre don't always reach for the same track.
+_TOPIC_TAG_BY_GENRE: dict[str, str] = {
+    "tech": "technology",
+    "ai": "technology",
+    "gaming": "electronic",
+    "world": "cinematic",
+    "business": "corporate",
+    "science": "ambient",
 }
-_FALLBACK_TAGS = ["corporate", "inspiring"]
+
+# Mood tags per poster_core.models.ContentBrief.tone -- a launch/win reads
+# as "celebratory" and gets an upbeat, energetic lift; a disaster/loss
+# reads as "sombre" and gets something soft; routine analysis stays
+# corporate and unobtrusive so the news itself stays the focus.
+_MOOD_TAGS_BY_TONE: dict[str, list[str]] = {
+    "urgent": ["cinematic", "intense", "energetic"],
+    "celebratory": ["upbeat", "energetic", "uplifting"],
+    "sombre": ["ambient", "piano", "melancholic"],
+    "analytical": ["corporate", "minimal", "focus"],
+    "inspiring": ["inspiring", "uplifting", "cinematic"],
+    "neutral": ["corporate", "inspiring"],
+}
 
 
-def music_tags_for_genre(genre: str) -> list[str]:
-    return _DEFAULT_TAGS_BY_GENRE.get(genre, _FALLBACK_TAGS)
+def music_tags_for(genre: str, tone: str) -> list[str]:
+    """Topical tag first (for relevance) then mood tags (for vibe),
+    de-duplicated in order."""
+    topic = _TOPIC_TAG_BY_GENRE.get(genre)
+    mood = _MOOD_TAGS_BY_TONE.get(tone, _MOOD_TAGS_BY_TONE["neutral"])
+    tags = ([topic] if topic else []) + mood
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for t in tags:
+        if t not in seen:
+            seen.add(t)
+            ordered.append(t)
+    return ordered
 
 
 @dataclass
@@ -85,7 +111,12 @@ class JamendoMusicClient:
         for attempt in range(_ATTEMPTS_PER_TAG):
             resp = httpx.get(f"{_API_BASE}/tracks/", params=params, timeout=self._timeout)
             resp.raise_for_status()
-            for track in resp.json().get("results", []):
+            results = resp.json().get("results", [])
+            # order=popularity_total makes the query deterministic, so
+            # without shuffling the same tag always returns the same track
+            # first -- every post in a genre ends up with identical music.
+            random.shuffle(results)
+            for track in results:
                 download_url = track.get("audiodownload")
                 if not track.get("audiodownload_allowed", True) or not download_url:
                     continue

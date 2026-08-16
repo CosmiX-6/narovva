@@ -14,6 +14,8 @@ _WIDTH, _HEIGHT = 1080, 1920  # 9:16, matches poster_core.Platform.INSTAGRAM_STO
 _SECONDS_PER_IMAGE = 4.0
 _FPS = 30
 _AUDIO_FADE_SECONDS = 1.5
+_XFADE_SECONDS = 0.6  # crossfade overlap between consecutive slides
+_XFADE_TRANSITION = "fade"
 
 
 class VideoAssemblyError(RuntimeError):
@@ -22,8 +24,9 @@ class VideoAssemblyError(RuntimeError):
 
 def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) -> str:
     """Renders a slow zoom/pan (Ken Burns) slideshow of `image_paths`, each
-    shown for _SECONDS_PER_IMAGE seconds, backed by `audio_bytes` trimmed
-    and faded to the video's total length. Returns `output_path`."""
+    shown for _SECONDS_PER_IMAGE seconds and crossfaded into the next,
+    backed by `audio_bytes` trimmed and faded to the video's total length.
+    Returns `output_path`."""
     if not image_paths:
         raise VideoAssemblyError("at least one image is required to assemble a reel")
 
@@ -32,11 +35,13 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
     audio_path = out.parent / f"{out.stem}_audio.mp3"
     audio_path.write_bytes(audio_bytes)
 
-    duration = _SECONDS_PER_IMAGE * len(image_paths)
-    frames_per_image = int(_SECONDS_PER_IMAGE * _FPS)
+    n = len(image_paths)
+    # A hard cap keeps the overlap sane if a caller ever shortens
+    # _SECONDS_PER_IMAGE below 2x the crossfade length.
+    xfade_seconds = min(_XFADE_SECONDS, _SECONDS_PER_IMAGE / 2)
 
     filter_parts = []
-    for i in range(len(image_paths)):
+    for i in range(n):
         # Alternate zoom-in / zoom-out so consecutive slides don't feel
         # identical; zoompan needs the image pre-scaled 2x so it has room
         # to zoom into without pixelating.
@@ -44,13 +49,35 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
         filter_parts.append(
             f"[{i}:v]scale={_WIDTH * 2}:{_HEIGHT * 2},"
             f"zoompan=z='{zoom_expr}':d=1:s={_WIDTH}x{_HEIGHT}:fps={_FPS},"
-            f"setsar=1[v{i}]"
+            f"setsar=1,format=yuv420p[v{i}]"
         )
-    concat_inputs = "".join(f"[v{i}]" for i in range(len(image_paths)))
-    filter_parts.append(f"{concat_inputs}concat=n={len(image_paths)}:v=1:a=0[vout]")
+
+    if n == 1:
+        vout_label = "v0"
+        duration = _SECONDS_PER_IMAGE
+    else:
+        # Chain xfade filters instead of a hard-cut concat: each transition
+        # blends the tail of the running stream into the next slide rather
+        # than jump-cutting, so slide changes read as a deliberate edit
+        # instead of a stutter. offset is the point (in the RUNNING merged
+        # stream's own timeline) where each transition starts, so it's
+        # tracked cumulatively rather than computed as a closed form.
+        label = "v0"
+        running_duration = _SECONDS_PER_IMAGE
+        for i in range(1, n):
+            out_label = "vout" if i == n - 1 else f"x{i}"
+            offset = running_duration - xfade_seconds
+            filter_parts.append(
+                f"[{label}][v{i}]xfade=transition={_XFADE_TRANSITION}:"
+                f"duration={xfade_seconds}:offset={offset}[{out_label}]"
+            )
+            running_duration += _SECONDS_PER_IMAGE - xfade_seconds
+            label = out_label
+        vout_label = "vout"
+        duration = running_duration
     filter_complex = ";".join(filter_parts)
 
-    audio_input_index = len(image_paths)
+    audio_input_index = n
     cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y"]
     for img in image_paths:
         # -framerate must match zoompan's fps below: with d=1 (one output
@@ -62,7 +89,7 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
     cmd += [
         "-i", str(audio_path),
         "-filter_complex", filter_complex,
-        "-map", "[vout]",
+        "-map", f"[{vout_label}]",
         "-map", f"{audio_input_index}:a",
         "-af", f"afade=t=out:st={max(duration - _AUDIO_FADE_SECONDS, 0)}:d={_AUDIO_FADE_SECONDS}",
         "-t", str(duration),

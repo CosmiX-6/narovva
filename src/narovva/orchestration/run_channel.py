@@ -21,7 +21,7 @@ from ..db.engine import ensure_schema, get_connection
 from ..db.repo import Repo
 from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
-from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for_genre
+from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
 from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
 from ..settings import Settings, get_settings, resolve_env
@@ -195,7 +195,7 @@ def _process_one(
     caption_text = caption.text
     try:
         if is_reel:
-            track = _pick_music_track(channel, genre_setting)
+            track = _pick_music_track(channel, genre_setting, brief.tone)
             caption_text = f"{caption.text}\n\n{track.attribution}"
             image_paths = [path for asset in assets for path in asset.paths]
             video_path = assemble_reel(
@@ -241,14 +241,14 @@ def _process_one(
     )
 
 
-def _pick_music_track(channel: ChannelConfig, genre_setting: GenreSetting) -> MusicTrack:
+def _pick_music_track(channel: ChannelConfig, genre_setting: GenreSetting, tone: str) -> MusicTrack:
     client_id = resolve_env(channel.credentials.jamendo_client_id_env)
     if not client_id:
         raise JamendoError(
             f"channel {channel.id!r} has publish_format='reel' but credentials.jamendo_client_id_env "
             "is unset (or the env var it names has no value)"
         )
-    tags = genre_setting.music_tags or music_tags_for_genre(genre_setting.genre)
+    tags = genre_setting.music_tags or music_tags_for(genre_setting.genre, tone)
     return JamendoMusicClient(client_id).pick_track(tags)
 
 

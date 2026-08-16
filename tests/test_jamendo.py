@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from narovva.music import jamendo as jamendo_module
-from narovva.music.jamendo import JamendoError, JamendoMusicClient, music_tags_for_genre
+from narovva.music.jamendo import JamendoError, JamendoMusicClient, music_tags_for
 
 
 class _FakeResponse:
@@ -25,9 +25,46 @@ def _no_real_sleep(monkeypatch):
     monkeypatch.setattr(jamendo_module.time, "sleep", lambda s: None)
 
 
-def test_music_tags_for_genre_known_and_fallback():
-    assert music_tags_for_genre("tech") == ["technology", "corporate", "inspiring"]
-    assert music_tags_for_genre("some-unregistered-genre") == ["corporate", "inspiring"]
+def test_music_tags_for_combines_topic_and_mood():
+    assert music_tags_for("tech", "neutral") == ["technology", "corporate", "inspiring"]
+    assert music_tags_for("tech", "celebratory") == ["technology", "upbeat", "energetic", "uplifting"]
+    assert music_tags_for("tech", "sombre") == ["technology", "ambient", "piano", "melancholic"]
+
+
+def test_music_tags_for_unknown_genre_and_tone_fall_back():
+    assert music_tags_for("some-unregistered-genre", "unknown-tone") == ["corporate", "inspiring"]
+
+
+def test_music_tags_for_dedupes_overlapping_topic_and_mood_tags():
+    # "science" genre's topic tag ("ambient") also appears in the "sombre"
+    # mood list -- it should only appear once, not be duplicated.
+    tags = music_tags_for("science", "sombre")
+    assert tags == ["ambient", "piano", "melancholic"]
+
+
+def test_pick_track_varies_across_calls_instead_of_always_the_top_result(monkeypatch):
+    """order=popularity_total makes Jamendo's own ranking deterministic;
+    without client-side shuffling every post in a genre would reach for
+    the exact same track."""
+    search_results = {
+        "results": [
+            {
+                "id": i, "audiodownload_allowed": True, "audiodownload": f"https://x/{i}.mp3",
+                "name": f"Track {i}", "artist_name": "Artist", "license_ccurl": "https://cc/by/3.0",
+            }
+            for i in range(1, 11)
+        ]
+    }
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/tracks/"):
+            return _FakeResponse(json_data=search_results)
+        return _FakeResponse(content=b"bytes")
+
+    monkeypatch.setattr(jamendo_module.httpx, "get", fake_get)
+
+    names = {JamendoMusicClient(client_id="fake-id").pick_track(["technology"]).name for _ in range(20)}
+    assert len(names) > 1, "expected varied track picks across repeated calls, got the same one every time"
 
 
 def test_pick_track_skips_tracks_without_download_permission(monkeypatch):

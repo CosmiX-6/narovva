@@ -53,7 +53,7 @@ def test_assemble_reel_produces_playable_9x16_video(tmp_path, silent_mp3_bytes):
     assert "1080x1920" in info
     assert "Video:" in info
     assert "Audio:" in info
-    assert "Duration: 00:00:08.0" in info  # 2 slides * 4s each, not stuck expanding slide 1
+    assert "Duration: 00:00:07.4" in info  # 2 slides * 4s, minus one 0.6s crossfade overlap
 
 
 def test_assemble_reel_advances_past_the_first_slide(tmp_path, silent_mp3_bytes):
