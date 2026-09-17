@@ -21,6 +21,13 @@ class BrandKitConfig(BaseModel):
     font_path_bold: str | None = None
     font_path_regular: str | None = None
     footer: str | None = None
+    # StoryCategory value (e.g. "ai", "science") -> hex. Overrides that
+    # category's accent; falls back to poster_core's built-in per-category
+    # accent for any category not listed here.
+    category_accents: dict[str, str] = Field(default_factory=dict)
+    # "@handle"-style social handle, without the "@", used by the deck's
+    # closing CTA slide ("Follow @handle for daily breakdowns").
+    social_handle: str | None = None
 
     def to_poster_core(self) -> BrandKit:
         return BrandKit(**self.model_dump())

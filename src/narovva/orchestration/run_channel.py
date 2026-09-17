@@ -25,7 +25,7 @@ from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
 from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
 from ..settings import Settings, get_settings, resolve_env
-from ..video import VideoAssemblyError, assemble_reel
+from ..video import VideoAssemblyError, assemble_reel, slide_duration
 
 logger = logging.getLogger(__name__)
 
@@ -198,9 +198,11 @@ def _process_one(
             track = _pick_music_track(channel, genre_setting, brief.tone)
             caption_text = f"{caption.text}\n\n{track.attribution}"
             image_paths = [path for asset in assets for path in asset.paths]
+            durations = [slide_duration(c) for c in _slide_char_counts(assets)]
             video_path = assemble_reel(
                 image_paths, track.audio_bytes,
                 f"/tmp/narovva/{channel.id}/{article.content_id}_reel.mp4",
+                durations=durations,
             )
             h = host.upload(
                 Path(video_path).read_bytes(),
@@ -239,6 +241,45 @@ def _process_one(
         platform_post_id=post_result.platform_post_id,
         error=post_result.error,
     )
+
+
+def _slide_char_counts(assets: list) -> list[int]:
+    """Visible-text character count per rendered image path, in the same
+    order as `[path for asset in assets for path in asset.paths]` -- the
+    Reel's per-slide timing formula reads text volume, not just image
+    count, so a dense slide holds on screen longer than a sparse one."""
+    counts: list[int] = []
+    for asset in assets:
+        if asset.asset_type is AssetType.CAROUSEL:
+            for slide, _ in zip(asset.plan.slides, asset.paths):
+                counts.append(_deck_slide_char_count(slide))
+        elif asset.asset_type is AssetType.INFOGRAPHIC:
+            char_count = sum(len(fact) for fact in asset.plan.facts)
+            counts.extend([char_count] * len(asset.paths))
+        else:  # COVER / THUMBNAIL: one path, headline + subheadline
+            char_count = len(asset.plan.headline) + len(asset.plan.subheadline or "")
+            counts.extend([char_count] * len(asset.paths))
+    return counts
+
+
+def _deck_slide_char_count(slide) -> int:
+    """Visible on-image text for one poster_core.DeckSlide, across every
+    field a slide renderer might actually draw -- not just kicker/heading/
+    body, since STATS/TIMELINE/MONEY_FLOW/COMPARISON/QUOTE slides carry
+    their real content in structured fields instead of those three."""
+    count = len(slide.kicker or "") + len(slide.heading or "") + len(slide.body or "")
+    count += sum(len(fact) for fact in slide.facts)
+    count += sum(len(event.when) + len(event.what) for event in slide.timeline)
+    count += sum(
+        len(step.actor) + len(step.amount or "") + len(step.detail or "")
+        for step in slide.money_trail
+    )
+    if slide.comparison:
+        c = slide.comparison
+        count += len(c.label_a) + len(c.value_a) + len(c.label_b) + len(c.value_b) + len(c.title or "")
+    if slide.quote:
+        count += len(slide.quote.text) + len(slide.quote.attribution or "")
+    return count
 
 
 def _pick_music_track(channel: ChannelConfig, genre_setting: GenreSetting, tone: str) -> MusicTrack:

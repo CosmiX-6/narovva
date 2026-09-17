@@ -3,6 +3,15 @@ from __future__ import annotations
 import sys
 
 from info_snipe.models import Article as FeedArticle
+from poster_core.models import (
+    AssetPlan,
+    AssetType,
+    DeckSlide,
+    GeneratedAsset,
+    Platform,
+    Quote,
+    SlideKind,
+)
 
 from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
 
@@ -113,3 +122,55 @@ def test_max_posts_per_genre_caps_publishes_within_one_run(monkeypatch):
 
     assert result.posted == 1
     assert result.considered == 1
+
+
+def test_slide_char_counts_matches_carousel_slide_order():
+    cover_plan = AssetPlan(
+        asset_type=AssetType.COVER, platform=Platform.INSTAGRAM_STORY,
+        headline="Headline", subheadline="Sub",
+    )
+    cover = GeneratedAsset(
+        asset_type=AssetType.COVER, platform=Platform.INSTAGRAM_STORY,
+        paths=["cover.png"], plan=cover_plan,
+    )
+
+    slides = [
+        DeckSlide(kind=SlideKind.HOOK, heading="Hook line"),
+        DeckSlide(kind=SlideKind.CTA, heading="Follow us", body="Recap"),
+    ]
+    carousel_plan = AssetPlan(
+        asset_type=AssetType.CAROUSEL, platform=Platform.INSTAGRAM_STORY,
+        headline="Headline", slides=slides,
+    )
+    carousel = GeneratedAsset(
+        asset_type=AssetType.CAROUSEL, platform=Platform.INSTAGRAM_STORY,
+        paths=["carousel_01.png", "carousel_02.png"], plan=carousel_plan,
+    )
+
+    counts = run_channel_module._slide_char_counts([cover, carousel])
+
+    assert counts == [
+        len("Headline") + len("Sub"),
+        len("Hook line"),
+        len("Follow us") + len("Recap"),
+    ]
+
+
+def test_slide_char_counts_reads_quote_slide_text():
+    # Regression: a QUOTE slide has no kicker/heading/body of its own -- its
+    # real on-image text lives entirely in `quote`. A naive
+    # kicker+heading+body count would silently score this slide as empty.
+    quote = Quote(text="This changes everything", attribution="Dana Reeve")
+    slide = DeckSlide(kind=SlideKind.QUOTE, quote=quote)
+    plan = AssetPlan(
+        asset_type=AssetType.CAROUSEL, platform=Platform.INSTAGRAM_STORY,
+        headline="Headline", slides=[slide],
+    )
+    asset = GeneratedAsset(
+        asset_type=AssetType.CAROUSEL, platform=Platform.INSTAGRAM_STORY,
+        paths=["carousel_01.png"], plan=plan,
+    )
+
+    counts = run_channel_module._slide_char_counts([asset])
+
+    assert counts == [len(quote.text) + len(quote.attribution)]

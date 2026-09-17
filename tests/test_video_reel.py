@@ -6,12 +6,27 @@ import imageio_ffmpeg
 import pytest
 from PIL import Image
 
-from narovva.video.reel import VideoAssemblyError, assemble_reel
+from narovva.video.reel import VideoAssemblyError, assemble_reel, slide_duration
 
 
 def test_assemble_reel_raises_without_images(tmp_path):
     with pytest.raises(VideoAssemblyError):
         assemble_reel([], b"", str(tmp_path / "out.mp4"))
+
+
+def test_assemble_reel_rejects_mismatched_durations_length(tmp_path):
+    with pytest.raises(VideoAssemblyError):
+        assemble_reel(["a.png", "b.png"], b"", str(tmp_path / "out.mp4"), durations=[1.8])
+
+
+def test_slide_duration_floors_at_1_8_seconds_for_sparse_text():
+    assert slide_duration(0) == pytest.approx(1.8 + 0.4)
+    assert slide_duration(5) == pytest.approx(1.8 + 0.4)  # 5/14 < floor
+
+
+def test_slide_duration_scales_with_character_count_above_the_floor():
+    # 280 chars / 14 chars-per-second = 20s, well above the 1.8s floor
+    assert slide_duration(280) == pytest.approx(20.0 + 0.4)
 
 
 @pytest.fixture
@@ -54,6 +69,24 @@ def test_assemble_reel_produces_playable_9x16_video(tmp_path, silent_mp3_bytes):
     assert "Video:" in info
     assert "Audio:" in info
     assert "Duration: 00:00:07.4" in info  # 2 slides * 4s, minus one 0.6s crossfade overlap
+
+
+def test_assemble_reel_honors_per_slide_durations(tmp_path, silent_mp3_bytes):
+    image_paths = []
+    for i, color in enumerate([(30, 60, 90), (90, 30, 60)]):
+        path = tmp_path / f"slide{i}.png"
+        Image.new("RGB", (1080, 1920), color).save(path)
+        image_paths.append(str(path))
+
+    output_path = str(tmp_path / "reel.mp4")
+    # 2s + 3s, minus one 0.6s crossfade overlap = 4.4s total.
+    assemble_reel(image_paths, silent_mp3_bytes, output_path, durations=[2.0, 3.0])
+
+    probe = subprocess.run(
+        [imageio_ffmpeg.get_ffmpeg_exe(), "-i", output_path],
+        capture_output=True, text=True,
+    )
+    assert "Duration: 00:00:04.4" in probe.stderr
 
 
 def test_assemble_reel_advances_past_the_first_slide(tmp_path, silent_mp3_bytes):

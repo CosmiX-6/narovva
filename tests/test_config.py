@@ -12,7 +12,7 @@ def test_load_example_channel():
     assert channel.id == "example-tech-ig"
     assert channel.platform == "instagram"
     assert [g.genre for g in channel.genres] == ["tech", "ai"]
-    assert channel.brand.name == "Example Tech Daily"
+    assert channel.brand.name == "CONTEXT UNFILTERED"
 
 
 def test_id_defaults_to_filename_stem(tmp_path):

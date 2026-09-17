@@ -5,30 +5,69 @@ this works the same in CI as on a laptop)."""
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
 
 import imageio_ffmpeg
 
+logger = logging.getLogger(__name__)
+
 _WIDTH, _HEIGHT = 1080, 1920  # 9:16, matches poster_core.Platform.INSTAGRAM_STORY
-_SECONDS_PER_IMAGE = 4.0
+_SECONDS_PER_IMAGE = 4.0  # fallback duration when the caller has no per-slide durations
 _FPS = 30
 _AUDIO_FADE_SECONDS = 1.5
 _XFADE_SECONDS = 0.6  # crossfade overlap between consecutive slides
 _XFADE_TRANSITION = "fade"
+
+# Design-system readability formula: duration = max(floor, chars/rate) +
+# transition buffer. The floor guarantees even a two-word slide gets a beat
+# to register; there is deliberately no ceiling here -- content that would
+# blow past a comfortable hold (the design system's 5.5s recommendation) is
+# a slide-splitting decision that belongs upstream, in poster-core's own
+# text limits, not something this function should silently clamp.
+_CHARS_PER_SECOND = 14.0
+_MIN_SLIDE_SECONDS = 1.8
+_TRANSITION_BUFFER_SECONDS = 0.4
+_RECOMMENDED_MAX_SECONDS = 5.5
 
 
 class VideoAssemblyError(RuntimeError):
     """Raised when ffmpeg is unavailable or fails to produce a video."""
 
 
-def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) -> str:
+def slide_duration(char_count: int) -> float:
+    """Design-system timing formula: max(1.8, chars/14) + 0.4s transition
+    buffer. Logs a warning (does not clamp) if the result exceeds the
+    system's 5.5s recommended ceiling -- that's a cue to split the slide's
+    content, not to truncate its time on screen."""
+    seconds = max(_MIN_SLIDE_SECONDS, char_count / _CHARS_PER_SECOND) + _TRANSITION_BUFFER_SECONDS
+    if seconds > _RECOMMENDED_MAX_SECONDS:
+        logger.warning(
+            "slide_duration: %d characters computes to %.1fs, above the %.1fs "
+            "recommended ceiling -- consider splitting this slide's content",
+            char_count, seconds, _RECOMMENDED_MAX_SECONDS,
+        )
+    return seconds
+
+
+def assemble_reel(
+    image_paths: list[str], audio_bytes: bytes, output_path: str,
+    durations: list[float] | None = None,
+) -> str:
     """Renders a slow zoom/pan (Ken Burns) slideshow of `image_paths`, each
-    shown for _SECONDS_PER_IMAGE seconds and crossfaded into the next,
-    backed by `audio_bytes` trimmed and faded to the video's total length.
-    Returns `output_path`."""
+    shown for its entry in `durations` (seconds) and crossfaded into the
+    next, backed by `audio_bytes` trimmed and faded to the video's total
+    length. `durations` defaults to a flat `_SECONDS_PER_IMAGE` per image
+    when unset. Returns `output_path`."""
     if not image_paths:
         raise VideoAssemblyError("at least one image is required to assemble a reel")
+
+    durations = durations if durations is not None else [_SECONDS_PER_IMAGE] * len(image_paths)
+    if len(durations) != len(image_paths):
+        raise VideoAssemblyError(
+            f"durations has {len(durations)} entries for {len(image_paths)} images"
+        )
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -36,9 +75,9 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
     audio_path.write_bytes(audio_bytes)
 
     n = len(image_paths)
-    # A hard cap keeps the overlap sane if a caller ever shortens
-    # _SECONDS_PER_IMAGE below 2x the crossfade length.
-    xfade_seconds = min(_XFADE_SECONDS, _SECONDS_PER_IMAGE / 2)
+    # A hard cap keeps the overlap sane if any slide's duration is very
+    # short -- the crossfade can never exceed half of the shortest slide.
+    xfade_seconds = min(_XFADE_SECONDS, min(durations) / 2)
 
     filter_parts = []
     for i in range(n):
@@ -54,7 +93,7 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
 
     if n == 1:
         vout_label = "v0"
-        duration = _SECONDS_PER_IMAGE
+        duration = durations[0]
     else:
         # Chain xfade filters instead of a hard-cut concat: each transition
         # blends the tail of the running stream into the next slide rather
@@ -63,7 +102,7 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
         # stream's own timeline) where each transition starts, so it's
         # tracked cumulatively rather than computed as a closed form.
         label = "v0"
-        running_duration = _SECONDS_PER_IMAGE
+        running_duration = durations[0]
         for i in range(1, n):
             out_label = "vout" if i == n - 1 else f"x{i}"
             offset = running_duration - xfade_seconds
@@ -71,7 +110,7 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
                 f"[{label}][v{i}]xfade=transition={_XFADE_TRANSITION}:"
                 f"duration={xfade_seconds}:offset={offset}[{out_label}]"
             )
-            running_duration += _SECONDS_PER_IMAGE - xfade_seconds
+            running_duration += durations[i] - xfade_seconds
             label = out_label
         vout_label = "vout"
         duration = running_duration
@@ -79,13 +118,13 @@ def assemble_reel(image_paths: list[str], audio_bytes: bytes, output_path: str) 
 
     audio_input_index = n
     cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y"]
-    for img in image_paths:
+    for img, img_duration in zip(image_paths, durations):
         # -framerate must match zoompan's fps below: with d=1 (one output
         # frame per input frame, needed so the zoom expression advances
         # once per real frame instead of zoompan re-multiplying an
         # already-looped input), a framerate mismatch here desyncs each
-        # segment's real length from its intended _SECONDS_PER_IMAGE.
-        cmd += ["-loop", "1", "-framerate", str(_FPS), "-t", str(_SECONDS_PER_IMAGE), "-i", img]
+        # segment's real length from its intended duration.
+        cmd += ["-loop", "1", "-framerate", str(_FPS), "-t", str(img_duration), "-i", img]
     cmd += [
         "-i", str(audio_path),
         "-filter_complex", filter_complex,

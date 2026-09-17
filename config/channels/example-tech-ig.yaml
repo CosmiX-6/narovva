@@ -1,6 +1,7 @@
-# Example channel: an Instagram account covering tech + AI news.
-# Copy this file, rename it (the filename becomes the channel id unless you
-# set `id` explicitly), and adjust the fields below.
+# Context Unfiltered: an Instagram account covering tech + AI news, run to
+# the "Context Unfiltered" design system (see the project's improvement.md
+# spec). File/id kept as example-tech-ig for continuity with existing
+# credentials, dedup history and GitHub Actions secrets.
 
 enabled: true
 platform: instagram
@@ -33,9 +34,29 @@ genres:
     asset_types: [cover, carousel]
 
 brand:
-  name: "Example Tech Daily"
-  accent_color: "#38BDF8"
+  name: "CONTEXT UNFILTERED"
+  # Unified navy background across every category (design system §1),
+  # overriding poster_core's built-in per-category backgrounds.
+  background_color: "#0A0E1A"
+  # Fallback accent for any category not listed in category_accents below.
+  accent_color: "#3B82F6"
+  # Design system's 5 category accents, mapped onto poster_core's nearest
+  # StoryCategory values -- "politics" stands in for "Policy/Society" and
+  # "technology" for "Hardware/Semiconductors" since poster_core has no
+  # exact match for either.
+  category_accents:
+    ai: "#3B82F6"
+    science: "#14B8A6"
+    business: "#F59E0B"
+    politics: "#A855F7"
+    technology: "#EC4899"
   footer: null
+  logo_path: "assets/logo/CU.png"
+  social_handle: "contextunfiltered"
+  # TODO: swap for the design system's Archivo Black/Space Grotesk Bold/Sora
+  # ExtraBold (headline) + Inter/Sora Regular (body) once those .ttf files
+  # are sourced -- drop them in assets/fonts/ and update these two paths,
+  # no code change needed.
   font_path_bold: "assets/fonts/DejaVuSans-Bold.ttf"
   font_path_regular: "assets/fonts/DejaVuSans-Regular.ttf"
 

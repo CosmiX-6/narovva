@@ -1,3 +1,3 @@
-from .reel import VideoAssemblyError, assemble_reel
+from .reel import VideoAssemblyError, assemble_reel, slide_duration
 
-__all__ = ["assemble_reel", "VideoAssemblyError"]
+__all__ = ["assemble_reel", "slide_duration", "VideoAssemblyError"]
