@@ -1,0 +1,109 @@
+<!doctype html>
+<html
+  lang="en"
+  data-composition-variables='[
+    {"id":"kicker","type":"string","label":"Kicker","default":"BREAKING / AI"},
+    {"id":"heading","type":"string","label":"Heading","default":"OpenAI just made its models 3x cheaper to run"},
+    {"id":"transition","type":"string","label":"Swipe cue","default":"Here is what changed"},
+    {"id":"handle","type":"string","label":"Handle","default":"contextunfiltered"},
+    {"id":"accent","type":"color","label":"Accent","default":"#3B82F6"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>CU hook slide</title>
+    <script src="vendor/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Archivo Black"; src: url("fonts/archivo-black-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Inter"; src: url("fonts/inter-latin-500-normal.woff2") format("woff2"); font-weight: 500; }
+      @font-face { font-family: "Inter"; src: url("fonts/inter-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      :root { --navy: #0A0E1A; --ink: #F3F5FA; --muted: #8A93AB; --accent: #3B82F6; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--navy); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: "Inter", sans-serif; color: var(--ink); }
+
+      /* Background: accent glow + faint grid. Safe zones for Reels UI: keep
+         content inside x 72..930 and y 230..1560. */
+      .bg { position: absolute; inset: 0; }
+      .glow { position: absolute; width: 1300px; height: 1300px; left: -110px; top: 380px; border-radius: 50%;
+        background: radial-gradient(circle, var(--accent) 0%, rgba(10,14,26,0) 62%); opacity: .30; }
+      .grid { position: absolute; inset: 0;
+        background-image: linear-gradient(rgba(255,255,255,.045) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,.045) 2px, transparent 2px);
+        background-size: 90px 90px; }
+      .bg, .bg * { pointer-events: none; }
+      .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(10,14,26,0) 40%, rgba(10,14,26,.85) 100%); }
+
+      .brand { position: absolute; left: 72px; top: 230px; display: flex; align-items: center; gap: 22px; }
+      .brand img { width: 96px; height: 96px; border-radius: 22px; display: block; }
+      .brand span { font-weight: 700; font-size: 30px; letter-spacing: .22em; }
+
+      .stack { position: absolute; left: 72px; right: 150px; top: 520px; }
+      .kicker { display: inline-block; padding: 16px 30px; border-radius: 999px; font-weight: 700; font-size: 32px; letter-spacing: .18em;
+        color: var(--navy); background: var(--accent); }
+      .heading { margin-top: 56px; font-family: "Archivo Black", sans-serif; font-size: 112px; line-height: 1.04; letter-spacing: -.01em; text-transform: uppercase; }
+      .heading .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 8px; margin-right: .26em; }
+      .heading .w > span { display: inline-block; }
+      .bar { margin-top: 52px; height: 10px; width: 260px; background: var(--accent); border-radius: 5px; transform-origin: left center; }
+
+      .cue { position: absolute; left: 72px; right: 150px; top: 1360px; display: flex; align-items: center; gap: 24px; font-weight: 500; font-size: 38px; color: var(--muted); }
+      .cue .arrow { font-size: 44px; color: var(--accent); }
+      .handle { position: absolute; left: 72px; top: 1470px; font-weight: 700; font-size: 34px; letter-spacing: .04em; color: var(--ink); opacity: .85; }
+      .progress { position: absolute; left: 72px; right: 150px; top: 1560px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; }
+      .progress i { display: block; height: 100%; width: 100%; background: var(--accent); border-radius: 3px; transform-origin: left center; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="cu-hook" data-start="0" data-duration="4.8" data-width="1080" data-height="1920">
+      <div class="bg">
+        <div class="glow" id="glow" data-layout-allow-overflow></div>
+        <div class="grid" id="grid"></div>
+        <div class="vignette"></div>
+      </div>
+      <div class="brand" id="brand"><img src="assets/CU.png" alt="" /><span>CONTEXT UNFILTERED</span></div>
+      <div class="stack" id="stack">
+        <div class="kicker" id="kicker" data-var-text="kicker">BREAKING / AI</div>
+        <h1 class="heading" id="heading" data-layout-allow-overflow></h1>
+        <div class="bar" id="bar"></div>
+      </div>
+      <div class="cue" id="cue"><span class="arrow">&rarr;</span><span id="cue-text" data-var-text="transition">Here is what changed</span></div>
+      <div class="handle" id="handle">@<span id="handle-text" data-var-text="handle">contextunfiltered</span></div>
+      <div class="progress"><i id="progress"></i></div>
+    </div>
+    <script>
+      const D = 4.8; // keep in sync with root data-duration
+      const v = window.__hyperframes.getVariables();
+      document.documentElement.style.setProperty("--accent", v.accent);
+
+      // Split the heading into per-word masks (deterministic, done once at init),
+      // then shrink the type until the block fits the safe-zone budget.
+      const h = document.getElementById("heading");
+      v.heading.trim().split(/\s+/).forEach((w) => {
+        const o = document.createElement("span"); o.className = "w"; o.setAttribute("data-layout-allow-overflow", ""); o.setAttribute("data-layout-allow-occlusion", "");
+        const i = document.createElement("span"); i.textContent = w; i.setAttribute("data-layout-allow-occlusion", ""); o.appendChild(i); h.appendChild(o);
+      });
+      const MAX_H = 640; // px budget for the heading block
+      let size = 112;
+      h.style.fontSize = size + "px";
+      while (h.offsetHeight > MAX_H && size > 56) { size -= 4; h.style.fontSize = size + "px"; }
+
+      const tl = gsap.timeline({ paused: true });
+      // Ambient: slow glow drift + grid creep across the whole slide.
+      tl.fromTo("#glow", { x: -80, y: 40, scale: 0.9 }, { x: 80, y: -60, scale: 1.12, duration: D, ease: "sine.inOut" }, 0);
+      tl.fromTo("#grid", { y: 0 }, { y: 90, duration: D, ease: "none" }, 0);
+      // Intro.
+      tl.from("#brand", { opacity: 0, x: -40, duration: 0.5, ease: "power3.out" }, 0.1);
+      tl.from("#kicker", { opacity: 0, scale: 0.7, transformOrigin: "left center", duration: 0.5, ease: "back.out(2)" }, 0.35);
+      tl.from(".heading .w > span", { yPercent: 115, duration: 0.65, ease: "power4.out", stagger: 0.07 }, 0.6);
+      tl.from("#bar", { scaleX: 0, duration: 0.7, ease: "power3.inOut" }, 1.25);
+      tl.from("#cue", { opacity: 0, x: -30, duration: 0.5, ease: "power2.out" }, 1.8);
+      tl.to("#cue .arrow", { x: 14, duration: 0.5, ease: "sine.inOut", repeat: 3, yoyo: true }, 2.2);
+      tl.from("#handle", { opacity: 0, duration: 0.5 }, 2.0);
+      tl.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: D, ease: "none" }, 0);
+      // Outro: lift and fade before the next slide takes over.
+      tl.to("#stack, #brand, #cue, #handle", { opacity: 0, y: -40, duration: 0.4, ease: "power2.in", stagger: 0.03 }, D - 0.5);
+      window.__timelines["cu-hook"] = tl;
+    </script>
+  </body>
+</html>
