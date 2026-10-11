@@ -32,7 +32,10 @@
       .progress { position: absolute; left: 72px; right: 150px; top: 1560px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; }
       .progress i { display: block; height: 100%; width: 100%; background: var(--accent); border-radius: 3px; transform-origin: left center; }
 
-      .scene { position: absolute; left: 72px; top: 400px; width: 858px; height: 1040px; display: flex; flex-direction: column; justify-content: center; }
+      /* Slides live in a clipped content window so transitions never cross the brand
+         header or the handle/progress footer. */
+      #scenes { position: absolute; left: 0; top: 330px; width: 1080px; height: 1130px; overflow: hidden; }
+      .scene { position: absolute; left: 72px; top: 70px; width: 858px; height: 1040px; display: flex; flex-direction: column; justify-content: center; }
       .kicker { align-self: flex-start; padding: 14px 28px; border-radius: 999px; font-weight: 700; font-size: 30px; letter-spacing: .18em; color: var(--navy); background: var(--accent); margin-bottom: 44px; text-transform: uppercase; }
       .h { font-family: "Archivo Black", sans-serif; letter-spacing: -.01em; text-transform: uppercase; line-height: 1.06; }
       .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 8px; margin-right: .26em; }
@@ -101,7 +104,7 @@
           document.fonts.load('700 40px "Inter"'),
         ]);
         const DECK = window.CU_DECK;
-        const OV = 0.4; // scene overlap == slide_duration's transition buffer
+        const OV = 0.3; // scene overlap == the transition (keep in sync with motion/slides.py)
         document.documentElement.style.setProperty("--accent", DECK.accent);
         document.getElementById("brandname").textContent = DECK.brand;
         document.getElementById("handle").textContent = "@" + DECK.handle;
@@ -130,165 +133,191 @@
         const scenesEl = document.getElementById("scenes");
         const slides = DECK.slides;
         let t = 0;
-        const starts = slides.map((s, i) => { const st = t; t += s.duration - OV; return st; });
+        const starts = slides.map((s) => { const st = t; t += s.duration - OV; return st; });
         const total = starts.length ? starts[starts.length - 1] + slides[slides.length - 1].duration : 1;
 
         // Ambient + global progress across the whole reel.
         tl.fromTo("#glow", { x: -80, y: 40, scale: 0.9 }, { x: 80, y: -60, scale: 1.12, duration: total, ease: "sine.inOut" }, 0);
-        tl.fromTo("#grid", { y: 0 }, { y: 90, duration: total, ease: "none" }, 0);
+        tl.fromTo("#grid", { y: 0 }, { y: 180, duration: total, ease: "none" }, 0);
         tl.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
-        tl.from(".brand", { opacity: 0, x: -40, duration: 0.5, ease: "power3.out" }, 0.1);
+        tl.from(".brand", { opacity: 0, x: -30, duration: 0.25, ease: "power4.out" }, 0);
 
-        // Per-kind builders. `at(x)` = absolute time of local offset x, squeezed
-        // so short slides still finish their intro before the exit starts.
+        // Fast entrances (house rules: text lands in 0.15-0.35 s, items x stagger <= ~0.35 s).
+        const E = 0.3;
+        const stag = (n, per) => Math.min(per, 0.35 / Math.max(n, 1));
         const B = {};
-        const head = (sc, s, size, maxH, lead) => {
+        const head = (sc, s, size, maxH) => {
           if (s.kicker) el("div", "kicker", s.kicker, sc);
           if (!s.heading) return null;
           const h = el("h1", "h", null, sc); words(h, s.heading); fit(h, maxH, size, 44);
           return h;
         };
-        const introHead = (sc, a, D) => {
+        const introHead = (sc, a, D, slam) => {
           const k = sc.querySelector(".kicker");
-          if (k) tl.from(k, { opacity: 0, scale: 0.7, transformOrigin: "left center", duration: D(0.45), ease: "back.out(2)" }, a(0.1));
+          if (k) tl.from(k, { opacity: 0, scale: 0.6, transformOrigin: "left center", duration: D(0.22), ease: "back.out(2.2)" }, a(0));
           const ws = sc.querySelectorAll(".h .w > span");
-          if (ws.length) tl.from(ws, { yPercent: 115, duration: D(0.6), ease: "power4.out", stagger: D(0.06) }, a(0.3));
+          if (ws.length) {
+            if (slam) tl.from(ws, { yPercent: 120, scale: 1.25, duration: D(E), ease: "power4.out", stagger: stag(ws.length, 0.05) }, a(0.04));
+            else tl.from(ws, { yPercent: 120, duration: D(E), ease: "power4.out", stagger: stag(ws.length, 0.04) }, a(0.04));
+          }
         };
         const bodyIn = (sc, s, a, D, size, maxH, delay) => {
           if (!s.body) return;
           const b = el("p", "body", s.body, sc); fit(b, maxH, size, 30);
-          tl.from(b, { opacity: 0, y: 30, duration: D(0.6), ease: "power2.out" }, a(delay));
+          tl.from(b, { opacity: 0, y: 24, duration: D(0.28), ease: "power3.out" }, a(delay));
         };
         const barIn = (sc, a, D, delay) => {
           const b = el("div", "bar", null, sc);
-          tl.from(b, { scaleX: 0, duration: D(0.7), ease: "power3.inOut" }, a(delay));
+          tl.from(b, { scaleX: 0, duration: D(0.3), ease: "expo.out" }, a(delay));
         };
 
         B.hook = B.hero = (sc, s, a, D) => {
-          head(sc, s, 112, 560); introHead(sc, a, D); barIn(sc, a, D, 1.0); bodyIn(sc, s, a, D, 42, 200, 1.2);
+          head(sc, s, 118, 560); introHead(sc, a, D, true); barIn(sc, a, D, 0.2); bodyIn(sc, s, a, D, 42, 200, 0.3);
         };
         B.text = B.conclusion = (sc, s, a, D) => {
-          head(sc, s, 92, 420); introHead(sc, a, D); barIn(sc, a, D, 0.9); bodyIn(sc, s, a, D, 46, 460, 1.0);
+          head(sc, s, 96, 420); introHead(sc, a, D); barIn(sc, a, D, 0.2); bodyIn(sc, s, a, D, 46, 460, 0.28);
         };
         B.evidence = (sc, s, a, D) => {
-          head(sc, s, 76, 260); introHead(sc, a, D);
-          const facts = (s.facts || []).slice(0, 5);
+          head(sc, s, 80, 260); introHead(sc, a, D);
+          const facts = (s.facts || []).slice(0, 4);
           const size = facts.length > 3 ? 36 : 42;
           facts.forEach((f, i) => {
             const c = el("div", "card", f, sc); c.style.fontSize = size + "px";
-            tl.from(c, { opacity: 0, x: -60, duration: D(0.5), ease: "power3.out" }, a(0.8 + i * 0.22));
+            tl.from(c, { opacity: 0, x: -70, duration: D(0.24), ease: "power4.out" }, a(0.18 + i * stag(facts.length, 0.12)));
           });
-          if (!facts.length) bodyIn(sc, s, a, D, 44, 460, 0.9);
+          if (!facts.length) bodyIn(sc, s, a, D, 44, 460, 0.28);
         };
         B.stats = (sc, s, a, D) => {
-          head(sc, s, 64, 200); introHead(sc, a, D);
+          head(sc, s, 68, 200); introHead(sc, a, D);
           const facts = (s.facts || []).slice(0, 4);
           const grid = el("div", "tiles", null, sc);
           grid.style.gridTemplateColumns = facts.length > 2 ? "1fr 1fr" : "1fr";
           facts.forEach((f, i) => {
-            // "45% faster inference" -> number "45%" + label "faster inference"
             const m = f.match(/^(\S*\d\S*)\s*(.*)$/);
             const tile = el("div", "tile", null, grid);
             const num = el("div", "num", m ? m[1] : f, tile);
             if (m && m[2]) el("div", "lab", m[2], tile).style.fontSize = "34px";
-            num.style.fontSize = (facts.length > 2 ? 80 : 120) + "px";
-            tl.from(tile, { opacity: 0, y: 50, scale: 0.92, duration: D(0.5), ease: "back.out(1.6)" }, a(0.7 + i * 0.2));
+            num.style.fontSize = (facts.length > 2 ? 84 : 124) + "px";
+            const at = a(0.15 + i * stag(facts.length, 0.1));
+            tl.from(tile, { opacity: 0, y: 40, scale: 0.9, duration: D(0.25), ease: "back.out(1.8)" }, at);
             const nm = m && m[1].match(/^([^\d]*)([\d][\d,]*\.?\d*)(.*)$/);
-            if (nm) { // count-up, seek-safe (state derives from tween progress)
+            if (nm) { // fast count-up, seek-safe
               const target = parseFloat(nm[2].replace(/,/g, ""));
               const dec = (nm[2].split(".")[1] || "").length;
               const o = { v: 0 };
-              tl.to(o, { v: target, duration: D(0.9), ease: "power2.out", onUpdate: () => {
+              tl.to(o, { v: target, duration: D(0.5), ease: "power3.out", onUpdate: () => {
                 const txt = dec ? o.v.toFixed(dec) : Math.round(o.v).toLocaleString("en-US");
                 num.textContent = nm[1] + txt + nm[3];
-              } }, a(0.7 + i * 0.2));
+              } }, at);
             }
           });
         };
         B.timeline = (sc, s, a, D) => {
-          head(sc, s, 64, 200); introHead(sc, a, D);
-          const evs = (s.timeline || []).slice(0, 5);
+          head(sc, s, 68, 200); introHead(sc, a, D);
+          const evs = (s.timeline || []).slice(0, 4);
           const box = el("div", "tl", null, sc);
           const line = el("div", "line", null, box);
-          tl.from(line, { scaleY: 0, duration: D(0.9), ease: "power2.inOut" }, a(0.6));
+          tl.from(line, { scaleY: 0, duration: D(0.45), ease: "power3.inOut" }, a(0.1));
           evs.forEach((e, i) => {
             const row = el("div", "ev", null, box);
-            const w = el("div", "when", e.when, row); w.style.fontSize = "30px";
-            const x = el("div", "what", e.what, row); x.style.fontSize = (evs.length > 3 ? 36 : 42) + "px";
-            tl.from(row, { opacity: 0, x: 40, duration: D(0.45), ease: "power3.out" }, a(0.7 + i * 0.22));
+            el("div", "when", e.when, row).style.fontSize = "30px";
+            el("div", "what", e.what, row).style.fontSize = (evs.length > 3 ? 36 : 42) + "px";
+            tl.from(row, { opacity: 0, x: 50, duration: D(0.22), ease: "power4.out" }, a(0.15 + i * stag(evs.length, 0.12)));
           });
         };
         B.money_flow = (sc, s, a, D) => {
-          head(sc, s, 60, 180); introHead(sc, a, D);
-          const steps = (s.money || []).slice(0, 5);
+          head(sc, s, 62, 180); introHead(sc, a, D);
+          const steps = (s.money || []).slice(0, 4);
           const wrap = el("div", null, null, sc); wrap.style.marginTop = "30px";
           steps.forEach((st, i) => {
+            const at = a(0.12 + i * stag(steps.length, 0.14));
             if (i > 0) {
               const l = el("div", "link", null, wrap);
               const stem = el("div", "stem", null, l);
-              if (st.amount) { const am = el("div", "amt", st.amount, l); am.style.fontSize = "38px"; }
-              tl.from(stem, { scaleY: 0, duration: D(0.3), ease: "power2.out" }, a(0.7 + i * 0.3));
-              if (st.amount) tl.from(l.querySelector(".amt"), { opacity: 0, x: -20, duration: D(0.3) }, a(0.85 + i * 0.3));
+              if (st.amount) el("div", "amt", st.amount, l).style.fontSize = "38px";
+              tl.from(stem, { scaleY: 0, duration: D(0.16), ease: "power3.out" }, at);
+              if (st.amount) tl.from(l.querySelector(".amt"), { opacity: 0, x: -20, duration: D(0.18) }, at);
             }
             const n = el("div", "node", null, wrap);
-            const ac = el("div", "actor", st.actor, n); ac.style.fontSize = (steps.length > 3 ? 36 : 44) + "px";
-            if (st.detail) { const d = el("div", "detail", st.detail, n); d.style.fontSize = "28px"; }
-            tl.from(n, { opacity: 0, scale: 0.9, duration: D(0.4), ease: "back.out(1.7)" }, a(0.6 + i * 0.3));
+            el("div", "actor", st.actor, n).style.fontSize = (steps.length > 3 ? 36 : 44) + "px";
+            if (st.detail) el("div", "detail", st.detail, n).style.fontSize = "28px";
+            tl.from(n, { opacity: 0, scale: 0.88, duration: D(0.22), ease: "back.out(1.8)" }, at);
           });
         };
         B.comparison = (sc, s, a, D) => {
           const c = s.comparison || {};
-          head(sc, { kicker: s.kicker, heading: c.title || s.heading }, 64, 220); introHead(sc, a, D);
+          head(sc, { kicker: s.kicker, heading: c.title || s.heading }, 66, 220); introHead(sc, a, D);
           const vs = el("div", "vs", null, sc);
           const num = (v) => { const m = String(v).replace(/,/g, "").match(/-?\d+(\.\d+)?/); return m ? parseFloat(m[0]) : null; };
           const na = num(c.value_a), nb = num(c.value_b);
           const both = na != null && nb != null && Math.max(na, nb) > 0;
           [["a", c.label_a, c.value_a, na], ["b", c.label_b, c.value_b, nb]].forEach(([k, lab, val, n], i) => {
             const side = el("div", "side " + k, null, vs);
-            const big = el("div", "big", String(val), side); fit(big, 150, 76, 34);
+            const big = el("div", "big", String(val), side); fit(big, 150, 80, 34);
             el("div", "lab", lab, side).style.fontSize = "28px";
             if (both) {
               const m = el("div", "meter", null, side); const f = el("i", null, null, m);
               f.style.width = Math.max(4, Math.abs(n) / Math.max(Math.abs(na), Math.abs(nb)) * 100) + "%";
-              tl.from(f, { scaleX: 0, duration: D(0.9), ease: "power3.out" }, a(0.9 + i * 0.15));
+              tl.from(f, { scaleX: 0, duration: D(0.45), ease: "expo.out" }, a(0.3 + i * 0.1));
             }
-            tl.from(side, { opacity: 0, y: 60, duration: D(0.5), ease: "power3.out" }, a(0.6 + i * 0.2));
+            tl.from(side, { opacity: 0, y: 50, duration: D(0.26), ease: "power4.out" }, a(0.1 + i * 0.1));
           });
         };
         B.quote = (sc, s, a, D) => {
           const q = s.quote || { text: s.body || s.heading || "" };
           if (s.kicker) el("div", "kicker", s.kicker, sc);
           const m = el("div", "qmark", "“", sc);
-          const t = el("p", "h", null, sc); t.style.textTransform = "none"; t.textContent = q.text; fit(t, 520, 64, 32);
-          if (q.attribution) { const at = el("div", "attr", "— " + q.attribution, sc); at.style.fontSize = "34px"; tl.from(at, { opacity: 0, x: -30, duration: D(0.5) }, a(1.0)); }
+          const tx = el("p", "h", null, sc); tx.style.textTransform = "none"; tx.textContent = q.text; fit(tx, 520, 66, 32);
+          if (q.attribution) { const at = el("div", "attr", "— " + q.attribution, sc); at.style.fontSize = "34px"; tl.from(at, { opacity: 0, x: -30, duration: D(0.25), ease: "power3.out" }, a(0.3)); }
           const k = sc.querySelector(".kicker");
-          if (k) tl.from(k, { opacity: 0, scale: 0.7, transformOrigin: "left center", duration: D(0.45), ease: "back.out(2)" }, a(0.1));
-          tl.from(m, { opacity: 0, scale: 0.4, transformOrigin: "left center", duration: D(0.5), ease: "back.out(2)" }, a(0.2));
-          tl.from(t, { opacity: 0, y: 40, duration: D(0.7), ease: "power3.out" }, a(0.45));
+          if (k) tl.from(k, { opacity: 0, scale: 0.6, transformOrigin: "left center", duration: D(0.22), ease: "back.out(2.2)" }, a(0));
+          tl.from(m, { opacity: 0, scale: 0.4, transformOrigin: "left center", duration: D(0.26), ease: "back.out(2.4)" }, a(0.04));
+          tl.from(tx, { opacity: 0, y: 36, duration: D(0.3), ease: "power4.out" }, a(0.12));
         };
         B.cta = (sc, s, a, D) => {
           sc.classList.add("ctawrap");
           const box = el("div", "ringbox", null, sc);
           const ring = el("div", "ring", null, box);
           const img = el("img", null, null, box); img.src = "assets/logo.png"; img.alt = "";
-          const h = el("h1", "h", null, sc); words(h, s.heading || "Follow for more"); fit(h, 300, 84, 44);
+          const h = el("h1", "h", null, sc); words(h, s.heading || "Follow for more"); fit(h, 300, 88, 44);
           const hd = el("div", "big-handle", "@" + DECK.handle, sc); fit(hd, 160, 72, 36);
-          tl.from(img, { scale: 0.3, opacity: 0, duration: D(0.6), ease: "back.out(2)" }, a(0.1));
-          tl.fromTo(ring, { scale: 0.8, opacity: 0.9 }, { scale: 1.25, opacity: 0, duration: 0.9, ease: "power1.out", repeat: 2 }, a(0.5));
-          tl.from(h.querySelectorAll(".w > span"), { yPercent: 115, duration: D(0.6), ease: "power4.out", stagger: D(0.07) }, a(0.4));
-          tl.from(hd, { opacity: 0, y: 30, duration: D(0.5) }, a(1.0));
+          tl.from(img, { scale: 0.3, opacity: 0, duration: D(0.3), ease: "back.out(2.2)" }, a(0));
+          tl.fromTo(ring, { scale: 0.8, opacity: 0.9 }, { scale: 1.25, opacity: 0, duration: 0.6, ease: "power1.out", repeat: 2 }, a(0.2));
+          tl.from(h.querySelectorAll(".w > span"), { yPercent: 120, duration: D(E), ease: "power4.out", stagger: stag(8, 0.05) }, a(0.08));
+          tl.from(hd, { opacity: 0, y: 24, duration: D(0.25), ease: "power3.out" }, a(0.3));
         };
 
-        slides.forEach((s, i) => {
-          const sc = el("div", "scene", null, scenesEl); sc.setAttribute("data-layout-allow-overlap", "");
+        // Transitions ARE the exit: outgoing and incoming move together (house rule: no
+        // fade-out-then-enter). One primary (push) + two accents (whip, zoom-through).
+        const TRANS = ["push", "push", "whip", "push", "zoom", "push", "whip", "push"];
+        const scs = slides.map((s, i) => {
+          const sc = el("div", "scene", null, scenesEl); sc.setAttribute("data-layout-allow-overlap", ""); sc.setAttribute("data-layout-allow-overflow", "");
           const dur = s.duration, t0 = starts[i];
-          const k = Math.min(1, Math.max(0.35, (dur - OV - 0.4) / 1.8));
+          const k = Math.min(1, Math.max(0.5, (dur - OV - 0.2) / 1.0));
           const a = (x) => t0 + x * k, D = (x) => x * k;
           (B[s.kind] || B.text)(sc, s, a, D);
-          tl.fromTo(sc, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: "power1.out" }, t0);
-          const last = i === slides.length - 1;
-          tl.to(sc, { opacity: 0, y: last ? 0 : -30, duration: last ? 0.3 : OV, ease: "power2.in" }, t0 + dur - (last ? 0.3 : OV));
+          return sc;
         });
+        scs.forEach((sc, i) => {
+          const T = starts[i];
+          if (i === 0) { tl.set(sc, { opacity: 1 }, 0); return; }
+          const prev = scs[i - 1], kind = TRANS[(i - 1) % TRANS.length];
+          if (kind === "push") {
+            tl.fromTo(sc, { yPercent: 100, opacity: 1 }, { yPercent: 0, duration: OV, ease: "power4.out", immediateRender: false }, T);
+            tl.to(prev, { yPercent: -100, duration: OV, ease: "power4.out" }, T);
+          } else if (kind === "whip") {
+            tl.fromTo(sc, { xPercent: 100, opacity: 1 }, { xPercent: 0, duration: OV, ease: "expo.out", immediateRender: false }, T);
+            tl.to(prev, { xPercent: -100, duration: OV, ease: "expo.out" }, T);
+          } else { // zoom-through
+            tl.fromTo(sc, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: OV, ease: "power4.out", immediateRender: false }, T);
+            tl.to(prev, { scale: 1.45, opacity: 0, duration: OV, ease: "power4.in" }, T);
+          }
+          tl.set(prev, { opacity: 0 }, T + OV); // parked scenes are hidden once they've left
+        });
+        // every non-first scene starts off-screen/hidden until its transition
+        scs.forEach((sc, i) => { if (i > 0) tl.set(sc, { opacity: 0 }, 0); });
+        // final scene: only scene allowed to fade out
+        tl.to(scs[scs.length - 1], { opacity: 0, duration: 0.25, ease: "power2.in" }, total - 0.25);
         window.__timelines["cu-reel"] = tl;
       })();
     </script>

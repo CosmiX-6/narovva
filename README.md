@@ -153,3 +153,16 @@ post falls back to the plain `reel` format, so nothing is skipped.
 - Each Reel records its music track in `post_history.music_track_id` (migration
   `0002`), and later posts avoid recently used tracks. Track tags come from the
   genre, `brief.tone`, `brief.emotions` and `brief.category`.
+
+### Pacing and narration
+
+- Reels are cut fast: text lands in ~0.3 s, slides hold 2-4 s (long copy is trimmed
+  on screen; the caption and voice carry the detail), and scenes change with real
+  transitions (push / whip / zoom-through) instead of fades.
+- `narration:` in the channel YAML adds a voice-over (`openai`, `gemini` or
+  `elevenlabs`). The LLM writes one short spoken line per slide, a voice that was not
+  used recently is chosen (`post_history.narration_voice`), each slide lasts as long as
+  its line, and the music ducks under the voice (-14 LUFS master). If anything in
+  that chain fails the reel still posts, music only.
+- Audition voices by ear: run **Actions -> Audition narration voices** (or
+  `python -m narovva.narration.demo openai out/`) and listen to the MP3 artifact.
