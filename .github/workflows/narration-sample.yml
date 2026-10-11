@@ -11,7 +11,7 @@ on:
         required: true
         default: "openai"
         type: choice
-        options: [openai, gemini, elevenlabs]
+        options: [openai, gemini, elevenlabs, kokoro]
       voices:
         description: "Optional space-separated voices (required for elevenlabs: voice ids). Blank = defaults."
         required: false
@@ -29,7 +29,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install narovva
-        run: pip install .
+        run: pip install ".[narration-local]"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/narovva
+          key: kokoro-model-v1
 
       - name: Generate samples
         env:

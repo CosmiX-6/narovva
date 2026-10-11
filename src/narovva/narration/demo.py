@@ -1,4 +1,4 @@
-"""Audition voices: python -m narovva.narration.demo <openai|gemini|elevenlabs> <out_dir> [voice ...]
+"""Audition voices: python -m narovva.narration.demo <openai|gemini|elevenlabs|kokoro> <out_dir> [voice ...]
 
 Reads the provider's API key from the usual env var (OPENAI_API_KEY,
 GOOGLE_API_KEY, ELEVENLABS_API_KEY), reads one sample news line in each
@@ -15,7 +15,7 @@ from pathlib import Path
 from .tts import build_provider
 from .voices import default_voices, style_for_tone
 
-_KEY_ENV = {"openai": "OPENAI_API_KEY", "gemini": "GOOGLE_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY"}
+_KEY_ENV = {"openai": "OPENAI_API_KEY", "gemini": "GOOGLE_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY", "kokoro": ""}
 SAMPLE = (
     "OpenAI just made its models three times cheaper to run. "
     "Here's what changed, and who pays for it. Sixty-seven percent cheaper per token, "
@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     if not voices:
         print("no voices: pass ElevenLabs voice ids as arguments")
         return 2
-    key = os.environ.get(_KEY_ENV[provider_name], "")
+    key = os.environ.get(_KEY_ENV[provider_name], "") if _KEY_ENV[provider_name] else ""
     provider = build_provider(provider_name, key)
     out_dir.mkdir(parents=True, exist_ok=True)
     failures = 0

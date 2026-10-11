@@ -343,6 +343,7 @@ def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed):
         "openai": channel.credentials.openai_api_key_env,
         "gemini": channel.credentials.gemini_api_key_env,
         "elevenlabs": channel.credentials.elevenlabs_api_key_env,
+        "kokoro": None,  # local voice, no key
     }
     lines = write_script(llm, brief, specs, brand=channel.brand.name)
     style = style_for_tone(brief.tone)

@@ -321,3 +321,99 @@ def test_all_providers_failing_still_posts_music_only(monkeypatch):
     track = _Track()
     path, voice = rc._try_motion_reel(ch, [_asset(3)], _brief(), track, "/tmp/o.mp4", llm=_LLM(["a", "b", "c"]), seed="s")
     assert path == "/tmp/o.mp4" and voice is None
+
+
+# -- Kokoro (local, keyless) ----------------------------------------------------
+
+def test_kokoro_model_download_is_cached_and_validated(monkeypatch, tmp_path):
+    monkeypatch.setenv("NAROVVA_KOKORO_DIR", str(tmp_path))
+    fetched = []
+
+    class _Stream:
+        def __init__(self, url, **kw):
+            fetched.append(url)
+            self.big = url.endswith("kokoro-v1.0.onnx")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def raise_for_status(self):
+            pass
+
+        def iter_bytes(self, n):
+            yield b"x" * (300_000_001 if self.big else 20_000_001)
+
+    monkeypatch.setattr(tts_module.httpx, "stream", lambda m, url, **kw: _Stream(url))
+    onnx, voices = tts_module.ensure_kokoro_models()
+    assert onnx.exists() and voices.exists() and len(fetched) == 2
+    tts_module.ensure_kokoro_models()          # second call: cached, no new downloads
+    assert len(fetched) == 2
+
+
+def test_kokoro_rejects_truncated_download(monkeypatch, tmp_path):
+    monkeypatch.setenv("NAROVVA_KOKORO_DIR", str(tmp_path))
+
+    class _Short:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def raise_for_status(self): pass
+        def iter_bytes(self, n): yield b"tiny"
+
+    monkeypatch.setattr(tts_module.httpx, "stream", lambda m, url, **kw: _Short())
+    with pytest.raises(NarrationError, match="too small"):
+        tts_module.ensure_kokoro_models()
+    assert not list(tmp_path.glob("*.part"))   # no half-written file left behind
+
+
+def test_kokoro_without_the_extra_installed_is_a_narration_error(monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_kokoro(name, *a, **k):
+        if name == "kokoro_onnx":
+            raise ImportError("not installed")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", no_kokoro)
+    with pytest.raises(NarrationError, match="narration-local"):
+        build_provider("kokoro", "")
+
+
+def test_kokoro_is_a_valid_config_provider_with_default_voices():
+    cfg = NarrationConfig(provider="openai", fallback_providers=["gemini", "kokoro"])
+    assert cfg.fallback_providers == ["gemini", "kokoro"] and default_voices("kokoro")
+
+
+def test_channel_falls_through_to_kokoro_when_keys_are_missing_or_broken(monkeypatch):
+    local = _FakeProvider()
+    built = []
+
+    def fake_build(name, key, model=None):
+        built.append((name, key))
+        if name == "kokoro":
+            return local
+        raise NarrationError(f"no API key for narration provider {name!r}")
+
+    monkeypatch.setattr(rc, "build_provider", fake_build)
+    monkeypatch.setattr(rc, "resolve_env", lambda name: None)          # no keys configured at all
+    monkeypatch.setattr(rc, "render_motion_reel", lambda specs, audio, out, **kw: out)
+    ch = _channel(narration=NarrationConfig(provider="openai", fallback_providers=["gemini", "kokoro"]))
+    path, voice = rc._try_motion_reel(ch, [_asset(3)], _brief(), _Track(), "/tmp/o.mp4", llm=_LLM(["a", "b", "c"]), seed="s")
+    assert [n for n, _ in built] == ["openai", "gemini", "kokoro"]
+    assert voice in default_voices("kokoro") and local.voices
+
+
+def _kokoro_models_present() -> bool:
+    d = tts_module.kokoro_dir()
+    return (d / "kokoro-v1.0.onnx").exists() and (d / "voices-v1.0.bin").exists()
+
+
+@pytest.mark.skipif(not _kokoro_models_present(), reason="Kokoro model files not cached (set NAROVVA_KOKORO_DIR)")
+def test_real_kokoro_synthesis_produces_speech():
+    provider = build_provider("kokoro", "")
+    clips = synthesize_lines(provider, ["Prices cut on every tier.", "Batch jobs now cost half."], voice="af_heart", style=("", ""))
+    assert all(1.0 < c.seconds < 6.0 for c in clips)
