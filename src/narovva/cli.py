@@ -27,6 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cap successful publishes per genre in this run (default: unlimited)",
     )
 
+    refresh_p = sub.add_parser(
+        "refresh-token", help="Exchange a channel's Instagram token for a fresh ~60-day one (run weekly)",
+    )
+    refresh_p.add_argument("path", help="Path to a channel YAML config")
+
     due_p = sub.add_parser("run-due", help="Run every channel/genre currently due, per configured cadence")
     due_p.add_argument("--channels-dir", default="config/channels")
     due_p.add_argument("--dry-run", action="store_true")
@@ -54,6 +59,18 @@ def main(argv: list[str] | None = None) -> int:
         )
         _print_result(result)
         return 1 if result.failed else 0
+
+    if args.command == "refresh-token":
+        from .tokens import InstagramTokenError, refresh_token
+
+        channel = load_channel(args.path)
+        try:
+            refresh_token(channel)
+        except InstagramTokenError as exc:
+            print(f"error: {exc}")
+            return 1
+        print(f"channel={channel.id} Instagram token refreshed")
+        return 0
 
     if args.command == "run-due":
         channels = load_all_channels(args.channels_dir)

@@ -101,6 +101,7 @@ def test_max_posts_per_genre_caps_publishes_within_one_run(monkeypatch):
             pass
 
     monkeypatch.setattr(run_channel_module, "NewsFetcher", _FakeFetcher)
+    monkeypatch.setattr(run_channel_module, "_preflight_token", lambda channel: None)
     monkeypatch.setattr(run_channel_module, "get_store_for_channel", lambda channel_id: _FakeStore())
     monkeypatch.setattr(
         run_channel_module, "get_settings",
