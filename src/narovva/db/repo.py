@@ -92,6 +92,7 @@ class Repo:
         status: str,
         platform_post_id: str | None = None,
         error: str | None = None,
+        music_track_id: str | None = None,
     ) -> None:
         """Upsert one post_history row keyed on (channel_id, content_id).
 
@@ -104,12 +105,13 @@ class Repo:
             INSERT INTO post_history (
                 channel_id, genre, content_id, article_url, article_title, platform,
                 asset_types, caption, hashtags, status, platform_post_id, attempt_count,
-                last_error, published_at
+                last_error, published_at, music_track_id
             ) VALUES (
                 %(channel_id)s, %(genre)s, %(content_id)s, %(article_url)s, %(article_title)s,
                 %(platform)s, %(asset_types)s, %(caption)s, %(hashtags)s, %(status)s,
                 %(platform_post_id)s, 1, %(error)s,
-                CASE WHEN %(status)s = 'success' THEN now() ELSE NULL END
+                CASE WHEN %(status)s = 'success' THEN now() ELSE NULL END,
+                %(music_track_id)s
             )
             ON CONFLICT (channel_id, content_id) DO UPDATE SET
                 status = EXCLUDED.status,
@@ -119,6 +121,7 @@ class Repo:
                 caption = EXCLUDED.caption,
                 hashtags = EXCLUDED.hashtags,
                 asset_types = EXCLUDED.asset_types,
+                music_track_id = COALESCE(EXCLUDED.music_track_id, post_history.music_track_id),
                 updated_at = now(),
                 published_at = CASE
                     WHEN EXCLUDED.status = 'success' THEN now()
@@ -138,8 +141,22 @@ class Repo:
                 "status": status,
                 "platform_post_id": platform_post_id,
                 "error": error,
+                "music_track_id": music_track_id,
             },
         )
+
+    def recent_music_track_ids(self, channel_id: str, *, limit: int = 60) -> set[str]:
+        """Music track ids used by this channel's most recent Reels, so the
+        next pick can avoid repeating them."""
+        rows = self.conn.execute(
+            """
+            SELECT music_track_id FROM post_history
+            WHERE channel_id = %s AND music_track_id IS NOT NULL
+            ORDER BY updated_at DESC LIMIT %s
+            """,
+            (channel_id, limit),
+        ).fetchall()
+        return {r[0] for r in rows}
 
     # -- instagram tokens ---------------------------------------------------
 

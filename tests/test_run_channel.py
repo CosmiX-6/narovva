@@ -109,7 +109,7 @@ def test_max_posts_per_genre_caps_publishes_within_one_run(monkeypatch):
     monkeypatch.setattr(
         run_channel_module,
         "_process_one",
-        lambda article, genre_setting, channel, dry_run: run_channel_module._Outcome(
+        lambda article, genre_setting, channel, dry_run, **_kw: run_channel_module._Outcome(
             status="success", caption_text="caption", hashtags=[], asset_types=["cover"],
             platform_post_id="fake-id",
         ),

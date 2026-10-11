@@ -41,12 +41,39 @@ _MOOD_TAGS_BY_TONE: dict[str, list[str]] = {
 }
 
 
-def music_tags_for(genre: str, tone: str) -> list[str]:
-    """Topical tag first (for relevance) then mood tags (for vibe),
+# Finer sentiment signals from the brief: substring of a ContentBrief.emotions
+# entry -> extra mood tags, and StoryCategory value -> extra tags. These come
+# after the tone's tags, so the tone still leads and these widen the pool.
+_MOOD_TAGS_BY_EMOTION: dict[str, list[str]] = {
+    "excit": ["upbeat"], "joy": ["upbeat"], "optim": ["uplifting"], "hope": ["uplifting"],
+    "fear": ["dark", "tense"], "anx": ["tense"], "alarm": ["tense", "dark"], "concern": ["tense"],
+    "sad": ["melancholic", "piano"], "loss": ["melancholic"], "grief": ["piano"],
+    "anger": ["intense"], "outrage": ["intense"],
+    "curio": ["inspiring", "ambient"], "wonder": ["ambient", "inspiring"], "surpris": ["cinematic"],
+    "skeptic": ["minimal"], "doubt": ["minimal"],
+}
+_TAGS_BY_CATEGORY: dict[str, list[str]] = {
+    "disaster": ["cinematic", "dark"], "breaking": ["cinematic", "intense"],
+    "product_launch": ["upbeat", "electronic"], "finance": ["corporate"],
+    "science": ["ambient"], "health": ["ambient", "piano"], "sports": ["energetic"],
+}
+
+
+def music_tags_for(
+    genre: str, tone: str, emotions: list[str] | tuple[str, ...] = (), category: str | None = None,
+) -> list[str]:
+    """Topical tag first (for relevance) then the tone's mood tags (for vibe),
+    then extras from the brief's emotions and category (wider pool),
     de-duplicated in order."""
     topic = _TOPIC_TAG_BY_GENRE.get(genre)
     mood = _MOOD_TAGS_BY_TONE.get(tone, _MOOD_TAGS_BY_TONE["neutral"])
-    tags = ([topic] if topic else []) + mood
+    extras: list[str] = []
+    for emotion in emotions:
+        for key, key_tags in _MOOD_TAGS_BY_EMOTION.items():
+            if key in emotion.lower():
+                extras.extend(key_tags)
+    extras.extend(_TAGS_BY_CATEGORY.get(category or "", []))
+    tags = ([topic] if topic else []) + mood + extras
     seen: set[str] = set()
     ordered: list[str] = []
     for t in tags:
@@ -73,7 +100,7 @@ class JamendoError(RuntimeError):
     """Raised when no eligible track can be found or downloaded."""
 
 
-_RESULTS_PER_QUERY = 10
+_RESULTS_PER_QUERY = 30
 _ATTEMPTS_PER_TAG = 4
 _RETRY_BACKOFF_SECONDS = 1.0
 
@@ -83,19 +110,26 @@ class JamendoMusicClient:
         self._client_id = client_id
         self._timeout = timeout
 
-    def pick_track(self, tags: list[str]) -> MusicTrack:
-        """Tries each tag in turn (Jamendo's own index appears to be
+    def pick_track(self, tags: list[str], exclude_ids: set[str] | frozenset[str] = frozenset()) -> MusicTrack:
+        """Picks a track whose id is not in `exclude_ids` (recently used
+        ones), so consecutive posts get different music. Only the very last
+        untagged fallback may repeat a track, rather than failing the post.
+
+        Tries each tag in turn (Jamendo's own index appears to be
         eventually-consistent -- the exact same query can return zero
         results one call and several the next, so each tag is retried a
         few times before moving on), then falls back to an untagged
         popularity-sorted search rather than failing the whole post."""
         for tag in [*tags, None]:
-            track = self._search_and_download(tag)
+            track = self._search_and_download(tag, exclude_ids)
             if track is not None:
                 return track
+        track = self._search_and_download(None, frozenset())
+        if track is not None:
+            return track
         raise JamendoError(f"no commercially-usable Jamendo track found for tags {tags!r} (or untagged fallback)")
 
-    def _search_and_download(self, tag: str | None) -> MusicTrack | None:
+    def _search_and_download(self, tag: str | None, exclude_ids: set[str] | frozenset[str]) -> MusicTrack | None:
         params = {
             "client_id": self._client_id,
             "format": "json",
@@ -119,6 +153,8 @@ class JamendoMusicClient:
             for track in results:
                 download_url = track.get("audiodownload")
                 if not track.get("audiodownload_allowed", True) or not download_url:
+                    continue
+                if str(track["id"]) in exclude_ids:
                     continue
                 audio_resp = httpx.get(download_url, timeout=self._timeout, follow_redirects=True)
                 audio_resp.raise_for_status()

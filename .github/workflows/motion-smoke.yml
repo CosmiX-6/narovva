@@ -1,0 +1,58 @@
+name: Motion reel smoke test
+
+# Proves the HyperFrames toolchain works on a clean GitHub runner: installs
+# Node + pinned hyperframes + Chrome, runs the test suite (including a real
+# 2-slide render), then renders the all-slide-kinds sample deck and uploads it.
+# No secrets, nothing is published.
+on:
+  push:
+    branches: ["claude/**"]
+    paths:
+      - "src/narovva/motion/**"
+      - "package*.json"
+      - ".github/workflows/motion-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: System deps (FFmpeg)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+
+      - name: Install
+        run: |
+          pip install ".[dev]"
+          npm ci --no-audit --no-fund
+          npx hyperframes telemetry disable
+          npx hyperframes browser ensure
+          npx hyperframes doctor || true
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Render sample deck
+        run: |
+          time python -m narovva.motion motion-sample.mp4
+          ffmpeg -hide_banner -i motion-sample.mp4 2>&1 | grep -E "Duration|Stream"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motion-sample
+          path: motion-sample.mp4
+          retention-days: 7

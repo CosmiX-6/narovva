@@ -174,3 +174,41 @@ def test_pick_track_sends_commercial_and_derivative_safe_filters(monkeypatch):
     assert all(p["ccnc"] == "false" for p in captured)
     assert all(p["ccnd"] == "false" for p in captured)
     assert captured[0]["fuzzytags"] == "technology"
+
+
+def test_music_tags_for_adds_emotion_and_category_extras_after_tone():
+    tags = music_tags_for("tech", "urgent", ["Anxiety about layoffs"], "disaster")
+    assert tags[:4] == ["technology", "cinematic", "intense", "energetic"]
+    assert "tense" in tags and "dark" in tags
+    assert len(tags) == len(set(tags))
+    # unchanged when no extras are given
+    assert music_tags_for("tech", "neutral") == ["technology", "corporate", "inspiring"]
+
+
+def test_pick_track_skips_recently_used_tracks(monkeypatch):
+    results = [
+        {"id": 1, "name": "Old", "artist_name": "A", "license_ccurl": "u", "audiodownload": "http://x/1"},
+        {"id": 2, "name": "Fresh", "artist_name": "B", "license_ccurl": "u", "audiodownload": "http://x/2"},
+    ]
+
+    def fake_get(url, **kw):
+        if url.endswith("/tracks/"):
+            return _FakeResponse(json_data={"results": list(results)})
+        return _FakeResponse(content=b"mp3")
+
+    monkeypatch.setattr(jamendo_module.httpx, "get", fake_get)
+    for _ in range(10):  # shuffled order must never matter
+        track = JamendoMusicClient("cid").pick_track(["technology"], exclude_ids={"1"})
+        assert track.id == "2"
+
+
+def test_pick_track_repeats_only_as_last_resort(monkeypatch):
+    only = [{"id": 1, "name": "Only", "artist_name": "A", "license_ccurl": "u", "audiodownload": "http://x/1"}]
+
+    def fake_get(url, **kw):
+        if url.endswith("/tracks/"):
+            return _FakeResponse(json_data={"results": list(only)})
+        return _FakeResponse(content=b"mp3")
+
+    monkeypatch.setattr(jamendo_module.httpx, "get", fake_get)
+    assert JamendoMusicClient("cid").pick_track(["technology"], exclude_ids={"1"}).id == "1"

@@ -18,9 +18,9 @@ ig_page_id: null
 # scheduling purposes (still used as each fetch's article-freshness window).
 rotation_minutes: 120
 
-# Post as Reels (short video, Ken-Burns motion over the rendered slides,
-# genre-matched royalty-free music) instead of static image carousels.
-publish_format: reel
+# Post as motion-graphics Reels (HyperFrames; falls back to the plain
+# Ken-Burns reel if the motion render fails) with genre/mood-matched music.
+publish_format: motion_reel
 
 genres:
   - genre: tech
@@ -78,4 +78,7 @@ credentials:
   jamendo_client_id_env: "JAMENDO_CLIENT_ID__example_tech_ig"
 
 text_provider: gemini
-image_provider: gemini
+# 'none': poster_core's Gemini image generation uses Imagen, which the Gemini
+# Developer API key can't call (every article lacking a usable image failed).
+# Posts use the article's own image, else the branded text layout.
+image_provider: none

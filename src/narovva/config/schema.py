@@ -85,7 +85,15 @@ class ChannelConfig(BaseModel):
     # "carousel" (default): post poster-core's rendered images directly.
     # "reel": assemble those same images into a short Ken-Burns video with
     # a genre-matched royalty-free music track and publish as a Reel.
-    publish_format: Literal["carousel", "reel"] = "carousel"
+    # "motion_reel": like "reel", but the slides are re-built as HyperFrames
+    # motion graphics (narovva.motion). Falls back to the plain "reel" if the
+    # motion render fails, so a post is never skipped.
+    publish_format: Literal["carousel", "reel", "motion_reel"] = "carousel"
+
+    @property
+    def is_video(self) -> bool:
+        """True for any format published as a Reel (needs music + video)."""
+        return self.publish_format in ("reel", "motion_reel")
 
     @field_validator("genres")
     @classmethod
