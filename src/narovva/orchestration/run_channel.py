@@ -21,7 +21,12 @@ from ..db.engine import ensure_schema, get_connection
 from ..db.repo import Repo
 from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
-from ..motion import MotionRenderError, render_motion_reel, slide_specs_from_assets
+from ..motion import MotionRenderError, render_motion_reel, slide_specs_from_assets, total_duration
+from ..motion.slides import SCENE_OVERLAP_SECONDS, motion_duration
+from ..narration import (
+    build_provider, choose_voice, default_voices, mix_voice_and_music, style_for_tone,
+    synthesize_lines, write_script,
+)
 from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
 from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
@@ -51,6 +56,7 @@ class _Outcome:
     platform_post_id: str | None = None
     error: str | None = None
     music_track_id: str | None = None
+    narration_voice: str | None = None
 
 
 def run_channel(
@@ -93,6 +99,7 @@ def run_channel(
     genres = [g for g in channel.genres if genres_filter is None or g.genre in genres_filter]
     genres_processed: list[str] = []
     recent_music_ids: set[str] = set(repo.recent_music_track_ids(channel.id)) if repo and channel.is_video else set()
+    recent_voices: set[str] = set(repo.recent_narration_voices(channel.id)) if repo and channel.narration else set()
 
     try:
         for genre_setting in genres:
@@ -122,9 +129,12 @@ def run_channel(
 
                 outcome = _process_one(
                     article, genre_setting, channel, dry_run=dry_run, recent_music_ids=recent_music_ids,
+                    recent_voices=recent_voices,
                 )
                 if outcome.music_track_id:
                     recent_music_ids.add(outcome.music_track_id)
+                if outcome.narration_voice:
+                    recent_voices.add(outcome.narration_voice)
                 if outcome.status == "failed":
                     logger.warning("channel %s: %s failed: %s", channel.id, article.url, outcome.error)
 
@@ -147,6 +157,7 @@ def run_channel(
                         platform_post_id=outcome.platform_post_id,
                         error=outcome.error,
                         music_track_id=outcome.music_track_id,
+                        narration_voice=outcome.narration_voice,
                     )
 
                 if outcome.status == "success":
@@ -177,6 +188,7 @@ def run_channel(
 def _process_one(
     article: FeedArticle, genre_setting: GenreSetting, channel: ChannelConfig, *, dry_run: bool,
     recent_music_ids: set[str] | frozenset[str] = frozenset(),
+    recent_voices: set[str] | frozenset[str] = frozenset(),
 ) -> _Outcome:
     is_reel = channel.is_video
     try:
@@ -220,6 +232,7 @@ def _process_one(
     hosted = []
     caption_text = caption.text
     music_track_id: str | None = None
+    narration_voice: str | None = None
     try:
         if is_reel:
             track = _pick_music_track(channel, genre_setting, brief, recent_music_ids)
@@ -230,8 +243,9 @@ def _process_one(
             reel_path = f"/tmp/narovva/{channel.id}/{article.content_id}_reel.mp4"
             video_path = None
             if channel.publish_format == "motion_reel":
-                video_path = _try_motion_reel(
-                    channel, assets, brief, track, durations, reel_path.replace("_reel.mp4", "_motion.mp4"),
+                video_path, narration_voice = _try_motion_reel(
+                    channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
+                    llm=llm, recent_voices=recent_voices, seed=article.content_id,
                 )
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
                 video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
@@ -259,6 +273,7 @@ def _process_one(
         return _Outcome(
             status="failed", caption_text=caption_text, hashtags=caption.hashtags,
             asset_types=asset_type_values, error=str(exc), music_track_id=music_track_id,
+            narration_voice=narration_voice,
         )
     finally:
         for h in hosted:
@@ -272,6 +287,7 @@ def _process_one(
         platform_post_id=post_result.platform_post_id,
         error=post_result.error,
         music_track_id=music_track_id,
+        narration_voice=narration_voice,
     )
 
 
@@ -318,22 +334,62 @@ def _preflight_token(channel: ChannelConfig) -> None:
     check_token(get_valid_token(channel))
 
 
-def _try_motion_reel(channel, assets, brief, track: MusicTrack, durations, output_path: str) -> str | None:
-    """Render the HyperFrames motion reel; returns the MP4 path, or None
-    (after logging why) so the caller falls back to the Ken-Burns reel."""
+def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed):
+    """Voice-over: script -> TTS (a voice not used recently) -> durations that
+    follow the speech -> music ducked under the voice. Returns (mixed_audio, voice)."""
+    cfg = channel.narration
+    env_name = {
+        "openai": channel.credentials.openai_api_key_env,
+        "gemini": channel.credentials.gemini_api_key_env,
+        "elevenlabs": channel.credentials.elevenlabs_api_key_env,
+    }[cfg.provider]
+    provider = build_provider(cfg.provider, resolve_env(env_name) or "", cfg.model)
+    pool = cfg.voices or default_voices(cfg.provider)
+    voice = choose_voice(pool, recent_voices, seed)
+    lines = write_script(llm, brief, specs, brand=channel.brand.name)
+    clips = synthesize_lines(provider, lines, voice=voice, style=style_for_tone(brief.tone))
+    for spec, clip in zip(specs, clips):
+        spec["duration"] = motion_duration(0, spec["kind"], clip.seconds)
+    starts, t = [], 0.0
+    for spec in specs:
+        starts.append(t + 0.25)  # the picture leads the voice slightly
+        t += spec["duration"] - SCENE_OVERLAP_SECONDS
+    total = total_duration([s["duration"] for s in specs])
+    audio = mix_voice_and_music(clips, starts, track.audio_bytes, total)
+    logger.info("channel %s: narrated with %s voice %r (%.0fs reel)", channel.id, cfg.provider, voice, total)
+    return audio, voice
+
+
+def _try_motion_reel(
+    channel, assets, brief, track: MusicTrack, output_path: str, *,
+    llm=None, recent_voices=frozenset(), seed: str = "",
+) -> tuple[str | None, str | None]:
+    """Render the HyperFrames motion reel (optionally narrated). Returns
+    (mp4 path, narration voice); path is None (after logging why) so the
+    caller falls back to the Ken-Burns reel. A narration failure only drops the voice."""
     try:
         category = getattr(brief.category, "value", str(brief.category))
         accent = channel.brand.category_accents.get(category) or channel.brand.accent_color
-        return render_motion_reel(
-            slide_specs_from_assets(assets, durations), track.audio_bytes, output_path,
+        specs = slide_specs_from_assets(assets)
+        audio, voice = track.audio_bytes, None
+        if channel.narration and llm is not None:
+            try:
+                audio, voice = _narrate(channel, brief, specs, track, llm=llm, recent_voices=recent_voices, seed=seed)
+            except Exception as exc:  # no voice is better than no post
+                logger.warning("channel %s: narration failed (%s); posting music-only", channel.id, exc)
+                specs = slide_specs_from_assets(assets)
+                audio, voice = track.audio_bytes, None
+        path = render_motion_reel(
+            specs, audio, output_path,
             accent=accent,
             handle=channel.brand.social_handle or "",
             brand=channel.brand.name,
             logo_path=channel.brand.logo_path or "",
         )
+        return path, voice
     except Exception as exc:  # any failure (render, staging, bad data) must degrade, not skip the post
         logger.warning("channel %s: motion reel failed (%s); falling back to plain reel", channel.id, exc)
-        return None
+        return None, None
 
 
 def _pick_music_track(

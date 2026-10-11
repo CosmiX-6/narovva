@@ -1,0 +1,48 @@
+name: Audition narration voices
+
+# Reads one sample news line in each voice of a provider (using the repo's own
+# API keys) and uploads the MP3s as an artifact, so voices can be chosen by ear.
+# Manual only; nothing is published.
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "TTS provider to audition"
+        required: true
+        default: "openai"
+        type: choice
+        options: [openai, gemini, elevenlabs]
+      voices:
+        description: "Optional space-separated voices (required for elevenlabs: voice ids). Blank = defaults."
+        required: false
+        type: string
+
+jobs:
+  audition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install narovva
+        run: pip install .
+
+      - name: Generate samples
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          PROVIDER: ${{ inputs.provider }}
+          VOICES: ${{ inputs.voices }}
+        run: python -m narovva.narration.demo "$PROVIDER" voice-samples $VOICES
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-samples-${{ inputs.provider }}
+          path: voice-samples/*.mp3
+          retention-days: 7

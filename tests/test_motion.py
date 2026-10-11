@@ -41,7 +41,7 @@ def _carousel_asset(n_slides: int = 3) -> GeneratedAsset:
 def test_total_duration_subtracts_scene_overlap():
     assert total_duration([]) == 0.0
     assert total_duration([3.0]) == pytest.approx(3.0)
-    assert total_duration([3.0, 4.0, 5.0]) == pytest.approx(12.0 - 0.8)
+    assert total_duration([3.0, 4.0, 5.0]) == pytest.approx(12.0 - 0.6)
 
 
 def test_slide_specs_cover_one_spec_per_image_with_durations_and_default_kicker():
@@ -57,6 +57,24 @@ def test_slide_specs_cover_one_spec_per_image_with_durations_and_default_kicker(
     assert specs[3]["comparison"]["value_a"] == "1"  # poster_core stringifies values
     assert [s["duration"] for s in specs] == [2.2, 3.0, 4.0, 5.0]
     json.dumps(specs)  # plain data only
+
+
+def test_slide_specs_default_to_brisk_durations_and_compact_text():
+    long_body = "Word " * 80
+    asset = _carousel_asset(2)
+    asset.plan.slides[0].body = long_body
+    specs = slide_specs_from_assets([asset])
+    assert len(specs[0]["body"]) <= 106 and specs[0]["duration"] <= 4.2
+    assert all(2.0 <= s["duration"] <= 4.2 for s in specs)
+
+
+def test_motion_duration_voice_sets_length_with_floor():
+    from narovva.motion.slides import motion_duration
+
+    assert motion_duration(0, "text", 3.0) == pytest.approx(3.5)
+    assert motion_duration(0, "text", 0.5) == 2.0      # never shorter than the floor
+    assert motion_duration(999, "text") == 4.2          # reading time is capped
+    assert motion_duration(10, "hook") >= 2.4
 
 
 def test_slide_specs_reject_mismatched_durations():
@@ -140,8 +158,8 @@ def test_try_motion_reel_passes_category_accent_and_handle(monkeypatch):
         return out
 
     monkeypatch.setattr(run_channel_module, "render_motion_reel", fake_render)
-    path = run_channel_module._try_motion_reel(_channel(), [_carousel_asset(2)], _brief(), _Track(), [2.2, 3.0], "/tmp/x.mp4")
-    assert path == "/tmp/x.mp4" and seen["accent"] == "#3B82F6" and seen["handle"] == "cu"
+    path, voice = run_channel_module._try_motion_reel(_channel(), [_carousel_asset(2)], _brief(), _Track(), "/tmp/x.mp4")
+    assert path == "/tmp/x.mp4" and voice is None and seen["accent"] == "#3B82F6" and seen["handle"] == "cu"
 
 
 def test_try_motion_reel_returns_none_on_any_failure(monkeypatch):
@@ -149,9 +167,7 @@ def test_try_motion_reel_returns_none_on_any_failure(monkeypatch):
         raise MotionRenderError("chrome crashed")
 
     monkeypatch.setattr(run_channel_module, "render_motion_reel", boom)
-    assert run_channel_module._try_motion_reel(_channel(), [_carousel_asset(2)], _brief(), _Track(), [2.2, 3.0], "/tmp/x.mp4") is None
-    # bad data (durations don't match images) also degrades instead of raising
-    assert run_channel_module._try_motion_reel(_channel(), [_carousel_asset(2)], _brief(), _Track(), [2.2], "/tmp/x.mp4") is None
+    assert run_channel_module._try_motion_reel(_channel(), [_carousel_asset(2)], _brief(), _Track(), "/tmp/x.mp4") == (None, None)
 
 
 def test_process_one_falls_back_to_plain_reel_when_motion_render_fails(monkeypatch, tmp_path):

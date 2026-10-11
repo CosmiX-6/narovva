@@ -64,6 +64,18 @@ class CredentialRefs(BaseModel):
     openai_api_key_env: str | None = None
     gemini_api_key_env: str | None = None
     jamendo_client_id_env: str | None = None
+    elevenlabs_api_key_env: str | None = None
+
+
+class NarrationConfig(BaseModel):
+    """Voice-over for motion reels. A different voice is picked for each video
+    from `voices` (defaults per provider) and the music ducks under it. Any
+    failure falls back to a music-only reel."""
+
+    provider: Literal["openai", "elevenlabs", "gemini"] = "openai"
+    model: str | None = None
+    # OpenAI/Gemini voice names, or ElevenLabs voice_ids (required for elevenlabs).
+    voices: list[str] | None = None
 
 
 class ChannelConfig(BaseModel):
@@ -89,6 +101,8 @@ class ChannelConfig(BaseModel):
     # motion graphics (narovva.motion). Falls back to the plain "reel" if the
     # motion render fails, so a post is never skipped.
     publish_format: Literal["carousel", "reel", "motion_reel"] = "carousel"
+    # Voice-over for "motion_reel" (ignored by other formats). Unset = music only.
+    narration: NarrationConfig | None = None
 
     @property
     def is_video(self) -> bool:

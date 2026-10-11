@@ -22,6 +22,13 @@ rotation_minutes: 120
 # Ken-Burns reel if the motion render fails) with genre/mood-matched music.
 publish_format: motion_reel
 
+# Voice-over for the motion reel. A different voice is picked for every video
+# (never one used in the last few posts), delivery follows the story's tone, and
+# the music ducks under the voice. Any failure posts the reel with music only.
+# Audition the voices first: Actions -> "Audition narration voices".
+narration:
+  provider: openai   # uses OPENAI_API_KEY; or gemini (GOOGLE_API_KEY) / elevenlabs
+
 genres:
   - genre: tech
     country: us
