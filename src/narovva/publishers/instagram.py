@@ -9,6 +9,7 @@ https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/cont
 
 from __future__ import annotations
 
+import logging
 import time
 
 import httpx
@@ -17,6 +18,8 @@ from ..config.schema import ChannelConfig
 from ..platforms import PublishPlatform
 from ..tokens.instagram_token_store import get_valid_token
 from .base import PostResult, PublishAsset
+
+logger = logging.getLogger(__name__)
 
 _GRAPH_BASE = "https://graph.instagram.com/v21.0"
 _POLL_INTERVAL_SECONDS = 2.0
@@ -71,6 +74,7 @@ class InstagramGraphPublisher:
                 self._wait_until_finished(creation_id, token)
             media_id = self._publish_container(ig_user_id, creation_id, token)
         except _GraphAPIError as exc:
+            logger.warning("instagram publish failed for %s: %s | response=%s", channel.id, exc, exc.response)
             return PostResult(status="failed", error=str(exc), raw_response=exc.response)
         return PostResult(status="success", platform_post_id=media_id)
 
