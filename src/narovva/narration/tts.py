@@ -29,19 +29,33 @@ class Clip:
     seconds: float
 
 
+_QUOTA_HINTS = ("insufficient_quota", "billing", "exceeded your current quota", "quota exceeded")
+
+
 def _post(url: str, *, retries: int = 3, **kwargs) -> httpx.Response:
+    """POST with backoff on transient errors. The provider's own error message is
+    always kept; a 429 that is really a billing/quota problem fails at once
+    (retrying can't fix it) with that message."""
     last: Exception | None = None
     for attempt in range(retries):
         try:
             resp = httpx.post(url, timeout=60.0, **kwargs)
         except httpx.HTTPError as exc:
-            last = exc
+            last = NarrationError(f"TTS request error: {exc}")
         else:
-            if resp.status_code not in _RETRY_STATUS:
-                if resp.status_code >= 400:
-                    raise NarrationError(f"TTS request failed ({resp.status_code}): {resp.text[:300]}")
+            if resp.status_code < 400:
                 return resp
-            last = NarrationError(f"TTS request returned {resp.status_code}")
+            body = (resp.text or "")[:400]
+            logger.warning("TTS %s -> HTTP %s: %s", url.split("?")[0], resp.status_code, body)
+            if resp.status_code not in _RETRY_STATUS or (
+                resp.status_code == 429 and any(h in body.lower() for h in _QUOTA_HINTS)
+            ):
+                raise NarrationError(f"TTS request failed (HTTP {resp.status_code}): {body}")
+            last = NarrationError(f"HTTP {resp.status_code}: {body}")
+            try:
+                time.sleep(min(float(resp.headers.get("retry-after", 0)), 10.0))
+            except (TypeError, ValueError):
+                pass
         time.sleep(1.5 * (attempt + 1))
     raise NarrationError(f"TTS request failed after retries: {last}")
 

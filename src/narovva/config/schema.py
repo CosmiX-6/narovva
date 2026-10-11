@@ -76,6 +76,8 @@ class NarrationConfig(BaseModel):
     model: str | None = None
     # OpenAI/Gemini voice names, or ElevenLabs voice_ids (required for elevenlabs).
     voices: list[str] | None = None
+    # Tried in order if the primary provider fails (each uses its own default voices).
+    fallback_providers: list[Literal["openai", "elevenlabs", "gemini"]] = Field(default_factory=list)
 
 
 class ChannelConfig(BaseModel):

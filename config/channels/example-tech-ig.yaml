@@ -28,6 +28,7 @@ publish_format: motion_reel
 # Audition the voices first: Actions -> "Audition narration voices".
 narration:
   provider: openai   # uses OPENAI_API_KEY; or gemini (GOOGLE_API_KEY) / elevenlabs
+  fallback_providers: [gemini]   # tried in order if the primary fails (e.g. quota, outage)
 
 genres:
   - genre: tech

@@ -102,6 +102,7 @@ def test_write_script_replaces_bad_lines_and_survives_llm_failure():
 class _Resp:
     def __init__(self, status=200, content=b"", payload=None):
         self.status_code, self.content, self._p, self.text = status, content, payload, str(payload)
+        self.headers = {}
 
     def json(self):
         return self._p
@@ -263,4 +264,60 @@ def test_no_narration_config_means_no_tts(monkeypatch):
     monkeypatch.setattr(rc, "build_provider", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no TTS expected")))
     monkeypatch.setattr(rc, "render_motion_reel", lambda specs, audio, out, **kw: out)
     path, voice = rc._try_motion_reel(_channel(narration=None), [_asset(2)], _brief(), _Track(), "/tmp/o.mp4", llm=_LLM([]))
+    assert path == "/tmp/o.mp4" and voice is None
+
+
+# -- failure handling ---------------------------------------------------------
+
+def test_quota_429_fails_fast_with_the_providers_message(monkeypatch):
+    calls = []
+    body = {"error": {"message": "You exceeded your current quota", "code": "insufficient_quota"}}
+    monkeypatch.setattr(tts_module.httpx, "post", lambda url, **kw: (calls.append(1), _Resp(status=429, payload=body))[1])
+    monkeypatch.setattr(tts_module.time, "sleep", lambda s: None)
+    with pytest.raises(NarrationError, match="insufficient_quota"):
+        build_provider("openai", "k").synthesize("x", voice="coral", style=("", ""))
+    assert len(calls) == 1  # retrying a billing problem is pointless
+
+
+def test_plain_rate_limit_429_retries_then_reports_body(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tts_module.httpx, "post", lambda url, **kw: (calls.append(1), _Resp(status=429, payload={"error": "slow down"}))[1])
+    monkeypatch.setattr(tts_module.time, "sleep", lambda s: None)
+    with pytest.raises(NarrationError, match="slow down"):
+        build_provider("openai", "k").synthesize("x", voice="coral", style=("", ""))
+    assert len(calls) == 3
+
+
+def test_narration_falls_back_to_the_next_provider(monkeypatch):
+    class Boom:
+        def synthesize(self, *a, **k):
+            raise NarrationError("HTTP 429: insufficient_quota")
+
+    good = _FakeProvider()
+    made = []
+
+    def fake_build(name, key, model=None):
+        made.append(name)
+        return Boom() if name == "openai" else good
+
+    monkeypatch.setattr(rc, "build_provider", fake_build)
+    monkeypatch.setattr(rc, "resolve_env", lambda name: "key")
+    monkeypatch.setattr(rc, "render_motion_reel", lambda specs, audio, out, **kw: out)
+    ch = _channel(narration=NarrationConfig(provider="openai", fallback_providers=["gemini"]))
+    path, voice = rc._try_motion_reel(ch, [_asset(3)], _brief(), _Track(), "/tmp/o.mp4", llm=_LLM(["a", "b", "c"]), seed="s")
+    assert made == ["openai", "gemini"] and path == "/tmp/o.mp4"
+    assert voice in default_voices("gemini") and good.voices          # narrated by the fallback
+
+
+def test_all_providers_failing_still_posts_music_only(monkeypatch):
+    class Boom:
+        def synthesize(self, *a, **k):
+            raise NarrationError("down")
+
+    monkeypatch.setattr(rc, "build_provider", lambda *a, **k: Boom())
+    monkeypatch.setattr(rc, "resolve_env", lambda name: "key")
+    monkeypatch.setattr(rc, "render_motion_reel", lambda specs, audio, out, **kw: out)
+    ch = _channel(narration=NarrationConfig(provider="openai", fallback_providers=["gemini"]))
+    track = _Track()
+    path, voice = rc._try_motion_reel(ch, [_asset(3)], _brief(), track, "/tmp/o.mp4", llm=_LLM(["a", "b", "c"]), seed="s")
     assert path == "/tmp/o.mp4" and voice is None

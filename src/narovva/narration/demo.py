@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import sys
+
+import httpx
 from pathlib import Path
 
 from .tts import build_provider
@@ -44,6 +46,14 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:  # keep going: one bad voice shouldn't hide the rest
                 failures += 1
                 print(f"FAILED {voice}/{tone}: {exc}")
+    if failures and provider_name == "gemini":
+        try:  # a wrong model name is the usual cause: show what the key can actually use
+            r = httpx.get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+                          headers={"x-goog-api-key": key}, timeout=30.0)
+            names = [m["name"].split("/")[-1] for m in r.json().get("models", []) if "tts" in m["name"].lower()]
+            print("Gemini TTS models available to this key:", names or "none found")
+        except Exception as exc:
+            print("could not list Gemini models:", exc)
     return 1 if failures == len(voices) * 2 else 0
 
 
