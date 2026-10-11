@@ -19,6 +19,8 @@ from ..db.engine import get_connection
 from ..db.repo import Repo
 from ..settings import get_settings
 
+ROTATION_GRACE_MINUTES = 20
+
 
 @dataclass
 class DueGenre:
@@ -59,7 +61,10 @@ def _next_rotation_genre(channel: ChannelConfig, repo: Repo | None, now: datetim
         return genre_order[0]
 
     last_genre, last_at = last
-    if now - last_at < timedelta(minutes=channel.rotation_minutes):
+    # Posts are stamped after the render/upload (several minutes into the hour),
+    # while the scheduler ticks on the hour; without a grace window a 120-minute
+    # rotation would only ever fire every 3 hours.
+    if now - last_at < timedelta(minutes=channel.rotation_minutes - ROTATION_GRACE_MINUTES):
         return None
 
     idx = (genre_order.index(last_genre) + 1) % len(genre_order) if last_genre in genre_order else 0
