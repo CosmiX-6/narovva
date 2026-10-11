@@ -14,3 +14,4 @@ uv.lock
 .vercel/
 .vercel
 .env*
+node_modules/

@@ -132,3 +132,24 @@ Offline: config loading/validation and caption rules run with no network
 calls or API keys. Exercising the real pipeline (`run-channel` without
 `--dry-run`) needs a configured channel, a Postgres `DATABASE_URL`, a
 `BLOB_READ_WRITE_TOKEN`, an LLM API key, and real Instagram credentials.
+
+## Motion reels (HyperFrames)
+
+`publish_format: motion_reel` builds the Reel from HTML/CSS/GSAP motion graphics
+rendered by [HyperFrames](https://github.com/heygen-com/hyperframes) (headless
+Chrome + FFmpeg) instead of a Ken-Burns slideshow of the PNG slides. One scene
+per slide, with a per-kind animation (hook, text, evidence, stats, timeline,
+money_flow, comparison, quote, conclusion, cta), the channel's brand colours
+and logo, and the music mixed in. If the motion render fails for any reason the
+post falls back to the plain `reel` format, so nothing is skipped.
+
+- Needs Node 22+, FFmpeg and `npm ci` (pins `hyperframes`); first run also needs
+  `npx hyperframes browser ensure` (Chrome Headless Shell). `HYPERFRAMES_BIN`
+  overrides the CLI location.
+- Preview everything locally: `python -m narovva.motion out.mp4` renders a sample
+  deck covering every slide kind (~2 min for 43 s of video).
+- Templates live in `src/narovva/motion/templates/reel/`; GSAP and the Archivo
+  Black / Inter fonts (OFL) are vendored so renders need no CDN.
+- Each Reel records its music track in `post_history.music_track_id` (migration
+  `0002`), and later posts avoid recently used tracks. Track tags come from the
+  genre, `brief.tone`, `brief.emotions` and `brief.category`.

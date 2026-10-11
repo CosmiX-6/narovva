@@ -1,0 +1,7 @@
+{
+  "name": "narovva-motion",
+  "private": true,
+  "description": "Node toolchain for narovva's HyperFrames motion reels (see src/narovva/motion).",
+  "engines": { "node": ">=22" },
+  "dependencies": { "hyperframes": "0.8.145" }
+}

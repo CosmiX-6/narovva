@@ -21,6 +21,7 @@ from ..db.engine import ensure_schema, get_connection
 from ..db.repo import Repo
 from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
+from ..motion import MotionRenderError, render_motion_reel, slide_specs_from_assets
 from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
 from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
@@ -48,6 +49,7 @@ class _Outcome:
     asset_types: list[str]
     platform_post_id: str | None = None
     error: str | None = None
+    music_track_id: str | None = None
 
 
 def run_channel(
@@ -75,6 +77,7 @@ def run_channel(
 
     genres = [g for g in channel.genres if genres_filter is None or g.genre in genres_filter]
     genres_processed: list[str] = []
+    recent_music_ids: set[str] = set(repo.recent_music_track_ids(channel.id)) if repo and channel.is_video else set()
 
     try:
         for genre_setting in genres:
@@ -102,7 +105,11 @@ def run_channel(
                     result.skipped += 1
                     continue
 
-                outcome = _process_one(article, genre_setting, channel, dry_run=dry_run)
+                outcome = _process_one(
+                    article, genre_setting, channel, dry_run=dry_run, recent_music_ids=recent_music_ids,
+                )
+                if outcome.music_track_id:
+                    recent_music_ids.add(outcome.music_track_id)
 
                 if outcome.status == "dry_run":
                     result.skipped += 1
@@ -122,6 +129,7 @@ def run_channel(
                         status=outcome.status,
                         platform_post_id=outcome.platform_post_id,
                         error=outcome.error,
+                        music_track_id=outcome.music_track_id,
                     )
 
                 if outcome.status == "success":
@@ -150,9 +158,10 @@ def run_channel(
 
 
 def _process_one(
-    article: FeedArticle, genre_setting: GenreSetting, channel: ChannelConfig, *, dry_run: bool
+    article: FeedArticle, genre_setting: GenreSetting, channel: ChannelConfig, *, dry_run: bool,
+    recent_music_ids: set[str] | frozenset[str] = frozenset(),
 ) -> _Outcome:
-    is_reel = channel.publish_format == "reel"
+    is_reel = channel.is_video
     try:
         llm = _build_llm(channel)
         pipeline = Pipeline(
@@ -193,17 +202,22 @@ def _process_one(
     publish_assets: list[PublishAsset] = []
     hosted = []
     caption_text = caption.text
+    music_track_id: str | None = None
     try:
         if is_reel:
-            track = _pick_music_track(channel, genre_setting, brief.tone)
+            track = _pick_music_track(channel, genre_setting, brief, recent_music_ids)
+            music_track_id = track.id
             caption_text = f"{caption.text}\n\n{track.attribution}"
             image_paths = [path for asset in assets for path in asset.paths]
             durations = [slide_duration(c) for c in _slide_char_counts(assets)]
-            video_path = assemble_reel(
-                image_paths, track.audio_bytes,
-                f"/tmp/narovva/{channel.id}/{article.content_id}_reel.mp4",
-                durations=durations,
-            )
+            reel_path = f"/tmp/narovva/{channel.id}/{article.content_id}_reel.mp4"
+            video_path = None
+            if channel.publish_format == "motion_reel":
+                video_path = _try_motion_reel(
+                    channel, assets, brief, track, durations, reel_path.replace("_reel.mp4", "_motion.mp4"),
+                )
+            if video_path is None:  # plain reel, or motion render failed -> never skip the post
+                video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
             h = host.upload(
                 Path(video_path).read_bytes(),
                 f"{channel.id}/{article.content_id}/reel.mp4",
@@ -227,7 +241,7 @@ def _process_one(
     except (ImageHostError, JamendoError, VideoAssemblyError) as exc:
         return _Outcome(
             status="failed", caption_text=caption_text, hashtags=caption.hashtags,
-            asset_types=asset_type_values, error=str(exc),
+            asset_types=asset_type_values, error=str(exc), music_track_id=music_track_id,
         )
     finally:
         for h in hosted:
@@ -240,6 +254,7 @@ def _process_one(
         asset_types=asset_type_values,
         platform_post_id=post_result.platform_post_id,
         error=post_result.error,
+        music_track_id=music_track_id,
     )
 
 
@@ -282,15 +297,37 @@ def _deck_slide_char_count(slide) -> int:
     return count
 
 
-def _pick_music_track(channel: ChannelConfig, genre_setting: GenreSetting, tone: str) -> MusicTrack:
+def _try_motion_reel(channel, assets, brief, track: MusicTrack, durations, output_path: str) -> str | None:
+    """Render the HyperFrames motion reel; returns the MP4 path, or None
+    (after logging why) so the caller falls back to the Ken-Burns reel."""
+    try:
+        category = getattr(brief.category, "value", str(brief.category))
+        accent = channel.brand.category_accents.get(category) or channel.brand.accent_color
+        return render_motion_reel(
+            slide_specs_from_assets(assets, durations), track.audio_bytes, output_path,
+            accent=accent,
+            handle=channel.brand.social_handle or "",
+            brand=channel.brand.name,
+            logo_path=channel.brand.logo_path or "",
+        )
+    except Exception as exc:  # any failure (render, staging, bad data) must degrade, not skip the post
+        logger.warning("channel %s: motion reel failed (%s); falling back to plain reel", channel.id, exc)
+        return None
+
+
+def _pick_music_track(
+    channel: ChannelConfig, genre_setting: GenreSetting, brief, recent_music_ids=frozenset(),
+) -> MusicTrack:
     client_id = resolve_env(channel.credentials.jamendo_client_id_env)
     if not client_id:
         raise JamendoError(
             f"channel {channel.id!r} has publish_format='reel' but credentials.jamendo_client_id_env "
             "is unset (or the env var it names has no value)"
         )
-    tags = genre_setting.music_tags or music_tags_for(genre_setting.genre, tone)
-    return JamendoMusicClient(client_id).pick_track(tags)
+    tags = genre_setting.music_tags or music_tags_for(
+        genre_setting.genre, brief.tone, brief.emotions, getattr(brief.category, "value", None),
+    )
+    return JamendoMusicClient(client_id).pick_track(tags, exclude_ids=recent_music_ids)
 
 
 def _build_llm(channel: ChannelConfig) -> LLMClient:
