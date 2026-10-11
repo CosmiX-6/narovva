@@ -1,4 +1,4 @@
-"""Render the sample deck: python -m narovva.motion [out.mp4] [--keep-stage DIR]"""
+"""Render the sample deck from the repo root: python -m narovva.motion [out.mp4] [logo.png]"""
 
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ from .sample import SAMPLE_SLIDES
 
 def main() -> None:
     out = sys.argv[1] if len(sys.argv) > 1 else "motion-sample.mp4"
-    logo = Path(__file__).resolve().parents[3] / "assets" / "logo" / "CU.png"
+    # Relative to the working directory (repo root), like channel.brand.logo_path.
+    logo = Path(sys.argv[2] if len(sys.argv) > 2 else "assets/logo/CU.png")
     total = sum(s["duration"] for s in SAMPLE_SLIDES) - 0.4 * (len(SAMPLE_SLIDES) - 1)
     audio = subprocess.run(
         [imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220",
