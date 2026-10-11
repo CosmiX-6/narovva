@@ -32,7 +32,10 @@
       .progress { position: absolute; left: 72px; right: 150px; top: 1560px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; }
       .progress i { display: block; height: 100%; width: 100%; background: var(--accent); border-radius: 3px; transform-origin: left center; }
 
-      .scene { position: absolute; left: 72px; top: 400px; width: 858px; height: 1040px; display: flex; flex-direction: column; justify-content: center; }
+      /* Slides live in a clipped content window so transitions never cross the brand
+         header or the handle/progress footer. */
+      #scenes { position: absolute; left: 0; top: 330px; width: 1080px; height: 1130px; overflow: hidden; }
+      .scene { position: absolute; left: 72px; top: 70px; width: 858px; height: 1040px; display: flex; flex-direction: column; justify-content: center; }
       .kicker { align-self: flex-start; padding: 14px 28px; border-radius: 999px; font-weight: 700; font-size: 30px; letter-spacing: .18em; color: var(--navy); background: var(--accent); margin-bottom: 44px; text-transform: uppercase; }
       .h { font-family: "Archivo Black", sans-serif; letter-spacing: -.01em; text-transform: uppercase; line-height: 1.06; }
       .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 8px; margin-right: .26em; }
