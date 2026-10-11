@@ -61,6 +61,25 @@ def get_valid_token(channel: ChannelConfig) -> str:
     return env_token
 
 
+def check_token(token: str) -> None:
+    """Cheap call that proves the token is accepted by Instagram right now
+    (raises InstagramTokenError with Instagram's own message otherwise), so a
+    dead token is caught in seconds instead of after a multi-minute render."""
+    try:
+        resp = httpx.get(
+            f"{_GRAPH_BASE}/v21.0/me", params={"fields": "id", "access_token": token}, timeout=20.0,
+        )
+    except httpx.HTTPError as exc:
+        # Network trouble isn't proof the token is bad; let the real publish decide.
+        return
+    if resp.status_code >= 400:
+        try:
+            message = resp.json().get("error", {}).get("message", resp.text)
+        except ValueError:
+            message = resp.text
+        raise InstagramTokenError(f"Instagram rejected the access token: {message}")
+
+
 def store_refreshed_token(channel: ChannelConfig, *, access_token: str, expires_in_seconds: int) -> None:
     now = datetime.now(timezone.utc)
     encrypted = _fernet().encrypt(access_token.encode())

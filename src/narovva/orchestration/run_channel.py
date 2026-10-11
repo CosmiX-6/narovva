@@ -26,6 +26,7 @@ from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
 from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
 from ..settings import Settings, get_settings, resolve_env
+from ..tokens import InstagramTokenError, check_token, get_valid_token
 from ..video import VideoAssemblyError, assemble_reel, slide_duration
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,20 @@ def run_channel(
     run_id = repo.start_run(channel.id) if repo else None
 
     result = ChannelRunResult(channel_id=channel.id)
+    if not dry_run and channel.platform == "instagram":
+        # Fail in seconds, before fetching/rendering, if Instagram would reject the token.
+        try:
+            _preflight_token(channel)
+        except InstagramTokenError as exc:
+            logger.error("channel %s: %s", channel.id, exc)
+            result.failed += 1
+            result.errors.append(str(exc))
+            if repo and run_id is not None:
+                repo.finish_run(
+                    run_id, status="failed", genres_processed=[], articles_considered=0,
+                    articles_posted=0, error=str(exc),
+                )
+            return result
     store = get_store_for_channel(channel.id)
     sources = [RSSSource()]
     if settings.newsapi_key:
@@ -297,6 +312,10 @@ def _deck_slide_char_count(slide) -> int:
     if slide.quote:
         count += len(slide.quote.text) + len(slide.quote.attribution or "")
     return count
+
+
+def _preflight_token(channel: ChannelConfig) -> None:
+    check_token(get_valid_token(channel))
 
 
 def _try_motion_reel(channel, assets, brief, track: MusicTrack, durations, output_path: str) -> str | None:

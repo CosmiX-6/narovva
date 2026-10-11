@@ -1,0 +1,31 @@
+name: Refresh Instagram token
+
+# Instagram long-lived tokens last ~60 days and can only be refreshed while
+# still valid (and at least 24h old). Refreshing weekly keeps the channel
+# posting. The new token is stored encrypted in Postgres (instagram_tokens),
+# which narovva prefers over the IG_ACCESS_TOKEN__* secret.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install narovva
+        run: pip install .
+
+      - name: Refresh token
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+          IG_ACCESS_TOKEN__example_tech_ig: ${{ secrets.IG_ACCESS_TOKEN__EXAMPLE_TECH_IG }}
+        run: narovva refresh-token config/channels/example-tech-ig.yaml
