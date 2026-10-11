@@ -11,6 +11,8 @@ _DEFAULT_VOICES = {
     "openai": ["coral", "nova", "shimmer", "sage", "ash", "onyx", "verse", "ballad"],
     "gemini": ["Kore", "Puck", "Aoede", "Charon", "Fenrir", "Leda", "Orus", "Zephyr"],
     "elevenlabs": [],
+    # Kokoro: US + UK voices; af_heart/af_bella/am_michael were auditioned.
+    "kokoro": ["af_heart", "af_bella", "am_michael", "af_nicole", "am_adam", "bf_emma", "bm_george", "af_sky"],
 }
 
 # Delivery direction per ContentBrief.tone. OpenAI takes it as natural-language

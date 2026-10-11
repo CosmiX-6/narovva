@@ -6,8 +6,10 @@ from __future__ import annotations
 import base64
 import io
 import logging
+import os
 import subprocess
 import tempfile
+import threading
 import time
 import wave
 from concurrent.futures import ThreadPoolExecutor
@@ -29,19 +31,33 @@ class Clip:
     seconds: float
 
 
+_QUOTA_HINTS = ("insufficient_quota", "billing", "exceeded your current quota", "quota exceeded")
+
+
 def _post(url: str, *, retries: int = 3, **kwargs) -> httpx.Response:
+    """POST with backoff on transient errors. The provider's own error message is
+    always kept; a 429 that is really a billing/quota problem fails at once
+    (retrying can't fix it) with that message."""
     last: Exception | None = None
     for attempt in range(retries):
         try:
             resp = httpx.post(url, timeout=60.0, **kwargs)
         except httpx.HTTPError as exc:
-            last = exc
+            last = NarrationError(f"TTS request error: {exc}")
         else:
-            if resp.status_code not in _RETRY_STATUS:
-                if resp.status_code >= 400:
-                    raise NarrationError(f"TTS request failed ({resp.status_code}): {resp.text[:300]}")
+            if resp.status_code < 400:
                 return resp
-            last = NarrationError(f"TTS request returned {resp.status_code}")
+            body = (resp.text or "")[:400]
+            logger.warning("TTS %s -> HTTP %s: %s", url.split("?")[0], resp.status_code, body)
+            if resp.status_code not in _RETRY_STATUS or (
+                resp.status_code == 429 and any(h in body.lower() for h in _QUOTA_HINTS)
+            ):
+                raise NarrationError(f"TTS request failed (HTTP {resp.status_code}): {body}")
+            last = NarrationError(f"HTTP {resp.status_code}: {body}")
+            try:
+                time.sleep(min(float(resp.headers.get("retry-after", 0)), 10.0))
+            except (TypeError, ValueError):
+                pass
         time.sleep(1.5 * (attempt + 1))
     raise NarrationError(f"TTS request failed after retries: {last}")
 
@@ -107,7 +123,71 @@ class GeminiTTS:
         return buf.getvalue()
 
 
+_KOKORO_BASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
+_KOKORO_FILES = {"kokoro-v1.0.onnx": 300_000_000, "voices-v1.0.bin": 20_000_000}  # (min plausible sizes)
+
+
+def kokoro_dir() -> Path:
+    return Path(os.environ.get("NAROVVA_KOKORO_DIR") or Path.home() / ".cache" / "narovva" / "kokoro")
+
+
+def ensure_kokoro_models() -> tuple[Path, Path]:
+    """Model files for the local Kokoro voice, downloaded once and cached."""
+    d = kokoro_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    for name, min_size in _KOKORO_FILES.items():
+        path = d / name
+        if path.exists() and path.stat().st_size >= min_size:
+            continue
+        logger.info("downloading Kokoro model file %s (one-time, cached)", name)
+        tmp = path.with_suffix(path.suffix + ".part")
+        try:
+            with httpx.stream("GET", f"{_KOKORO_BASE}/{name}", follow_redirects=True, timeout=300.0) as r:
+                r.raise_for_status()
+                with open(tmp, "wb") as f:
+                    for chunk in r.iter_bytes(1 << 20):
+                        f.write(chunk)
+        except httpx.HTTPError as exc:
+            tmp.unlink(missing_ok=True)
+            raise NarrationError(f"could not download Kokoro model {name}: {exc}") from exc
+        if tmp.stat().st_size < min_size:
+            tmp.unlink(missing_ok=True)
+            raise NarrationError(f"downloaded Kokoro file {name} is too small")
+        tmp.replace(path)
+    return d / "kokoro-v1.0.onnx", d / "voices-v1.0.bin"
+
+
+class KokoroTTS:
+    """Free, offline voice (Kokoro-82M via ONNX): no API key, no quota. Less
+    expressive than the cloud voices, but it always works. Needs the
+    `narration-local` extra (kokoro-onnx, soundfile)."""
+
+    _lock = threading.Lock()
+
+    def __init__(self, _key: str = "", model: str | None = None, speed: float = 1.05):
+        try:
+            from kokoro_onnx import Kokoro
+            import soundfile  # noqa: F401
+        except ImportError as exc:
+            raise NarrationError("Kokoro needs: pip install 'narovva[narration-local]'") from exc
+        onnx, voices = ensure_kokoro_models()
+        self._kokoro, self._speed = Kokoro(str(onnx), str(voices)), speed
+
+    def synthesize(self, text: str, *, voice: str, style: tuple[str, str]) -> bytes:
+        import soundfile as sf
+
+        with self._lock:  # one ONNX session; keep synthesis sequential
+            samples, rate = self._kokoro.create(
+                text, voice=voice, speed=self._speed, lang="en-gb" if voice.startswith("b") else "en-us",
+            )
+        buf = io.BytesIO()
+        sf.write(buf, samples, rate, format="WAV")
+        return buf.getvalue()
+
+
 def build_provider(name: str, api_key: str, model: str | None = None):
+    if name == "kokoro":
+        return KokoroTTS(api_key, model)
     cls = {"openai": OpenAITTS, "elevenlabs": ElevenLabsTTS, "gemini": GeminiTTS}.get(name)
     if cls is None:
         raise NarrationError(f"unknown narration provider {name!r}")

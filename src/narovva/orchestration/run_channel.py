@@ -336,28 +336,39 @@ def _preflight_token(channel: ChannelConfig) -> None:
 
 def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed):
     """Voice-over: script -> TTS (a voice not used recently) -> durations that
-    follow the speech -> music ducked under the voice. Returns (mixed_audio, voice)."""
+    follow the speech -> music ducked under the voice. Tries the configured
+    provider, then each fallback. Returns (mixed_audio, voice)."""
     cfg = channel.narration
-    env_name = {
+    env_names = {
         "openai": channel.credentials.openai_api_key_env,
         "gemini": channel.credentials.gemini_api_key_env,
         "elevenlabs": channel.credentials.elevenlabs_api_key_env,
-    }[cfg.provider]
-    provider = build_provider(cfg.provider, resolve_env(env_name) or "", cfg.model)
-    pool = cfg.voices or default_voices(cfg.provider)
-    voice = choose_voice(pool, recent_voices, seed)
+        "kokoro": None,  # local voice, no key
+    }
     lines = write_script(llm, brief, specs, brand=channel.brand.name)
-    clips = synthesize_lines(provider, lines, voice=voice, style=style_for_tone(brief.tone))
-    for spec, clip in zip(specs, clips):
-        spec["duration"] = motion_duration(0, spec["kind"], clip.seconds)
-    starts, t = [], 0.0
-    for spec in specs:
-        starts.append(t + 0.25)  # the picture leads the voice slightly
-        t += spec["duration"] - SCENE_OVERLAP_SECONDS
-    total = total_duration([s["duration"] for s in specs])
-    audio = mix_voice_and_music(clips, starts, track.audio_bytes, total)
-    logger.info("channel %s: narrated with %s voice %r (%.0fs reel)", channel.id, cfg.provider, voice, total)
-    return audio, voice
+    style = style_for_tone(brief.tone)
+    failures: list[str] = []
+    for n, name in enumerate([cfg.provider, *cfg.fallback_providers]):
+        try:
+            provider = build_provider(name, resolve_env(env_names[name]) or "", cfg.model if n == 0 else None)
+            pool = (cfg.voices if n == 0 and cfg.voices else None) or default_voices(name)
+            voice = choose_voice(pool, recent_voices, seed)
+            clips = synthesize_lines(provider, lines, voice=voice, style=style)
+        except Exception as exc:
+            failures.append(f"{name}: {exc}")
+            logger.warning("channel %s: narration via %s failed (%s)", channel.id, name, exc)
+            continue
+        for spec, clip in zip(specs, clips):
+            spec["duration"] = motion_duration(0, spec["kind"], clip.seconds)
+        starts, t = [], 0.0
+        for spec in specs:
+            starts.append(t + 0.25)  # the picture leads the voice slightly
+            t += spec["duration"] - SCENE_OVERLAP_SECONDS
+        total = total_duration([s["duration"] for s in specs])
+        audio = mix_voice_and_music(clips, starts, track.audio_bytes, total)
+        logger.info("channel %s: narrated with %s voice %r (%.0fs reel)", channel.id, name, voice, total)
+        return audio, voice
+    raise RuntimeError("; ".join(failures) or "no narration provider configured")
 
 
 def _try_motion_reel(

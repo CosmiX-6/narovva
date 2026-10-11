@@ -28,6 +28,9 @@ publish_format: motion_reel
 # Audition the voices first: Actions -> "Audition narration voices".
 narration:
   provider: openai   # uses OPENAI_API_KEY; or gemini (GOOGLE_API_KEY) / elevenlabs
+  # Tried in order if the primary fails (quota, outage, missing key). 'kokoro' is a free
+  # local voice that needs no key, so there is always a voice.
+  fallback_providers: [gemini, kokoro]
 
 genres:
   - genre: tech

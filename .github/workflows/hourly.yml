@@ -24,7 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install narovva
-        run: pip install .
+        run: pip install ".[narration-local]"
 
       # HyperFrames (motion_reel format): Node 22 + pinned CLI + Chrome Headless
       # Shell. FFmpeg is installed explicitly. If any of this fails the run still
@@ -46,6 +46,11 @@ jobs:
         with:
           path: ~/.cache/hyperframes
           key: hyperframes-chrome-${{ hashFiles('package-lock.json') }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/narovva
+          key: kokoro-model-v1
 
       - name: Run every channel/genre currently due
         env:
