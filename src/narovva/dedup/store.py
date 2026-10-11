@@ -13,19 +13,48 @@ orchestration layer needs to know which backend is in play.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Union
 
+import psycopg
 from info_snipe import ContentStore
 from info_snipe.store_postgres import PostgresContentStore
 
 from ..settings import get_settings
 
+logger = logging.getLogger(__name__)
 
-def get_store_for_channel(channel_id: str) -> Union[ContentStore, PostgresContentStore]:
+
+class ResilientPostgresStore:
+    """PostgresContentStore that rebuilds itself (new connection) and retries
+    once if the server dropped its long-idle connection -- e.g. mark_seen()
+    after a multi-minute motion-reel render."""
+
+    def __init__(self, dsn: str, namespace: str):
+        self._dsn, self._namespace = dsn, namespace
+        self._store = PostgresContentStore(dsn, namespace=namespace)
+
+    def __getattr__(self, name):
+        attr = getattr(self._store, name)
+        if not callable(attr):
+            return attr
+
+        def call(*args, **kwargs):
+            try:
+                return getattr(self._store, name)(*args, **kwargs)
+            except (psycopg.OperationalError, psycopg.InterfaceError):
+                logger.warning("dedup store connection was closed; reconnecting")
+                self._store = PostgresContentStore(self._dsn, namespace=self._namespace)
+                return getattr(self._store, name)(*args, **kwargs)
+
+        return call
+
+
+def get_store_for_channel(channel_id: str) -> Union[ContentStore, ResilientPostgresStore]:
     settings = get_settings()
     if settings.database_url:
-        return PostgresContentStore(settings.database_url, namespace=channel_id)
+        return ResilientPostgresStore(settings.database_url, namespace=channel_id)
 
     db_dir = Path(settings.local_dedup_dir)
     db_dir.mkdir(parents=True, exist_ok=True)

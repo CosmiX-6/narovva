@@ -110,6 +110,8 @@ def run_channel(
                 )
                 if outcome.music_track_id:
                     recent_music_ids.add(outcome.music_track_id)
+                if outcome.status == "failed":
+                    logger.warning("channel %s: %s failed: %s", channel.id, article.url, outcome.error)
 
                 if outcome.status == "dry_run":
                     result.skipped += 1
