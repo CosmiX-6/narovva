@@ -7,5 +7,6 @@ psycopg[binary]>=3.1
 vercel_blob>=0.4
 cryptography>=42.0
 imageio-ffmpeg>=0.5
-poster-core[all] @ git+https://github.com/CosmiX-6/poster-core.git@a6ef150a40338bbc7f67aa819ee54167bbfe4d27
+pillow>=10.0
+poster-core[all] @ git+https://github.com/CosmiX-6/poster-core.git@066dfb98352befd31a0f6281c3f11fbde012dade
 info-snipe[postgres] @ git+https://github.com/CosmiX-6/info-snipe.git@2eec16deed7dcd601747af494185cb8b2c11c9f1

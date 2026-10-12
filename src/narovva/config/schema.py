@@ -78,6 +78,9 @@ class NarrationConfig(BaseModel):
     voices: list[str] | None = None
     # Tried in order if the primary provider fails (each uses its own default voices).
     fallback_providers: list[Literal["openai", "elevenlabs", "gemini", "kokoro"]] = Field(default_factory=list)
+    # Burn the spoken line into the picture, word by word, so the reel still
+    # reads with the sound off.
+    captions: bool = True
 
 
 class ChannelConfig(BaseModel):

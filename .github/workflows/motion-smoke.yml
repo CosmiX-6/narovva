@@ -51,8 +51,15 @@ jobs:
           time python -m narovva.motion motion-sample.mp4
           ffmpeg -hide_banner -i motion-sample.mp4 2>&1 | grep -E "Duration|Stream"
 
+      - name: Extract review frames (one per second)
+        run: |
+          mkdir -p motion-frames
+          ffmpeg -hide_banner -loglevel error -i motion-sample.mp4 -vf "fps=1,scale=540:-1" motion-frames/f_%03d.jpg
+
       - uses: actions/upload-artifact@v4
         with:
           name: motion-sample
-          path: motion-sample.mp4
+          path: |
+            motion-sample.mp4
+            motion-frames/
           retention-days: 7
