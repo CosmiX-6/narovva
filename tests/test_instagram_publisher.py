@@ -44,6 +44,7 @@ def test_publish_reel_creates_video_container_and_publishes(monkeypatch):
         if url.endswith("/ig123/media") and kwargs["data"].get("media_type") == "REELS":
             assert kwargs["data"]["video_url"] == "https://blob/reel.mp4"
             assert kwargs["data"]["share_to_feed"] == "true"
+            assert kwargs["data"]["cover_url"] == "https://blob/cover.jpg"
             return _FakeResponse(200, {"id": "creation123"})
         if url.endswith("/creation123"):
             return _FakeResponse(200, {"status_code": "FINISHED"})
@@ -56,7 +57,10 @@ def test_publish_reel_creates_video_container_and_publishes(monkeypatch):
     monkeypatch.setattr(instagram_module.time, "sleep", lambda s: None)
 
     publisher = InstagramGraphPublisher()
-    asset = PublishAsset(asset_type="reel", local_path="/tmp/reel.mp4", hosted_url="https://blob/reel.mp4")
+    asset = PublishAsset(
+        asset_type="reel", local_path="/tmp/reel.mp4", hosted_url="https://blob/reel.mp4",
+        cover_url="https://blob/cover.jpg",
+    )
     result = publisher.publish([asset], "a caption", _channel())
 
     assert result.status == "success"

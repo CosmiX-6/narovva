@@ -32,7 +32,8 @@ from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
 from ..settings import Settings, get_settings, resolve_env
 from ..tokens import InstagramTokenError, check_token, get_valid_token
-from ..video import VideoAssemblyError, assemble_reel, slide_duration
+from ..logsafe import redact
+from ..video import VideoAssemblyError, assemble_reel, make_cover, slide_duration
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ def run_channel(
             if repo and run_id is not None:
                 repo.finish_run(
                     run_id, status="failed", genres_processed=[], articles_considered=0,
-                    articles_posted=0, error=str(exc),
+                    articles_posted=0, error=redact(str(exc)),
                 )
             return result
     store = get_store_for_channel(channel.id)
@@ -172,7 +173,7 @@ def run_channel(
             repo.finish_run(
                 run_id, status="failed", genres_processed=genres_processed,
                 articles_considered=result.considered, articles_posted=result.posted,
-                error=str(exc),
+                error=redact(str(exc)),
             )
         raise
     else:
@@ -219,7 +220,7 @@ def _process_one(
         # must not crash the whole channel run -- record it as a failed
         # attempt and let the caller move on to the next article.
         logger.warning("channel %s: failed to process %s: %s", channel.id, article.url, exc)
-        return _Outcome(status="failed", caption_text="", hashtags=[], asset_types=[], error=str(exc))
+        return _Outcome(status="failed", caption_text="", hashtags=[], asset_types=[], error=redact(str(exc)))
 
     if dry_run:
         return _Outcome(
@@ -255,7 +256,10 @@ def _process_one(
                 content_type="video/mp4",
             )
             hosted.append(h)
-            publish_assets.append(PublishAsset(asset_type="reel", local_path=video_path, hosted_url=h.url))
+            cover_url = _host_cover(host, hosted, channel, article, brief, assets)
+            publish_assets.append(
+                PublishAsset(asset_type="reel", local_path=video_path, hosted_url=h.url, cover_url=cover_url)
+            )
         else:
             for asset in assets:
                 for path in asset.paths:
@@ -272,7 +276,7 @@ def _process_one(
     except (ImageHostError, JamendoError, VideoAssemblyError) as exc:
         return _Outcome(
             status="failed", caption_text=caption_text, hashtags=caption.hashtags,
-            asset_types=asset_type_values, error=str(exc), music_track_id=music_track_id,
+            asset_types=asset_type_values, error=redact(str(exc)), music_track_id=music_track_id,
             narration_voice=narration_voice,
         )
     finally:
@@ -409,6 +413,28 @@ def _try_motion_reel(
     except Exception as exc:  # any failure (render, staging, bad data) must degrade, not skip the post
         logger.warning("channel %s: motion reel failed (%s); falling back to plain reel", channel.id, exc)
         return None, None
+
+
+def _host_cover(host, hosted: list, channel, article, brief, assets) -> str | None:
+    """Designed thumbnail (photo + headline + logo) for the reel. Optional:
+    any failure just leaves Instagram to pick a frame from the video."""
+    try:
+        category = getattr(brief.category, "value", str(brief.category))
+        photo = next((a for a in assets if getattr(a, "source_image_path", None)), None)
+        out = f"/tmp/narovva/{channel.id}/{article.content_id}_cover.jpg"
+        make_cover(
+            out, headline=brief.headline, kicker=category.replace("_", " "),
+            accent=channel.brand.category_accents.get(category) or channel.brand.accent_color,
+            handle=channel.brand.social_handle or "", logo_path=channel.brand.logo_path,
+            photo_path=photo.source_image_path if photo else None,
+            font_path=channel.brand.font_path_bold, brand=channel.brand.name,
+        )
+        h = host.upload(Path(out).read_bytes(), f"{channel.id}/{article.content_id}/cover.jpg", content_type="image/jpeg")
+        hosted.append(h)
+        return h.url
+    except Exception as exc:
+        logger.warning("channel %s: cover image skipped (%s)", channel.id, exc)
+        return None
 
 
 def _pick_music_track(

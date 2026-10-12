@@ -64,17 +64,17 @@ def test_slide_specs_default_to_brisk_durations_and_compact_text():
     asset = _carousel_asset(2)
     asset.plan.slides[0].body = long_body
     specs = slide_specs_from_assets([asset])
-    assert len(specs[0]["body"]) <= 106 and specs[0]["duration"] <= 4.2
-    assert all(2.0 <= s["duration"] <= 4.2 for s in specs)
+    assert len(specs[0]["body"]) <= 106 and specs[0]["duration"] <= 3.6
+    assert all(1.7 <= s["duration"] <= 3.6 for s in specs)
 
 
 def test_motion_duration_voice_sets_length_with_floor():
     from narovva.motion.slides import motion_duration
 
-    assert motion_duration(0, "text", 3.0) == pytest.approx(3.5)
-    assert motion_duration(0, "text", 0.5) == 2.0      # never shorter than the floor
-    assert motion_duration(999, "text") == 4.2          # reading time is capped
-    assert motion_duration(10, "hook") >= 2.4
+    assert motion_duration(0, "text", 3.0) == pytest.approx(3.25)
+    assert motion_duration(0, "text", 0.5) == 1.7      # never shorter than the floor
+    assert motion_duration(999, "text") == 3.6          # reading time is capped
+    assert motion_duration(10, "hook") >= 2.2
 
 
 def test_slide_specs_reject_mismatched_durations():
@@ -138,7 +138,7 @@ def test_sample_deck_carries_charts_and_captions():
     stats = next(s for s in deck if s["kind"] == "stats")
     assert [i["type"] for i in stats["viz"]["items"]] == ["ring", "number", "number"]
     assert next(s for s in deck if s["kind"] == "comparison")["viz"]["delta"] == "\u221267%"
-    assert all(s["caption"] and s["duration"] >= s["voice"] + 0.5 - 1e-6 for s in deck)
+    assert all(s["caption"] and s["duration"] >= s["voice"] + 0.25 - 1e-6 for s in deck)
     assert all("caption" not in s for s in sample_deck(captions=False))
     json.dumps(deck)
 
@@ -276,3 +276,16 @@ def test_process_one_falls_back_to_plain_reel_when_motion_render_fails(monkeypat
     art = FeedArticle(content_id="abc", title="t", url="https://e.com/a", source_name="e", genre="tech")
     out = run_channel_module._process_one(art, GenreSetting(genre="tech"), _channel(), dry_run=False)
     assert out.status == "success" and "assemble" in calls and out.music_track_id == "t1"
+
+
+def test_select_scenes_keeps_hook_cta_and_strongest_middle_in_order():
+    from narovva.motion.slides import select_scenes
+
+    kinds = ["hook", "text", "evidence", "stats", "text", "timeline", "conclusion", "comparison", "text", "cta"]
+    specs = [{"kind": k, "i": i} for i, k in enumerate(kinds)]
+    out = select_scenes(specs, max_scenes=6)
+    assert len(out) == 6
+    assert out[0]["kind"] == "hook" and out[-1]["kind"] == "cta"
+    assert [s["i"] for s in out] == sorted(s["i"] for s in out)           # original order kept
+    assert {"stats", "timeline", "comparison"} <= {s["kind"] for s in out}  # data beats prose
+    assert select_scenes(specs[:5], max_scenes=6) == specs[:5]            # short decks untouched

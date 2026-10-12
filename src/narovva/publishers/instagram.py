@@ -15,6 +15,7 @@ import time
 import httpx
 
 from ..config.schema import ChannelConfig
+from ..logsafe import redact
 from ..platforms import PublishPlatform
 from ..tokens.instagram_token_store import get_valid_token
 from .base import PostResult, PublishAsset
@@ -33,6 +34,7 @@ _RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
 
 class _GraphAPIError(RuntimeError):
     def __init__(self, message: str, response: dict | None = None):
+        message = redact(message)
         super().__init__(message)
         self.response = response
 
@@ -61,7 +63,9 @@ class InstagramGraphPublisher:
         ig_user_id = channel.ig_business_account_id
         try:
             if len(hosted) == 1 and hosted[0].asset_type == "reel":
-                creation_id = self._create_reel_container(ig_user_id, hosted[0].hosted_url, caption, token)
+                creation_id = self._create_reel_container(
+                    ig_user_id, hosted[0].hosted_url, caption, token, cover_url=hosted[0].cover_url,
+                )
                 self._wait_until_finished(
                     creation_id, token,
                     interval=_VIDEO_POLL_INTERVAL_SECONDS, max_attempts=_VIDEO_POLL_MAX_ATTEMPTS,
@@ -106,17 +110,19 @@ class InstagramGraphPublisher:
         )
         return data["id"]
 
-    def _create_reel_container(self, ig_user_id: str, video_url: str, caption: str, token: str) -> str:
-        data = self._post(
-            f"/{ig_user_id}/media",
-            {
-                "media_type": "REELS",
-                "video_url": video_url,
-                "caption": caption,
-                "share_to_feed": "true",
-                "access_token": token,
-            },
-        )
+    def _create_reel_container(
+        self, ig_user_id: str, video_url: str, caption: str, token: str, cover_url: str | None = None,
+    ) -> str:
+        params = {
+            "media_type": "REELS",
+            "video_url": video_url,
+            "caption": caption,
+            "share_to_feed": "true",
+            "access_token": token,
+        }
+        if cover_url:
+            params["cover_url"] = cover_url
+        data = self._post(f"/{ig_user_id}/media", params)
         return data["id"]
 
     def _wait_until_finished(

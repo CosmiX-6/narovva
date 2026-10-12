@@ -6,6 +6,7 @@ import argparse
 import logging
 import sys
 
+from . import logsafe
 from .config import load_all_channels, load_channel
 from .orchestration import due_channels_with_genres, run_channel
 
@@ -46,10 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    logsafe.install(logging.DEBUG if args.verbose else logging.INFO)
 
     if args.command == "run-channel":
         channel = load_channel(args.path)
@@ -97,7 +95,7 @@ def _print_result(result) -> None:
         f"posted={result.posted} failed={result.failed} skipped={result.skipped}"
     )
     for error in result.errors:
-        print(f"  error: {error}")
+        print(f"  error: {logsafe.redact(str(error))}")
 
 
 if __name__ == "__main__":

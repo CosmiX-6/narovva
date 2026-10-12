@@ -22,13 +22,15 @@ from cryptography.fernet import Fernet, InvalidToken
 from ..config.schema import ChannelConfig
 from ..db.engine import get_connection
 from ..db.repo import Repo
+from ..logsafe import redact
 from ..settings import get_settings, resolve_env
 
 _GRAPH_BASE = "https://graph.instagram.com"
 
 
 class InstagramTokenError(RuntimeError):
-    pass
+    def __init__(self, message: str = ""):
+        super().__init__(redact(message))
 
 
 def _fernet() -> Fernet:
