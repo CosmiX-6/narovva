@@ -181,9 +181,14 @@ is the same when reached out of order).
 
 ### Pacing and narration
 
-- Reels are cut fast: text lands in ~0.3 s, slides hold 2-4 s (long copy is trimmed
-  on screen; the caption and voice carry the detail), and scenes change with real
-  transitions (push / whip / zoom-through) instead of fades.
+- Reels are quick updates: at most 7 scenes (the opener, the CTA and the strongest
+  data scenes; prose scenes are dropped first), text lands in ~0.3 s, scenes hold
+  1.7-3.6 s (long copy is trimmed on screen; the caption and voice carry the detail),
+  spoken lines are 6-12 words and the voice runs ~20% above natural pace. A typical
+  reel is 20-30 s. Scenes change with real transitions (push / whip / zoom-through).
+- Each reel gets a designed cover (`narovva.video.cover`): the article photo (or a
+  branded card), the category, the headline and the logo, kept inside the 4:5 band the
+  profile grid shows. If it can't be made, Instagram picks a frame.
 - `narration:` in the channel YAML adds a voice-over (`openai`, `gemini` or
   `elevenlabs`). The LLM writes one short spoken line per slide, a voice that was not
   used recently is chosen (`post_history.narration_voice`), each slide lasts as long as
@@ -194,3 +199,10 @@ is the same when reached out of order).
   it. `narration.captions: false` turns them off.
 - Audition voices by ear: run **Actions -> Audition narration voices** (or
   `python -m narovva.narration.demo openai out/`) and listen to the MP3 artifact.
+
+## Logs and secrets
+
+The Instagram Graph API takes the access token as a query parameter, so request URLs
+are sensitive. `narovva.logsafe` (installed by the CLI) holds the HTTP client loggers
+at WARNING and redacts tokens/keys from every log record, error message and stored
+run error. Tokens are never printed; if one was exposed in old logs, regenerate it.

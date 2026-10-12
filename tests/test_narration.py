@@ -168,7 +168,7 @@ def test_to_clip_measures_and_trims_silence():
         w.writeframes(b"".join(struct.pack("<h", int(13000 * math.sin(2 * math.pi * 300 * i / rate))) for i in range(rate)))
         w.writeframes(b"\x00\x00" * (rate // 2))
     clip = to_clip(buf.getvalue())
-    assert 0.9 < clip.seconds < 1.3
+    assert 0.8 < clip.seconds < 1.3
 
 
 def test_to_clip_rejects_silence_and_garbage():
@@ -240,11 +240,11 @@ def test_narrated_reel_uses_unused_voice_and_speech_sets_durations(monkeypatch):
     )
     assert path == "/tmp/o.mp4" and voice == "v2"                     # v1 was used recently
     assert provider.voices == ["v2", "v2", "v2"]
-    assert [round(s["duration"], 2) for s in captured["specs"]] == [2.0, 2.0, 2.0]  # 1.5 s voice + 0.5 -> 2.0
+    assert [round(s["duration"], 2) for s in captured["specs"]] == [1.7, 1.7, 1.7]  # 1.5 s voice sped up 1.08x = 1.39 s, + 0.25 lead/tail, floored at 1.7
     assert len(captured["audio"]) > 1000
     # each slide carries its spoken line and how long it takes to say, for the burned-in captions
     assert [s["caption"] for s in captured["specs"]] == ["One.", "Two.", "Three."]
-    assert all(s["voice"] == pytest.approx(1.5, abs=0.1) for s in captured["specs"])
+    assert all(s["voice"] == pytest.approx(1.5 / 1.08, abs=0.1) for s in captured["specs"])
 
 
 def test_captions_can_be_switched_off(monkeypatch):
@@ -270,7 +270,7 @@ def test_narration_failure_degrades_to_music_only(monkeypatch):
     path, voice = rc._try_motion_reel(_channel(), [_asset(3)], _brief(), track, "/tmp/o.mp4", llm=_LLM(["a", "b", "c"]), seed="s")
     assert path == "/tmp/o.mp4" and voice is None
     assert captured["audio"] == track.audio_bytes                      # untouched music bed
-    assert all(2.0 <= s["duration"] <= 4.2 for s in captured["specs"])  # brisk timing restored
+    assert all(1.7 <= s["duration"] <= 3.6 for s in captured["specs"])  # brisk timing restored
     assert not any("caption" in s for s in captured["specs"])           # no voice, so nothing to caption
 
 

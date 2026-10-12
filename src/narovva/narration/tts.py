@@ -164,7 +164,7 @@ class KokoroTTS:
 
     _lock = threading.Lock()
 
-    def __init__(self, _key: str = "", model: str | None = None, speed: float = 1.05):
+    def __init__(self, _key: str = "", model: str | None = None, speed: float = 1.12):
         try:
             from kokoro_onnx import Kokoro
             import soundfile  # noqa: F401
@@ -196,9 +196,12 @@ def build_provider(name: str, api_key: str, model: str | None = None):
     return cls(api_key, model) if model else cls(api_key)
 
 
-def to_clip(audio_bytes: bytes, trim_silence: bool = True) -> Clip:
+TEMPO = 1.08  # quick-update pace on top of the provider's own; pitch is preserved
+
+
+def to_clip(audio_bytes: bytes, trim_silence: bool = True, tempo: float = TEMPO) -> Clip:
     """Decode whatever the provider returned to 44.1 kHz mono wav (trimming
-    leading/trailing silence) and measure its length."""
+    leading/trailing silence, speeding it up by `tempo`) and measure its length."""
     ff = imageio_ffmpeg.get_ffmpeg_exe()
     with tempfile.TemporaryDirectory() as tmp:
         src, dst = Path(tmp, "in.audio"), Path(tmp, "out.wav")
@@ -206,8 +209,9 @@ def to_clip(audio_bytes: bytes, trim_silence: bool = True) -> Clip:
         af = ("silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,"
               "areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.08,areverse")
         cmd = [ff, "-v", "error", "-y", "-i", str(src), "-ac", "1", "-ar", "44100"]
-        if trim_silence:
-            cmd += ["-af", af]
+        filters = ([af] if trim_silence else []) + ([f"atempo={tempo}"] if abs(tempo - 1.0) > 1e-3 else [])
+        if filters:
+            cmd += ["-af", ",".join(filters)]
         cmd += [str(dst)]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if r.returncode != 0 or not dst.exists():

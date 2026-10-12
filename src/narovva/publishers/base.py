@@ -16,6 +16,7 @@ class PublishAsset(BaseModel):
     asset_type: str  # poster_core.AssetType.value
     local_path: str
     hosted_url: str | None = None
+    cover_url: str | None = None  # reels: hosted thumbnail image
 
 
 class PostResult(BaseModel):

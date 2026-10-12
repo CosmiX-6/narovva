@@ -28,12 +28,19 @@ _KIND_LABELS = {
 # -- fast pacing -----------------------------------------------------------
 # House rules for short-form motion: text lands in ~0.3 s and a slide holds
 # just long enough to read once; something changes every couple of seconds.
-_MIN_HOLD = 2.0
-_MAX_HOLD = 4.2
-_CHARS_PER_SECOND = 24.0
-VOICE_LEAD = 0.25  # picture leads the voice slightly (also where captions start)
-_VOICE_TAIL = 0.25
+_MIN_HOLD = 1.7
+_MAX_HOLD = 3.6
+_CHARS_PER_SECOND = 28.0
+VOICE_LEAD = 0.15  # picture leads the voice slightly (also where captions start)
+_VOICE_TAIL = 0.1
 _MAX_FACTS = 3
+# A quick update, not a documentary: at most this many scenes (hook + CTA + the
+# strongest middle scenes), which with spoken lines of ~3 s is a 20-30 s reel.
+MAX_SCENES = 7
+_KIND_PRIORITY = {
+    "stats": 6, "comparison": 6, "money_flow": 5, "timeline": 5, "quote": 4,
+    "conclusion": 3, "evidence": 2, "text": 1,
+}
 
 
 def motion_duration(char_count: int, kind: str = "text", voice_seconds: float | None = None) -> float:
@@ -41,8 +48,8 @@ def motion_duration(char_count: int, kind: str = "text", voice_seconds: float | 
     the length (plus a short lead/tail); without it, a brisk reading time."""
     if voice_seconds is not None:
         return round(max(_MIN_HOLD, voice_seconds + VOICE_LEAD + _VOICE_TAIL), 3)
-    floor = {"hook": 2.4, "hero": 2.4, "cta": 2.2}.get(kind, _MIN_HOLD)
-    return round(min(_MAX_HOLD, max(floor, 1.3 + char_count / _CHARS_PER_SECOND)), 3)
+    floor = {"hook": 2.2, "hero": 2.2, "cta": 2.0}.get(kind, _MIN_HOLD)
+    return round(min(_MAX_HOLD, max(floor, 1.1 + char_count / _CHARS_PER_SECOND)), 3)
 
 
 def _trim(text: str | None, limit: int) -> str | None:
@@ -94,6 +101,18 @@ def compact_spec(spec: dict) -> dict:
     return spec
 
 
+def select_scenes(specs: list[dict], max_scenes: int = MAX_SCENES) -> list[dict]:
+    """Keep the opening scene, the closing scene and the strongest middle
+    scenes (data beats prose), in their original order."""
+    if len(specs) <= max_scenes or max_scenes < 3:
+        return specs
+    middle = list(range(1, len(specs) - 1))
+    # Highest priority first; earlier scenes win ties (the story builds in order).
+    keep = sorted(middle, key=lambda i: (-_KIND_PRIORITY.get(specs[i].get("kind"), 1), i))[: max_scenes - 2]
+    chosen = sorted({0, len(specs) - 1, *keep})
+    return [specs[i] for i in chosen]
+
+
 def total_duration(durations: list[float]) -> float:
     """Reel length: scene durations minus the overlap between neighbours."""
     if not durations:
@@ -123,8 +142,9 @@ def _deck_spec(slide, category_label: str) -> dict:
 
 def slide_specs_from_assets(assets: list, durations: list[float] | None = None) -> list[dict]:
     """Build one compacted spec per image path. `durations=None` uses the
-    brisk reading-time formula; pass voice-driven durations to override.
-    Raises ValueError if the counts don't match."""
+    brisk reading-time formula; pass voice-driven durations to override (one
+    per kept scene). Long decks are cut to MAX_SCENES. Raises ValueError if
+    the counts don't match."""
     specs: list[dict] = []
     for asset in assets:
         plan = asset.plan
@@ -138,7 +158,7 @@ def slide_specs_from_assets(assets: list, durations: list[float] | None = None) 
         else:  # COVER / THUMBNAIL
             for _ in asset.paths:
                 specs.append({"kind": "hook", "kicker": label, "heading": plan.headline, "body": plan.subheadline})
-    specs = [compact_spec(attach_viz(sp)) for sp in specs]
+    specs = select_scenes([compact_spec(attach_viz(sp)) for sp in specs])
     if durations is None:
         durations = [motion_duration(display_chars(sp), sp["kind"]) for sp in specs]
     if len(specs) != len(durations):

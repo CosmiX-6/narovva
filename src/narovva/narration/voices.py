@@ -20,7 +20,7 @@ _DEFAULT_VOICES = {
 _STYLE_BY_TONE = {
     "urgent": ("Fast, punchy news-anchor delivery with urgency. Crisp and confident.", "[serious]"),
     "celebratory": ("Upbeat, bright and excited, smiling while you speak.", "[excited]"),
-    "sombre": ("Calm, measured and serious. Warm but grave. Slower pace.", "[serious]"),
+    "sombre": ("Calm, measured and serious. Warm but grave. Steady, never slow.", "[serious]"),
     "analytical": ("Clear, confident and curious. Briskly paced explainer, like a sharp tech podcast host.", "[confident]"),
     "inspiring": ("Warm, energetic and optimistic.", "[warmly]"),
     "neutral": ("Energetic, conversational and confident, like a sharp tech news host. Brisk pace, natural emphasis.", "[confident]"),
