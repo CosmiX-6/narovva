@@ -242,6 +242,19 @@ def test_narrated_reel_uses_unused_voice_and_speech_sets_durations(monkeypatch):
     assert provider.voices == ["v2", "v2", "v2"]
     assert [round(s["duration"], 2) for s in captured["specs"]] == [2.0, 2.0, 2.0]  # 1.5 s voice + 0.5 -> 2.0
     assert len(captured["audio"]) > 1000
+    # each slide carries its spoken line and how long it takes to say, for the burned-in captions
+    assert [s["caption"] for s in captured["specs"]] == ["One.", "Two.", "Three."]
+    assert all(s["voice"] == pytest.approx(1.5, abs=0.1) for s in captured["specs"])
+
+
+def test_captions_can_be_switched_off(monkeypatch):
+    monkeypatch.setattr(rc, "build_provider", lambda *a, **k: _FakeProvider())
+    monkeypatch.setattr(rc, "resolve_env", lambda name: "key")
+    captured = {}
+    monkeypatch.setattr(rc, "render_motion_reel", lambda specs, audio, out, **kw: (captured.update(specs=specs), out)[1])
+    channel = _channel(narration=NarrationConfig(provider="openai", voices=["v1"], captions=False))
+    path, voice = rc._try_motion_reel(channel, [_asset(2)], _brief(), _Track(), "/tmp/o.mp4", llm=_LLM(["One.", "Two."]), seed="s")
+    assert voice == "v1" and not any("caption" in s for s in captured["specs"])
 
 
 def test_narration_failure_degrades_to_music_only(monkeypatch):
@@ -258,6 +271,7 @@ def test_narration_failure_degrades_to_music_only(monkeypatch):
     assert path == "/tmp/o.mp4" and voice is None
     assert captured["audio"] == track.audio_bytes                      # untouched music bed
     assert all(2.0 <= s["duration"] <= 4.2 for s in captured["specs"])  # brisk timing restored
+    assert not any("caption" in s for s in captured["specs"])           # no voice, so nothing to caption
 
 
 def test_no_narration_config_means_no_tts(monkeypatch):

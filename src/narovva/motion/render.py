@@ -6,6 +6,7 @@ the plain Ken-Burns reel (narovva.video.assemble_reel)."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ from pathlib import Path
 
 import imageio_ffmpeg
 
+from .photo import prepare_photo
 from .slides import total_duration
 
 logger = logging.getLogger(__name__)
@@ -63,12 +65,30 @@ def _prepare_audio(audio_bytes: bytes, total: float, dest: Path) -> None:
         raise MotionRenderError(f"audio prep failed: {result.stderr[-800:]}")
 
 
+def _stage_photo(photo_path: str | None, credit: str | None, assets_dir: Path) -> dict | None:
+    """The article photo is a bonus, never a requirement: anything wrong with
+    it just means the reel renders without one."""
+    if not photo_path:
+        return None
+    try:
+        photo = prepare_photo(photo_path, assets_dir)
+    except Exception as exc:
+        logger.warning("motion photo skipped: %s", exc)
+        return None
+    if photo:
+        photo["credit"] = credit or ""
+    return photo
+
+
 def stage_project(
     stage_dir: Path, slides: list[dict], *, accent: str, handle: str, brand: str,
     logo_path: str, audio_bytes: bytes | None,
+    photo_path: str | None = None, photo_credit: str | None = None, seed: str = "",
 ) -> float:
     """Populate `stage_dir` with a renderable HyperFrames project; returns the
-    total reel duration in seconds."""
+    total reel duration in seconds. `seed` (e.g. the article id) fixes the
+    generative background and transition order, so a story always renders
+    the same way but no two stories look alike."""
     if not slides:
         raise MotionRenderError("no slides to render")
     if not Path(logo_path).is_file():
@@ -78,7 +98,12 @@ def stage_project(
     shutil.copyfile(logo_path, stage_dir / "assets" / "logo.png")
 
     total = total_duration([s["duration"] for s in slides])
-    deck = {"slides": slides, "accent": accent, "handle": handle, "brand": brand}
+    deck = {
+        "slides": slides, "accent": accent, "handle": handle, "brand": brand,
+        "photo": _stage_photo(photo_path, photo_credit, stage_dir / "assets"),
+        "seed": int(hashlib.sha256((seed or slides[0].get("heading") or "").encode()).hexdigest()[:8], 16),
+        "captions": any(s.get("caption") for s in slides),
+    }
     # </script> in article text must not terminate the inline-free deck.js
     # either way, but escape '<' so the file is also safe if ever inlined.
     (stage_dir / "deck.js").write_text(
@@ -110,10 +135,12 @@ def _probe_duration(path: str) -> float | None:
 def render_motion_reel(
     slides: list[dict], audio_bytes: bytes | None, output_path: str, *,
     accent: str, handle: str, brand: str, logo_path: str,
+    photo_path: str | None = None, photo_credit: str | None = None, seed: str = "",
     stage_dir: str | None = None,
 ) -> str:
     """Render `slides` (see narovva.motion.slides) to an MP4 at `output_path`
-    (1080x1920, 30fps). Raises MotionRenderError on any failure."""
+    (1080x1920, 30fps). `photo_path` is the article's own photo, if it has
+    one. Raises MotionRenderError on any failure."""
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="narovva-motion-") as tmp:
@@ -121,6 +148,7 @@ def render_motion_reel(
         total = stage_project(
             stage, slides, accent=accent, handle=handle, brand=brand,
             logo_path=logo_path, audio_bytes=audio_bytes,
+            photo_path=photo_path, photo_credit=photo_credit, seed=seed,
         )
         cmd = [*_hyperframes_command(), "render", str(stage), "--quality", "looks", "--fps", "30",
                "--output", str(out)]
