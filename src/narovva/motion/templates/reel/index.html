@@ -21,8 +21,7 @@
 
       /* Persistent layers, back to front: the article photo as blurred atmosphere,
          the same photo sharp and full-bleed (tall photos only), glow, the generative
-         field, grid, vignette, grain. Then brand header, scenes, captions, handle,
-         progress. Reels UI safe zones: content lives inside x 72..930, y 400..1440. */
+         field, grid, vignette. Then brand header, scenes, captions, handle, progress. Reels UI safe zones: content lives inside x 72..930, y 400..1440. */
       .bg, .bg > * { position: absolute; pointer-events: none; }
       .bg { inset: 0; }
       .photo-layer { inset: 0; overflow: hidden; opacity: 0; }
@@ -34,7 +33,6 @@
       #field { left: 0; top: 0; width: 1080px; height: 1920px; }
       .grid { inset: 0; background-image: linear-gradient(rgba(255,255,255,.035) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,.035) 2px, transparent 2px); background-size: 90px 90px; }
       .vignette { inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(10,14,26,0) 38%, rgba(10,14,26,.88) 100%); }
-      #grain { inset: 0; background-image: url("grain.png"); background-size: 256px 256px; }
 
       .brand { position: absolute; left: 72px; top: 230px; display: flex; align-items: center; gap: 22px; }
       .brand img { width: 96px; height: 96px; border-radius: 22px; display: block; }
@@ -144,7 +142,6 @@
         <canvas id="field" width="540" height="960" data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion></canvas>
         <div class="grid" id="grid"></div>
         <div class="vignette"></div>
-        <div id="grain" data-layout-allow-overlap data-layout-allow-occlusion></div>
       </div>
       <div class="brand"><img id="logo" src="assets/logo.png" alt="" /><span id="brandname"></span></div>
       <div id="scenes"></div>
@@ -211,18 +208,14 @@
         tl.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
         tl.from(".brand", { opacity: 0, x: -30, duration: 0.25, ease: "power4.out" }, 0);
 
-        // The generative field and the grain are redrawn from timeline time alone,
-        // so any frame can be reached in any order (see ambient.js).
+        // The generative field is redrawn from timeline time alone, so any frame can
+        // be reached in any order (see ambient.js). No film grain on top of it: noise
+        // that changes every frame cannot be compressed (it made a 45 s reel 125 MB).
         const drawField = window.CUAmbient.createField(document.getElementById("field"), {
           seed: DECK.seed, accent: DECK.accent, cuts: starts, dim: PHOTO ? 0.75 : 1,
         });
-        const grain = document.getElementById("grain");
         const clock = { t: 0 };
-        const paint = () => {
-          drawField(clock.t);
-          const f = Math.floor(clock.t * 15); // new grain position every other frame
-          grain.style.backgroundPosition = ((f * 89) % 256) + "px " + ((f * 157) % 256) + "px";
-        };
+        const paint = () => drawField(clock.t);
         tl.fromTo(clock, { t: 0 }, { t: total, duration: total, ease: "none", onUpdate: paint }, 0);
         paint();
 
