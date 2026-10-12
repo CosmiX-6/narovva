@@ -147,12 +147,37 @@ post falls back to the plain `reel` format, so nothing is skipped.
   `npx hyperframes browser ensure` (Chrome Headless Shell). `HYPERFRAMES_BIN`
   overrides the CLI location.
 - Preview everything locally: `python -m narovva.motion out.mp4` renders a sample
-  deck covering every slide kind (~2 min for 43 s of video).
+  deck covering every slide kind, with a synthetic photo and captions.
 - Templates live in `src/narovva/motion/templates/reel/`; GSAP and the Archivo
   Black / Inter fonts (OFL) are vendored so renders need no CDN.
 - Each Reel records its music track in `post_history.music_track_id` (migration
   `0002`), and later posts avoid recently used tracks. Track tags come from the
   genre, `brief.tone`, `brief.emotions` and `brief.category`.
+
+### What is on screen
+
+- **The article's own photo.** poster-core exposes the photo it sourced
+  (`GeneratedAsset.source_image_path`); `narovva.motion.photo` turns it into a sharp
+  framed card on the opening scene (most article photos are ~1200x630, so they are
+  shown at their real size rather than stretched to fill 1080x1920) and a blurred,
+  darkened copy that sits behind every scene. A tall, large photo goes full-bleed
+  instead. A photo that is too small, banner-shaped or really a logo is skipped and
+  the reel runs on its generative background alone.
+- **Charts from the story's numbers.** `narovva.motion.dataviz` parses the stated
+  figures: a percentage becomes a ring that fills, figures that share a unit become
+  bars on one scale, a comparison becomes two bars with the change between them, and
+  the timeline and money trail draw themselves in. Only numbers the article states
+  are drawn, and two figures share a scale only when they share a unit.
+- **A background that never sits still.** A canvas field of light streaks in the
+  category accent (`templates/reel/ambient.js`), seeded per story so no two reels
+  match, which flares at each cut and settles while the text is read.
+- Everything is a pure function of timeline time (no clocks, no unseeded
+  randomness), because HyperFrames renders by seeking to frames in any order.
+
+Work on the template without the Node toolchain: `python -m narovva.motion.preview
+out/` screenshots two frames of every scene from a local Chrome and writes a contact
+sheet (`--photo PATH|none`, `--no-captions`, `--at 1.5,4`, `--via T` to check a frame
+is the same when reached out of order).
 
 ### Pacing and narration
 
@@ -164,5 +189,8 @@ post falls back to the plain `reel` format, so nothing is skipped.
   used recently is chosen (`post_history.narration_voice`), each slide lasts as long as
   its line, and the music ducks under the voice (-14 LUFS master). If anything in
   that chain fails the reel still posts, music only.
+- With narration on, the spoken line is burned in as captions that light up word by
+  word (most people watch with the sound off); the on-screen paragraph gives way to
+  it. `narration.captions: false` turns them off.
 - Audition voices by ear: run **Actions -> Audition narration voices** (or
   `python -m narovva.narration.demo openai out/`) and listen to the MP3 artifact.

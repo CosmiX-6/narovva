@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from poster_core import AssetType
 
+from .dataviz import comparison_viz, stats_viz
+
 # Must match OV in templates/reel/index.html: consecutive scenes overlap by
 # the transition buffer that slide_duration() already adds to every slide.
 SCENE_OVERLAP_SECONDS = 0.3
@@ -29,15 +31,16 @@ _KIND_LABELS = {
 _MIN_HOLD = 2.0
 _MAX_HOLD = 4.2
 _CHARS_PER_SECOND = 24.0
-_VOICE_LEAD = 0.25  # picture leads the voice slightly
+VOICE_LEAD = 0.25  # picture leads the voice slightly (also where captions start)
 _VOICE_TAIL = 0.25
+_MAX_FACTS = 3
 
 
 def motion_duration(char_count: int, kind: str = "text", voice_seconds: float | None = None) -> float:
     """Seconds a slide stays on screen. With narration the spoken line sets
     the length (plus a short lead/tail); without it, a brisk reading time."""
     if voice_seconds is not None:
-        return round(max(_MIN_HOLD, voice_seconds + _VOICE_LEAD + _VOICE_TAIL), 3)
+        return round(max(_MIN_HOLD, voice_seconds + VOICE_LEAD + _VOICE_TAIL), 3)
     floor = {"hook": 2.4, "hero": 2.4, "cta": 2.2}.get(kind, _MIN_HOLD)
     return round(min(_MAX_HOLD, max(floor, 1.3 + char_count / _CHARS_PER_SECOND)), 3)
 
@@ -68,11 +71,22 @@ def display_chars(spec: dict) -> int:
     return n
 
 
+def attach_viz(spec: dict) -> dict:
+    """Chart specs for the data scenes (see narovva.motion.dataviz). Built
+    from the untrimmed copy: trimming a long fact can cut off the very
+    number it ends on."""
+    if spec.get("kind") == "stats":
+        spec["viz"] = stats_viz((spec.get("facts") or [])[:_MAX_FACTS])
+    elif spec.get("kind") == "comparison":
+        spec["viz"] = comparison_viz(spec.get("comparison"))
+    return spec
+
+
 def compact_spec(spec: dict) -> dict:
     """Trim on-screen copy for a fast reel: the voice/caption carry the detail."""
     spec["heading"] = _trim(spec.get("heading"), 78)
     spec["body"] = _trim(spec.get("body"), 105)
-    spec["facts"] = [_trim(f, 64) for f in (spec.get("facts") or [])[:3]]
+    spec["facts"] = [_trim(f, 64) for f in (spec.get("facts") or [])[:_MAX_FACTS]]
     spec["timeline"] = [{"when": e["when"], "what": _trim(e["what"], 60)} for e in (spec.get("timeline") or [])[:3]]
     spec["money"] = [dict(m, detail=_trim(m.get("detail"), 40)) for m in (spec.get("money") or [])[:3]]
     if spec.get("quote"):
@@ -124,7 +138,7 @@ def slide_specs_from_assets(assets: list, durations: list[float] | None = None) 
         else:  # COVER / THUMBNAIL
             for _ in asset.paths:
                 specs.append({"kind": "hook", "kicker": label, "heading": plan.headline, "body": plan.subheadline})
-    specs = [compact_spec(sp) for sp in specs]
+    specs = [compact_spec(attach_viz(sp)) for sp in specs]
     if durations is None:
         durations = [motion_duration(display_chars(sp), sp["kind"]) for sp in specs]
     if len(specs) != len(durations):

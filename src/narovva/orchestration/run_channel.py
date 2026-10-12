@@ -22,7 +22,7 @@ from ..db.repo import Repo
 from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
 from ..motion import MotionRenderError, render_motion_reel, slide_specs_from_assets, total_duration
-from ..motion.slides import SCENE_OVERLAP_SECONDS, motion_duration
+from ..motion.slides import SCENE_OVERLAP_SECONDS, VOICE_LEAD, motion_duration
 from ..narration import (
     build_provider, choose_voice, default_voices, mix_voice_and_music, style_for_tone,
     synthesize_lines, write_script,
@@ -358,11 +358,13 @@ def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed):
             failures.append(f"{name}: {exc}")
             logger.warning("channel %s: narration via %s failed (%s)", channel.id, name, exc)
             continue
-        for spec, clip in zip(specs, clips):
+        for spec, clip, line in zip(specs, clips, lines):
             spec["duration"] = motion_duration(0, spec["kind"], clip.seconds)
+            if cfg.captions:  # burned-in: most viewers watch with the sound off
+                spec["caption"], spec["voice"] = line, round(clip.seconds, 3)
         starts, t = [], 0.0
         for spec in specs:
-            starts.append(t + 0.25)  # the picture leads the voice slightly
+            starts.append(t + VOICE_LEAD)  # the picture leads the voice slightly
             t += spec["duration"] - SCENE_OVERLAP_SECONDS
         total = total_duration([s["duration"] for s in specs])
         audio = mix_voice_and_music(clips, starts, track.audio_bytes, total)
@@ -390,12 +392,18 @@ def _try_motion_reel(
                 logger.warning("channel %s: narration failed (%s); posting music-only", channel.id, exc)
                 specs = slide_specs_from_assets(assets)
                 audio, voice = track.audio_bytes, None
+        # The article's own photo, when poster-core found one (it is optional:
+        # the reel renders on its generative background without it).
+        photo = next((a for a in assets if getattr(a, "source_image_path", None)), None)
         path = render_motion_reel(
             specs, audio, output_path,
             accent=accent,
             handle=channel.brand.social_handle or "",
             brand=channel.brand.name,
             logo_path=channel.brand.logo_path or "",
+            photo_path=photo.source_image_path if photo else None,
+            photo_credit=photo.credit if photo else None,
+            seed=seed,
         )
         return path, voice
     except Exception as exc:  # any failure (render, staging, bad data) must degrade, not skip the post

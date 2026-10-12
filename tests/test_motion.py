@@ -98,6 +98,60 @@ def test_stage_project_writes_deck_audio_and_total(tmp_path, monkeypatch):
     assert (tmp_path / "p" / "assets" / "logo.png").is_file()
 
 
+def _deck(tmp_path, name) -> dict:
+    text = (tmp_path / name / "deck.js").read_text(encoding="utf-8")
+    return json.loads(text[len("window.CU_DECK = "):].rstrip().rstrip(";"))
+
+
+def test_stage_project_stages_the_article_photo_and_a_stable_seed(tmp_path):
+    from narovva.motion.sample import write_sample_photo
+
+    photo = write_sample_photo(tmp_path / "in.jpg")
+    kwargs = dict(accent="#3B82F6", handle="h", brand="B", logo_path="assets/logo/CU.png", audio_bytes=None)
+    stage_project(tmp_path / "a", [dict(s) for s in SAMPLE_SLIDES[:2]], photo_path=photo, photo_credit="Image: Wire", seed="story-1", **kwargs)
+    deck = _deck(tmp_path, "a")
+    assert deck["photo"]["mode"] == "card" and deck["photo"]["credit"] == "Image: Wire"
+    assert (tmp_path / "a" / "assets" / "photo.jpg").is_file() and (tmp_path / "a" / "assets" / "photo_bg.jpg").is_file()
+    assert deck["captions"] is False
+    for extra in ("ambient.js", "viz.js"):
+        assert (tmp_path / "a" / extra).is_file()
+
+    stage_project(tmp_path / "b", [dict(s) for s in SAMPLE_SLIDES[:2]], seed="story-1", **kwargs)
+    stage_project(tmp_path / "c", [dict(s) for s in SAMPLE_SLIDES[:2]], seed="story-2", **kwargs)
+    assert _deck(tmp_path, "b")["seed"] == deck["seed"] != _deck(tmp_path, "c")["seed"]
+    assert _deck(tmp_path, "b")["photo"] is None            # no photo is a normal case
+
+
+def test_stage_project_survives_an_unusable_photo(tmp_path):
+    (tmp_path / "bad.jpg").write_bytes(b"nope")
+    stage_project(
+        tmp_path / "p", [dict(s) for s in SAMPLE_SLIDES[:1]], accent="#fff", handle="h", brand="B",
+        logo_path="assets/logo/CU.png", audio_bytes=None, photo_path=str(tmp_path / "bad.jpg"),
+    )
+    assert _deck(tmp_path, "p")["photo"] is None
+
+
+def test_sample_deck_carries_charts_and_captions():
+    from narovva.motion.sample import sample_deck
+
+    deck = sample_deck(captions=True)
+    stats = next(s for s in deck if s["kind"] == "stats")
+    assert [i["type"] for i in stats["viz"]["items"]] == ["ring", "number", "number"]
+    assert next(s for s in deck if s["kind"] == "comparison")["viz"]["delta"] == "\u221267%"
+    assert all(s["caption"] and s["duration"] >= s["voice"] + 0.5 - 1e-6 for s in deck)
+    assert all("caption" not in s for s in sample_deck(captions=False))
+    json.dumps(deck)
+
+
+def test_chart_specs_are_built_before_long_facts_are_trimmed():
+    asset = _carousel_asset(1)
+    fact = "After two years of negotiation between the regulators and the company the fine was finally set at 60%"
+    asset.plan.slides[0] = DeckSlide(kind=SlideKind.STATS, facts=[fact])
+    spec = slide_specs_from_assets([asset])[0]
+    assert len(spec["facts"][0]) <= 65                       # the on-screen copy is trimmed...
+    assert spec["viz"]["items"][0]["text"] == "60%"          # ...but the number it ended on survives
+
+
 def test_stage_project_rejects_empty_and_missing_logo(tmp_path):
     with pytest.raises(MotionRenderError):
         stage_project(tmp_path / "a", [], accent="#fff", handle="h", brand="B", logo_path="x", audio_bytes=None)
@@ -160,6 +214,17 @@ def test_try_motion_reel_passes_category_accent_and_handle(monkeypatch):
     monkeypatch.setattr(run_channel_module, "render_motion_reel", fake_render)
     path, voice = run_channel_module._try_motion_reel(_channel(), [_carousel_asset(2)], _brief(), _Track(), "/tmp/x.mp4")
     assert path == "/tmp/x.mp4" and voice is None and seen["accent"] == "#3B82F6" and seen["handle"] == "cu"
+    assert seen["photo_path"] is None and seen["photo_credit"] is None
+
+
+def test_try_motion_reel_hands_over_the_article_photo(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(run_channel_module, "render_motion_reel", lambda slides, audio, out, **kw: (seen.update(kw), out)[1])
+    cover = _carousel_asset(1)                       # typographic: no photo
+    deck = _carousel_asset(2)
+    deck.source_image_path, deck.credit = "/tmp/src.jpg", "Image: Wire"
+    run_channel_module._try_motion_reel(_channel(), [cover, deck], _brief(), _Track(), "/tmp/x.mp4", seed="abc")
+    assert seen["photo_path"] == "/tmp/src.jpg" and seen["photo_credit"] == "Image: Wire" and seen["seed"] == "abc"
 
 
 def test_try_motion_reel_returns_none_on_any_failure(monkeypatch):
