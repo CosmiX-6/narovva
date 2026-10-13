@@ -32,6 +32,7 @@ from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
 from ..settings import Settings, get_settings, resolve_env
 from ..tokens import InstagramTokenError, check_token, get_valid_token
+from ..llm import LLMUnavailable, build_llm_chain
 from ..logsafe import redact
 from ..video import VideoAssemblyError, assemble_reel, make_cover, slide_duration
 
@@ -58,6 +59,7 @@ class _Outcome:
     error: str | None = None
     music_track_id: str | None = None
     narration_voice: str | None = None
+    fatal: bool = False  # no text model is left: stop the run rather than fail every article
 
 
 def run_channel(
@@ -99,6 +101,8 @@ def run_channel(
 
     genres = [g for g in channel.genres if genres_filter is None or g.genre in genres_filter]
     genres_processed: list[str] = []
+    llm_cache: dict = {}  # the text-model chain, built on first use and shared by every article
+    llm_down = False
     recent_music_ids: set[str] = set(repo.recent_music_track_ids(channel.id)) if repo and channel.is_video else set()
     recent_voices: set[str] = set(repo.recent_narration_voices(channel.id)) if repo and channel.narration else set()
 
@@ -130,8 +134,15 @@ def run_channel(
 
                 outcome = _process_one(
                     article, genre_setting, channel, dry_run=dry_run, recent_music_ids=recent_music_ids,
-                    recent_voices=recent_voices,
+                    recent_voices=recent_voices, llm_cache=llm_cache,
                 )
+                if outcome.fatal:
+                    # Not the article's fault: leave it unrecorded (no burnt attempt) and stop.
+                    logger.error("channel %s: %s; stopping this run", channel.id, outcome.error)
+                    result.failed += 1
+                    result.errors.append(f"{article.url}: {outcome.error}")
+                    llm_down = True
+                    break
                 if outcome.music_track_id:
                     recent_music_ids.add(outcome.music_track_id)
                 if outcome.narration_voice:
@@ -168,6 +179,8 @@ def run_channel(
                 else:
                     result.failed += 1
                     result.errors.append(f"{article.url}: {outcome.error}")
+            if llm_down:
+                break
     except Exception as exc:
         if repo and run_id is not None:
             repo.finish_run(
@@ -190,10 +203,17 @@ def _process_one(
     article: FeedArticle, genre_setting: GenreSetting, channel: ChannelConfig, *, dry_run: bool,
     recent_music_ids: set[str] | frozenset[str] = frozenset(),
     recent_voices: set[str] | frozenset[str] = frozenset(),
+    llm_cache: dict | None = None,
 ) -> _Outcome:
     is_reel = channel.is_video
     try:
-        llm = _build_llm(channel)
+        # One chain per run, so a model whose quota is spent stays skipped for later articles.
+        if llm_cache is not None and "llm" in llm_cache:
+            llm = llm_cache["llm"]
+        else:
+            llm = _build_llm(channel)
+            if llm_cache is not None:
+                llm_cache["llm"] = llm
         pipeline = Pipeline(
             PipelineConfig(
                 text_provider=channel.text_provider,
@@ -219,8 +239,11 @@ def _process_one(
         # A bad article (unextractable page, transient LLM/network error)
         # must not crash the whole channel run -- record it as a failed
         # attempt and let the caller move on to the next article.
-        logger.warning("channel %s: failed to process %s: %s", channel.id, article.url, exc)
-        return _Outcome(status="failed", caption_text="", hashtags=[], asset_types=[], error=redact(str(exc)))
+        logger.warning("channel %s: failed to process %s: %s", channel.id, article.url, redact(str(exc)))
+        return _Outcome(
+            status="failed", caption_text="", hashtags=[], asset_types=[], error=redact(str(exc)),
+            fatal=isinstance(exc, LLMUnavailable),
+        )
 
     if dry_run:
         return _Outcome(
@@ -453,6 +476,13 @@ def _pick_music_track(
 
 
 def _build_llm(channel: ChannelConfig) -> LLMClient:
+    if channel.llm_chain:
+        creds = channel.credentials
+        return build_llm_chain(channel.llm_chain, {
+            "gemini": resolve_env(creds.gemini_api_key_env),
+            "openai": resolve_env(creds.openai_api_key_env),
+            "openrouter": resolve_env(creds.openrouter_api_key_env),
+        })
     if channel.text_provider == "gemini":
         return GeminiChat(api_key=resolve_env(channel.credentials.gemini_api_key_env))
     return OpenAIChat(api_key=resolve_env(channel.credentials.openai_api_key_env))

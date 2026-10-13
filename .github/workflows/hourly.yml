@@ -68,6 +68,7 @@ jobs:
           TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           IG_ACCESS_TOKEN__example_tech_ig: ${{ secrets.IG_ACCESS_TOKEN__EXAMPLE_TECH_IG }}
           IG_APP_ID__example_tech_ig: ${{ secrets.IG_APP_ID__EXAMPLE_TECH_IG }}

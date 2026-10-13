@@ -225,9 +225,13 @@ def to_clip(audio_bytes: bytes, trim_silence: bool = True, tempo: float = TEMPO)
 
 
 def synthesize_lines(provider, lines: list[str], *, voice: str, style: tuple[str, str]) -> list[Clip]:
-    """One clip per line (3 requests at a time). Raises NarrationError if any line fails."""
+    """One clip per line (3 requests at a time). Raises NarrationError if any line fails,
+    naming the line (a bare 'no audio' error was undiagnosable in the logs)."""
     def one(line: str) -> Clip:
-        return to_clip(provider.synthesize(line, voice=voice, style=style))
+        try:
+            return to_clip(provider.synthesize(line, voice=voice, style=style))
+        except NarrationError as exc:
+            raise NarrationError(f"{exc} (line: {line!r})") from exc
 
     with ThreadPoolExecutor(max_workers=3) as pool:
         return list(pool.map(one, lines))

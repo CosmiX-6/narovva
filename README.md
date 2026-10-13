@@ -206,3 +206,16 @@ The Instagram Graph API takes the access token as a query parameter, so request 
 are sensitive. `narovva.logsafe` (installed by the CLI) holds the HTTP client loggers
 at WARNING and redacts tokens/keys from every log record, error message and stored
 run error. Tokens are never printed; if one was exposed in old logs, regenerate it.
+
+## Text-model fallback chain
+
+Each article costs several LLM calls (analysis, caption, voice-over script). A single
+free-tier model runs out of daily quota after a few articles and answers 503 when busy,
+so `llm_chain:` in the channel YAML lists models in order (`provider[:model]`; providers
+`gemini`, `openai`, `openrouter`). A model whose quota is spent is skipped for the rest of
+the run, an overloaded one is retried once and rested for two minutes, and a short
+per-minute rate limit is waited out. Free-tier quotas are per model, so each Gemini model
+is a separate pool; OpenRouter `:free` models are a separate provider (secret
+`OPENROUTER_API_KEY`; entries without a key are skipped). When no model is left the run
+stops at once, without recording failed attempts against the articles. Free model names
+change often; edit the list, no code change needed.

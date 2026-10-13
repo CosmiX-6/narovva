@@ -431,3 +431,34 @@ def test_real_kokoro_synthesis_produces_speech():
     provider = build_provider("kokoro", "")
     clips = synthesize_lines(provider, ["Prices cut on every tier.", "Batch jobs now cost half."], voice="af_heart", style=("", ""))
     assert all(1.0 < c.seconds < 6.0 for c in clips)
+
+
+def test_script_never_produces_an_unspeakable_line():
+    from narovva.narration.script import speakable, write_script
+
+    class _LLM:
+        def complete_json(self, system, user):
+            return {"lines": ["...", "", "\u2026!", "Real line about prices."]}
+
+    specs = [
+        {"kind": "stats", "facts": ["67% cheaper"]},
+        {"kind": "evidence"},                       # no heading/body/facts at all
+        {"kind": "chart"},
+        {"kind": "cta", "heading": "Follow"},
+    ]
+    brief = type("B", (), {"tone": "neutral", "headline": "h", "summary": "s"})()
+    lines = write_script(_LLM(), brief, specs, brand="Context Unfiltered")
+    assert len(lines) == 4 and all(speakable(line) for line in lines)
+    assert lines[0] == "67% cheaper." and lines[1] == "Here's what the evidence shows."
+    assert lines[3] == "Real line about prices." or lines[3].startswith("Follow")
+
+
+def test_synthesize_lines_error_names_the_line():
+    from narovva.narration.tts import synthesize_lines
+
+    class _Silent:
+        def synthesize(self, text, *, voice, style):
+            return _wav(0.05, 300)
+
+    with pytest.raises(NarrationError, match="'Hi'"):
+        synthesize_lines(_Silent(), ["Hi"], voice="v", style=("", ""))
