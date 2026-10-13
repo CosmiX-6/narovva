@@ -10,6 +10,15 @@ on:
         required: false
         type: string
 
+# One publish run at a time. GitHub's own cron is late or dropped most hours,
+# so an outside scheduler may also dispatch this workflow; a run that starts
+# while another is still rendering would see the same genre as due and post it
+# twice. Queued instead, it starts after the post is recorded and finds
+# nothing due.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 jobs:
   run-due-channels:
     runs-on: ubuntu-latest
