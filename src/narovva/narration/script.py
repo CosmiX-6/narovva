@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +42,38 @@ def _slide_payload(i: int, spec: dict) -> dict:
     return out
 
 
+_HAS_WORDS = re.compile(r"[A-Za-z0-9]{2,}")
+_GENERIC = {
+    "stats": "Here are the numbers that matter.",
+    "comparison": "Here's how the two compare.",
+    "timeline": "Here's how it unfolded.",
+    "money_flow": "Now, follow the money.",
+    "quote": "And here's what they said.",
+    "evidence": "Here's what the evidence shows.",
+    "conclusion": "Here's why it matters.",
+}
+
+
+def speakable(text: str) -> bool:
+    """True if a TTS engine has real words to say (not '.', '...', an emoji)."""
+    return bool(_HAS_WORDS.search(text or ""))
+
+
 def _fallback_line(spec: dict, brand: str, last: bool) -> str:
+    """A safe, speakable line derived from the slide itself; never empty."""
     if last:
         return f"Follow {brand.title()} for daily breakdowns."
-    return (spec.get("heading") or spec.get("body") or "").rstrip(".") + "."
+    candidates = [spec.get("heading"), spec.get("body")]
+    candidates += list(spec.get("facts") or [])[:1]
+    candidates += [e.get("what") for e in (spec.get("timeline") or [])[:1]]
+    candidates += [m.get("actor") for m in (spec.get("money") or [])[:1]]
+    comparison = spec.get("comparison") or {}
+    candidates += [comparison.get("title")]
+    candidates += [(spec.get("quote") or {}).get("text")]
+    for text in candidates:
+        if text and speakable(text):
+            return str(text).strip().rstrip(".!?") + "."
+    return _GENERIC.get(spec.get("kind"), "Here's the next detail.")
 
 
 def write_script(llm, brief, specs: list[dict], *, brand: str) -> list[str]:
@@ -66,7 +95,7 @@ def write_script(llm, brief, specs: list[dict], *, brand: str) -> list[str]:
     out: list[str] = []
     for i, spec in enumerate(specs):
         text = str(lines[i]).strip() if i < len(lines) and lines[i] else ""
-        if not text or len(text.split()) > _MAX_WORDS:
+        if not speakable(text) or len(text.split()) > _MAX_WORDS:
             text = _fallback_line(spec, brand, last=(i == len(specs) - 1))
         out.append(text)
     return out
