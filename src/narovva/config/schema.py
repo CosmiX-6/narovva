@@ -65,6 +65,7 @@ class CredentialRefs(BaseModel):
     gemini_api_key_env: str | None = None
     jamendo_client_id_env: str | None = None
     elevenlabs_api_key_env: str | None = None
+    openrouter_api_key_env: str | None = None
 
 
 class NarrationConfig(BaseModel):
@@ -98,6 +99,10 @@ class ChannelConfig(BaseModel):
     caption: CaptionTone = Field(default_factory=CaptionTone)
     credentials: CredentialRefs = Field(default_factory=CredentialRefs)
     text_provider: Literal["openai", "gemini"] = "openai"
+    # Text-model fallback chain, tried in order ("provider[:model]"; providers
+    # gemini, openai, openrouter). Unset = just `text_provider`. Free-tier quotas
+    # are per model, so listing several Gemini models gives several pools.
+    llm_chain: list[str] | None = None
     image_provider: Literal["openai", "gemini", "none"] = "openai"
     # "carousel" (default): post poster-core's rendered images directly.
     # "reel": assemble those same images into a short Ken-Burns video with
