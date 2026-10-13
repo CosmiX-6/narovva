@@ -42,13 +42,15 @@ class LLMUnavailable(RuntimeError):
 
 
 def classify_error(exc: BaseException) -> str:
-    """'quota' | 'overload' | 'auth' | 'bad_output' | 'other'."""
+    """'quota' | 'overload' | 'gone' | 'auth' | 'bad_output' | 'other'."""
     text = f"{type(exc).__name__} {exc}".lower()
     status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
     if status == 429 or any(k in text for k in ("resource_exhausted", "insufficient_quota", "quota", "rate limit", "rate_limit", " 429")):
         return "quota"
     if status in (500, 502, 503, 504) or any(k in text for k in ("unavailable", "overloaded", "high demand", "timed out", "timeout", "connection", " 503", " 500", " 502", " 504")):
         return "overload"
+    if status == 404 or any(k in text for k in ("not_found", "no longer available", "is not found", "does not exist", "model_not_found")):
+        return "gone"  # retired or misspelled model id: it will fail identically for every article
     if status in (401, 403) or any(k in text for k in ("api key", "api_key", "permission_denied", "unauthorized", "invalid_api_key", "no api key")):
         return "auth"
     if "json" in text or "analysiserror" in text:
@@ -156,6 +158,9 @@ class FallbackLLM:
                     elif kind == "auth":
                         entry.dead_reason = f"credentials rejected ({detail})"
                         logger.warning("llm %s: credentials rejected; skipping it", entry.name)
+                    elif kind == "gone":
+                        entry.dead_reason = f"model unavailable ({detail})"
+                        logger.warning("llm %s: model not available (retired or misspelled id?); skipping it", entry.name)
                     else:  # bad JSON or something unexpected: another model may do better
                         logger.warning("llm %s failed (%s): %s", entry.name, kind, detail)
                     failures.append(f"{entry.name}: {kind}")

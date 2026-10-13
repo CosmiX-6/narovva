@@ -42,6 +42,17 @@ def test_classify_and_retry_delay():
     assert retry_delay_seconds(_Err("retryDelay': '75586s'")) == 75586
 
 
+GONE = _Err("404 NOT_FOUND. This model models/gemini-2.5-flash is no longer available to new users.", 404)
+
+
+def test_retired_model_is_skipped_for_the_rest_of_the_run():
+    assert classify_error(GONE) == "gone"
+    a, b = _Fake(GONE), _Fake({"ok": 1})
+    llm = _chain(a, b)
+    assert llm.complete_json("s", "u") == {"ok": 1} and llm.complete_json("s", "u") == {"ok": 1}
+    assert a.calls == 1
+
+
 def test_quota_falls_through_and_the_spent_model_is_skipped_afterwards():
     a, b = _Fake(QUOTA), _Fake({"ok": 1})
     llm = _chain(a, b)
