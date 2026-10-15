@@ -71,7 +71,7 @@ def check_token(token: str) -> None:
         resp = httpx.get(
             f"{_GRAPH_BASE}/v21.0/me", params={"fields": "id", "access_token": token}, timeout=20.0,
         )
-    except httpx.HTTPError as exc:
+    except httpx.HTTPError:
         # Network trouble isn't proof the token is bad; let the real publish decide.
         return
     if resp.status_code >= 400:
@@ -114,7 +114,7 @@ def refresh_token(channel: ChannelConfig) -> None:
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
         try:
-            Repo(get_connection()).mark_instagram_token_refresh_failed(channel.id, str(exc))
+            Repo(get_connection()).mark_instagram_token_refresh_failed(channel.id, redact(str(exc)))  # the URL carries the token
         except Exception:
             pass
         raise InstagramTokenError(f"token refresh failed for channel {channel.id!r}: {exc}") from exc

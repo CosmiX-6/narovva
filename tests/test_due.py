@@ -37,21 +37,21 @@ def _patch_repo(monkeypatch, last):
 def test_rotation_picks_first_genre_when_never_posted(monkeypatch):
     _patch_repo(monkeypatch, last=None)
     result = due.due_genres([_channel()])
-    assert [d.genre for d in result] == ["tech"]
+    assert [d.genre for d in result] == ["tech", "ai"]  # due genre first, the rest as fallbacks
 
 
 def test_rotation_advances_to_next_genre_after_cadence_elapses(monkeypatch):
     last_at = datetime.now(timezone.utc) - timedelta(minutes=130)
     _patch_repo(monkeypatch, last=("tech", last_at))
     result = due.due_genres([_channel()])
-    assert [d.genre for d in result] == ["ai"]
+    assert [d.genre for d in result] == ["ai", "tech"]
 
 
 def test_rotation_wraps_around_after_last_genre(monkeypatch):
     last_at = datetime.now(timezone.utc) - timedelta(minutes=130)
     _patch_repo(monkeypatch, last=("ai", last_at))
     result = due.due_genres([_channel()])
-    assert [d.genre for d in result] == ["tech"]
+    assert [d.genre for d in result] == ["tech", "ai"]
 
 
 def test_rotation_not_due_before_cadence_elapses(monkeypatch):
@@ -65,7 +65,7 @@ def test_rotation_recovers_if_last_posted_genre_was_removed_from_config(monkeypa
     last_at = datetime.now(timezone.utc) - timedelta(minutes=130)
     _patch_repo(monkeypatch, last=("gaming", last_at))
     result = due.due_genres([_channel()])
-    assert [d.genre for d in result] == ["tech"]
+    assert [d.genre for d in result] == ["tech", "ai"]
 
 
 def test_independent_mode_unaffected_when_rotation_minutes_unset(monkeypatch):
