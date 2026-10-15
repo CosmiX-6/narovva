@@ -21,6 +21,10 @@ _KIND_LABELS = {
     "stats": "BY THE NUMBERS",
     "comparison": "HEAD TO HEAD",
     "quote": "IN THEIR WORDS",
+    "why": "WHY IT'S HAPPENING",
+    "impact": "WHO WINS / WHO LOSES",
+    "bigger_picture": "THE BIGGER PICTURE",
+    "scream": "THE NUMBER",
     "conclusion": "WHY IT MATTERS",
 }
 
@@ -38,7 +42,8 @@ _MAX_FACTS = 3
 # strongest middle scenes), which with spoken lines of ~3 s is a 20-30 s reel.
 MAX_SCENES = 7
 _KIND_PRIORITY = {
-    "stats": 6, "comparison": 6, "money_flow": 5, "timeline": 5, "quote": 4,
+    "scream": 7, "stats": 6, "comparison": 6, "money_flow": 5, "timeline": 5,
+    "why": 5, "impact": 5, "quote": 4, "bigger_picture": 4,
     "conclusion": 3, "evidence": 2, "text": 1,
 }
 
@@ -82,16 +87,30 @@ def attach_viz(spec: dict) -> dict:
     """Chart specs for the data scenes (see narovva.motion.dataviz). Built
     from the untrimmed copy: trimming a long fact can cut off the very
     number it ends on."""
-    if spec.get("kind") == "stats":
+    kind = spec.get("kind")
+    if kind == "stats":
         spec["viz"] = stats_viz((spec.get("facts") or [])[:_MAX_FACTS])
-    elif spec.get("kind") == "comparison":
+    elif kind == "scream":
+        # Single oversized stat: parse the first fact so the template gets
+        # a count-up + ring/bar rather than plain text.
+        facts = spec.get("facts") or []
+        spec["viz"] = stats_viz(facts[:1]) if facts else None
+    elif kind == "comparison":
         spec["viz"] = comparison_viz(spec.get("comparison"))
     return spec
 
 
+_HEADING_LIMIT: dict[str, int] = {
+    # Narrative-arc kinds carry a full sentence as heading; let fit() scale the
+    # font down rather than truncating mid-thought.
+    "why": 110, "bigger_picture": 110, "impact": 95, "scream": 95,
+}
+
+
 def compact_spec(spec: dict) -> dict:
     """Trim on-screen copy for a fast reel: the voice/caption carry the detail."""
-    spec["heading"] = _trim(spec.get("heading"), 78)
+    heading_limit = _HEADING_LIMIT.get(spec.get("kind", ""), 78)
+    spec["heading"] = _trim(spec.get("heading"), heading_limit)
     spec["body"] = _trim(spec.get("body"), 105)
     spec["facts"] = [_trim(f, 64) for f in (spec.get("facts") or [])[:_MAX_FACTS]]
     spec["timeline"] = [{"when": e["when"], "what": _trim(e["what"], 60)} for e in (spec.get("timeline") or [])[:3]]

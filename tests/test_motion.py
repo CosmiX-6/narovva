@@ -135,8 +135,12 @@ def test_sample_deck_carries_charts_and_captions():
     from narovva.motion.sample import sample_deck
 
     deck = sample_deck(captions=True)
+    # Scream scene: "67% cheaper per token" \u2192 single ring item
+    scream = next(s for s in deck if s["kind"] == "scream")
+    assert scream["viz"]["items"][0]["type"] == "ring"
+    # Stats scene: 3.2x / $1.2B / 14 \u2014 no two facts share a unit, so all "number"
     stats = next(s for s in deck if s["kind"] == "stats")
-    assert [i["type"] for i in stats["viz"]["items"]] == ["ring", "number", "number"]
+    assert all(i["type"] == "number" for i in stats["viz"]["items"])
     assert next(s for s in deck if s["kind"] == "comparison")["viz"]["delta"] == "\u221267%"
     assert all(s["caption"] and s["duration"] >= s["voice"] + 0.25 - 1e-6 for s in deck)
     assert all("caption" not in s for s in sample_deck(captions=False))
@@ -175,7 +179,8 @@ def test_real_hyperframes_render_of_two_slides(tmp_path):
         accent="#EC4899", handle="contextunfiltered", brand="CONTEXT UNFILTERED",
         logo_path="assets/logo/CU.png",
     )
-    assert render_module._probe_duration(out) == pytest.approx(total_duration([4.6, 5.0]), abs=0.2)
+    expected = total_duration([s["duration"] for s in SAMPLE_SLIDES[:2]])
+    assert render_module._probe_duration(out) == pytest.approx(expected, abs=0.2)
 
 
 def _channel(**kw) -> ChannelConfig:
