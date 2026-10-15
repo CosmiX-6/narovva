@@ -225,7 +225,7 @@
           const atmo = document.getElementById("atmo");
           const atmoImg = image(PHOTO.bg, atmo);
           document.getElementById("glow").style.opacity = ".14";
-          const LEVEL = { hook: 0.95, hero: 0.95, text: 0.75, conclusion: 0.85, quote: 0.75, evidence: 0.55, cta: 0.8 };
+          const LEVEL = { hook: 0.95, hero: 0.95, text: 0.75, conclusion: 0.85, quote: 0.75, evidence: 0.55, why: 0.75, impact: 0.55, bigger_picture: 0.85, scream: 0.45, cta: 0.8 };
           let prev = 0;
           slides.forEach((s, i) => {
             const v = LEVEL[s.kind] == null ? 0.42 : LEVEL[s.kind];
@@ -461,6 +461,11 @@
           tl.from(h.querySelectorAll(".w > span"), { yPercent: 120, duration: D(E), ease: "power4.out", stagger: stag(8, 0.05) }, a(0.08));
           tl.from(hd, { opacity: 0, y: 24, duration: D(0.25), ease: "power3.out" }, a(0.3));
         };
+
+        // New narrative-arc kinds: reuse existing builders.
+        B.why = B.bigger_picture = B.text;
+        B.impact = B.evidence;
+        B.scream = B.stats;
 
         const scs = slides.map((s, i) => {
           const sc = el("div", "scene", null, scenesEl); sc.setAttribute("data-layout-allow-overlap", ""); sc.setAttribute("data-layout-allow-overflow", "");

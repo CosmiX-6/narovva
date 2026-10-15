@@ -6,30 +6,29 @@ from __future__ import annotations
 from pathlib import Path
 
 SAMPLE_SLIDES: list[dict] = [
-    {"kind": "hook", "kicker": "AI", "heading": "OpenAI just made its models three times cheaper to run", "body": "Here is what changed, and who pays.", "duration": 4.6},
-    {"kind": "text", "kicker": "THE DETAILS", "heading": "A new pricing tier lands today", "body": "Inference costs drop for every model in the lineup, with the biggest cuts on the largest ones.", "duration": 5.0},
-    {"kind": "stats", "kicker": "BY THE NUMBERS", "heading": "What shifted", "facts": ["67% cheaper per token", "3.2x faster responses", "$1.2B saved by customers", "14 models updated"], "duration": 5.2},
-    {"kind": "evidence", "kicker": "THE EVIDENCE", "heading": "What the filings show", "facts": ["Prices were cut on all API tiers", "Rate limits doubled for paid plans", "Batch jobs now cost half"], "duration": 5.0},
-    {"kind": "timeline", "kicker": "TIMELINE", "heading": "How we got here", "timeline": [{"when": "Jan 2025", "what": "First price cut announced"}, {"when": "Jun 2025", "what": "Competitors respond"}, {"when": "Oct 2026", "what": "Three-times-cheaper tier ships"}], "duration": 5.0},
-    {"kind": "money_flow", "kicker": "FOLLOW THE MONEY", "heading": "Where the savings go", "money": [{"actor": "Customers", "amount": None, "detail": "API spend"}, {"actor": "Cloud provider", "amount": "$0.4B", "detail": "Compute bill"}, {"actor": "Chipmaker", "amount": "$0.2B", "detail": "GPU purchases"}], "duration": 5.0},
+    {"kind": "hook", "kicker": "AI", "heading": "What if the smartest A I just got three times cheaper?", "duration": 4.2},
+    {"kind": "text", "kicker": "WHAT HAPPENED", "heading": "OpenAI slashed model prices across the board today", "body": "Inference costs drop for every model in the lineup, with the biggest cuts on the largest ones.", "duration": 4.8},
+    {"kind": "why", "kicker": "WHY IT'S HAPPENING", "heading": "Compute got cheap fast, and rivals caught up — prices had nowhere left to go", "duration": 4.4},
+    {"kind": "impact", "kicker": "WHO WINS / WHO LOSES", "heading": "Every developer and startup building on the A P I wins immediately", "body": "Loses: smaller closed-source labs that competed on price.\nCost: open-source momentum stalls as the gap with closed models narrows.", "duration": 5.0},
+    {"kind": "scream", "kicker": "THE NUMBER", "facts": ["67% cheaper per token"], "duration": 3.6},
+    {"kind": "stats", "kicker": "BY THE NUMBERS", "facts": ["3.2x faster responses", "$1.2B saved by customers this year", "14 models updated at once"], "duration": 5.0},
     {"kind": "comparison", "kicker": "HEAD TO HEAD", "comparison": {"title": "Cost per million tokens", "label_a": "Before", "value_a": "$15", "label_b": "After", "value_b": "$5"}, "duration": 4.6},
     {"kind": "quote", "kicker": "IN THEIR WORDS", "quote": {"text": "Intelligence should be too cheap to meter.", "attribution": "Company spokesperson"}, "duration": 4.4},
-    {"kind": "conclusion", "kicker": "WHY IT MATTERS", "heading": "Cheaper AI means more AI everywhere", "body": "Expect a wave of products that were too expensive to ship last year.", "duration": 4.8},
+    {"kind": "bigger_picture", "kicker": "THE BIGGER PICTURE", "heading": "When inference is cheap, the edge moves from the model to whoever builds the best product", "duration": 4.6},
     {"kind": "cta", "heading": "Follow for daily AI breakdowns", "duration": 3.2},
 ]
 
-# One spoken line per sample slide, standing in for the narration script so the
-# sample exercises the caption track without calling a TTS provider.
+# One spoken line per sample slide, standing in for the narration script.
 SAMPLE_CAPTIONS: list[str] = [
     "What if the smartest models suddenly cost a third of what you pay today?",
     "A new pricing tier just landed, and the biggest models get the deepest cuts.",
-    "Sixty-seven percent cheaper per token, and more than three times faster.",
-    "The filings show cuts on every tier, with rate limits doubled.",
-    "It took less than two years to get from the first cut to this one.",
-    "Follow the money: the savings move from customers to clouds to chipmakers.",
+    "Compute got cheap, and the competition caught up — prices had to follow.",
+    "Every developer building on the A P I just got a raise. Smaller labs didn't.",
+    "Sixty-seven percent cheaper per token.",
+    "Three point two times faster, one point two billion dollars saved, fourteen models updated.",
     "A million tokens used to cost fifteen dollars. Now it's five.",
     "The company says intelligence should be too cheap to meter.",
-    "Cheaper models mean products that couldn't ship last year can ship now.",
+    "When inference is free, the advantage moves to whoever builds the best product.",
     "Follow Context Unfiltered for daily breakdowns.",
 ]
 
