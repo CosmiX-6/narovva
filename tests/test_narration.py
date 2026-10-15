@@ -17,7 +17,7 @@ from narovva.narration import (
     style_for_tone, synthesize_lines, write_script,
 )
 from narovva.narration import tts as tts_module
-from narovva.narration.tts import Clip, to_clip
+from narovva.narration.tts import to_clip
 
 import narovva.orchestration.run_channel  # noqa: F401
 
@@ -240,7 +240,7 @@ def test_narrated_reel_uses_unused_voice_and_speech_sets_durations(monkeypatch):
     )
     assert path == "/tmp/o.mp4" and voice == "v2"                     # v1 was used recently
     assert provider.voices == ["v2", "v2", "v2"]
-    assert [round(s["duration"], 2) for s in captured["specs"]] == [1.7, 1.7, 1.7]  # 1.5 s voice sped up 1.08x = 1.39 s, + 0.25 lead/tail, floored at 1.7
+    assert [round(s["duration"], 2) for s in captured["specs"]] == [1.84, 1.84, 1.84]  # 1.5 s voice sped up 1.08x = 1.39 s, + 0.15 lead + 0.3 tail
     assert len(captured["audio"]) > 1000
     # each slide carries its spoken line and how long it takes to say, for the burned-in captions
     assert [s["caption"] for s in captured["specs"]] == ["One.", "Two.", "Three."]

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import httpx
-import pytest
 
 from narovva.config.schema import BrandKitConfig, ChannelConfig, CredentialRefs, GenreSetting
 from narovva.publishers import instagram as instagram_module

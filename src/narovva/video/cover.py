@@ -133,7 +133,6 @@ def make_cover(
     draw = ImageDraw.Draw(canvas)
 
     # Logo, top-left of the safe band.
-    logo_bottom = _BAND_TOP
     if logo_path and Path(logo_path).exists():
         try:
             with Image.open(logo_path) as lg:
@@ -141,7 +140,6 @@ def make_cover(
             mask = Image.new("L", lg.size, 0)
             ImageDraw.Draw(mask).rounded_rectangle((0, 0, *lg.size), radius=30, fill=255)
             canvas.paste(lg, (_MARGIN, _BAND_TOP), mask)
-            logo_bottom = _BAND_TOP + 132
         except Exception as exc:
             logger.info("cover logo skipped (%s)", exc)
     if brand:

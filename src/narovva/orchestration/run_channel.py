@@ -21,7 +21,7 @@ from ..db.engine import ensure_schema, get_connection
 from ..db.repo import Repo
 from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
-from ..motion import MotionRenderError, render_motion_reel, slide_specs_from_assets, total_duration
+from ..motion import render_motion_reel, slide_specs_from_assets, total_duration
 from ..motion.slides import SCENE_OVERLAP_SECONDS, VOICE_LEAD, motion_duration
 from ..narration.script import caption_text
 from ..narration import (

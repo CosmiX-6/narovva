@@ -4,7 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from narovva.config import load_all_channels, load_channel
-from narovva.config.schema import ChannelConfig
 
 
 def test_load_example_channel():

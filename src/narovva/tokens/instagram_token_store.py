@@ -71,7 +71,7 @@ def check_token(token: str) -> None:
         resp = httpx.get(
             f"{_GRAPH_BASE}/v21.0/me", params={"fields": "id", "access_token": token}, timeout=20.0,
         )
-    except httpx.HTTPError as exc:
+    except httpx.HTTPError:
         # Network trouble isn't proof the token is bad; let the real publish decide.
         return
     if resp.status_code >= 400:

@@ -71,7 +71,7 @@ def test_slide_specs_default_to_brisk_durations_and_compact_text():
 def test_motion_duration_voice_sets_length_with_floor():
     from narovva.motion.slides import motion_duration
 
-    assert motion_duration(0, "text", 3.0) == pytest.approx(3.25)
+    assert motion_duration(0, "text", 3.0) == pytest.approx(3.45)  # + 0.15 lead + 0.3 tail
     assert motion_duration(0, "text", 0.5) == 1.7      # never shorter than the floor
     assert motion_duration(999, "text") == 3.6          # reading time is capped
     assert motion_duration(10, "hook") >= 2.2

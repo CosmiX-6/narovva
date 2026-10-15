@@ -71,12 +71,13 @@ def sample_deck(captions: bool = True) -> list[dict]:
     """The sample slides prepared the way the pipeline prepares real ones.
     With `captions`, each slide gets its spoken line and lasts as long as
     that line would take to say (~160 words a minute), as narration does."""
+    from ..narration.script import caption_text
     from .slides import attach_viz, compact_spec, display_chars, motion_duration
 
     slides = [compact_spec(attach_viz(dict(s))) for s in SAMPLE_SLIDES]
     for slide, line in zip(slides, SAMPLE_CAPTIONS):
         if captions:
-            slide["caption"] = line
+            slide["caption"] = caption_text(line)  # on screen: "API", not the spoken "A P I"
             slide["voice"] = round(len(line.split()) / 2.7, 3)
             slide["duration"] = motion_duration(0, slide["kind"], slide["voice"])
         else:
