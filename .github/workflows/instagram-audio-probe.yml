@@ -27,9 +27,10 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
           IG_ACCESS_TOKEN__example_tech_ig: ${{ secrets.IG_ACCESS_TOKEN__EXAMPLE_TECH_IG }}
+          AUDIO_QUERY: ${{ inputs.query }}
         run: |
-          if [ -n "${{ inputs.query }}" ]; then
-            narovva audio-probe config/channels/example-tech-ig.yaml --query "${{ inputs.query }}"
+          if [ -n "$AUDIO_QUERY" ]; then
+            narovva audio-probe config/channels/example-tech-ig.yaml --query "$AUDIO_QUERY"
           else
             narovva audio-probe config/channels/example-tech-ig.yaml
           fi

@@ -43,6 +43,12 @@ jobs:
           node-version: "22"
           cache: npm
 
+      # Restore Chrome before 'browser ensure', so a cache hit skips the 114 MB download.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/hyperframes
+          key: hyperframes-chrome-${{ hashFiles('package-lock.json') }}
+
       - name: Install HyperFrames
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
@@ -50,11 +56,6 @@ jobs:
           npx hyperframes telemetry disable
           npx hyperframes browser ensure
         continue-on-error: true
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/hyperframes
-          key: hyperframes-chrome-${{ hashFiles('package-lock.json') }}
 
       - uses: actions/cache@v4
         with:
@@ -74,9 +75,11 @@ jobs:
           IG_APP_ID__example_tech_ig: ${{ secrets.IG_APP_ID__EXAMPLE_TECH_IG }}
           IG_APP_SECRET__example_tech_ig: ${{ secrets.IG_APP_SECRET__EXAMPLE_TECH_IG }}
           JAMENDO_CLIENT_ID__example_tech_ig: ${{ secrets.JAMENDO_CLIENT_ID__EXAMPLE_TECH_IG }}
+          # Passed as data, never pasted into the script (no shell injection from the input).
+          FORCE_GENRE: ${{ inputs.genre }}
         run: |
-          if [ -n "${{ inputs.genre }}" ]; then
-            narovva run-channel config/channels/example-tech-ig.yaml --genre "${{ inputs.genre }}" --max-posts-per-genre 1
+          if [ -n "$FORCE_GENRE" ]; then
+            narovva run-channel config/channels/example-tech-ig.yaml --genre "$FORCE_GENRE" --max-posts-per-genre 1
           else
             narovva run-due
           fi

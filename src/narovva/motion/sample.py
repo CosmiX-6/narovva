@@ -6,10 +6,10 @@ from __future__ import annotations
 from pathlib import Path
 
 SAMPLE_SLIDES: list[dict] = [
-    {"kind": "hook", "kicker": "AI", "heading": "What if the smartest A I just got three times cheaper?", "duration": 4.2},
+    {"kind": "hook", "kicker": "AI", "heading": "What if the smartest AI just got three times cheaper?", "duration": 4.2},
     {"kind": "text", "kicker": "WHAT HAPPENED", "heading": "OpenAI slashed model prices across the board today", "body": "Inference costs drop for every model in the lineup, with the biggest cuts on the largest ones.", "duration": 4.8},
     {"kind": "why", "kicker": "WHY IT'S HAPPENING", "heading": "Compute got cheap fast, and rivals caught up — prices had nowhere left to go", "duration": 4.4},
-    {"kind": "impact", "kicker": "WHO WINS / WHO LOSES", "heading": "Every developer and startup building on the A P I wins immediately", "body": "Loses: smaller closed-source labs that competed on price.\nCost: open-source momentum stalls as the gap with closed models narrows.", "duration": 5.0},
+    {"kind": "impact", "kicker": "WHO WINS / WHO LOSES", "heading": "Every developer and startup building on the API wins immediately", "body": "Loses: smaller closed-source labs that competed on price.\nCost: open-source momentum stalls as the gap with closed models narrows.", "duration": 5.0},
     {"kind": "scream", "kicker": "THE NUMBER", "facts": ["67% cheaper per token"], "duration": 3.6},
     {"kind": "stats", "kicker": "BY THE NUMBERS", "facts": ["3.2x faster responses", "$1.2B saved by customers this year", "14 models updated at once"], "duration": 5.0},
     {"kind": "comparison", "kicker": "HEAD TO HEAD", "comparison": {"title": "Cost per million tokens", "label_a": "Before", "value_a": "$15", "label_b": "After", "value_b": "$5"}, "duration": 4.6},

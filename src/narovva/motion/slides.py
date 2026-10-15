@@ -35,8 +35,10 @@ _KIND_LABELS = {
 _MIN_HOLD = 1.7
 _MAX_HOLD = 3.6
 _CHARS_PER_SECOND = 28.0
-VOICE_LEAD = 0.15  # picture leads the voice slightly (also where captions start)
-_VOICE_TAIL = 0.1
+VOICE_LEAD = 0.15  # picture leads the voice slightly (also where captions start; passed to the template)
+# After the line ends the scene still holds through the 0.3 s transition, so the next
+# line (which starts VOICE_LEAD into the next scene) never talks over this one.
+_VOICE_TAIL = 0.3
 _MAX_FACTS = 3
 # A quick update, not a documentary: at most this many scenes (hook + CTA + the
 # strongest middle scenes), which with spoken lines of ~3 s is a 20-30 s reel.

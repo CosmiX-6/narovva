@@ -40,7 +40,13 @@ def due_genres(channels: list[ChannelConfig]) -> list[DueGenre]:
         if channel.rotation_minutes is not None:
             genre = _next_rotation_genre(channel, repo, now)
             if genre is not None:
-                due.append(DueGenre(channel=channel, genre=genre))
+                # The due genre first, then the others in rotation order as fallbacks: a
+                # genre with nothing new to post must not hold up the whole rotation
+                # (the caller posts at most one item per rotation slot).
+                order = [g.genre for g in channel.genres]
+                start = order.index(genre)
+                for name in order[start:] + order[:start]:
+                    due.append(DueGenre(channel=channel, genre=name))
         else:
             for genre_setting in channel.genres:
                 last = repo.last_successful_post_at(channel.id, genre_setting.genre) if repo else None

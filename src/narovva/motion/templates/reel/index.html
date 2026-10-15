@@ -161,7 +161,7 @@
         const PHOTO = DECK.photo || null;
         const CAPTIONS = !!DECK.captions;
         const OV = 0.3; // scene overlap == the transition (keep in sync with motion/slides.py)
-        const LEAD = 0.25; // the voice starts this long after its scene (VOICE_LEAD in motion/slides.py)
+        const LEAD = DECK.voice_lead ?? 0.15; // the voice starts this long after its scene (VOICE_LEAD in motion/slides.py)
         // With captions on, the scene window gives up its bottom strip to them.
         const SH = CAPTIONS ? 880 : 1040, K = SH / 1040;
         const mh = (v) => Math.round(v * K);
@@ -501,7 +501,10 @@
             });
             tl.fromTo(cap, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.18, ease: "power3.out" }, t0 + 0.06);
             const last = i === slides.length - 1;
-            tl.fromTo(cap, { opacity: 1 }, { opacity: 0, duration: 0.12, ease: "power2.in", immediateRender: false }, t0 + s.duration - (last ? 0.25 : OV + 0.04));
+            // Leave once the line is spoken, but before the next scene's caption arrives.
+            const nextIn = t0 + s.duration - OV + 0.06;
+            const fadeAt = last ? t0 + s.duration - 0.25 : Math.min(t0 + LEAD + voice, nextIn - 0.1);
+            tl.fromTo(cap, { opacity: 1 }, { opacity: 0, duration: 0.1, ease: "power2.in", immediateRender: false }, fadeAt);
           });
         }
 

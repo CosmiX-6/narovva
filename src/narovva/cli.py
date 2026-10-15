@@ -94,9 +94,16 @@ def main(argv: list[str] | None = None) -> int:
         max_posts = args.max_posts_per_genre or None
         failed_any = False
         for channel, genres in due:
-            result = run_channel(
-                channel, genres_filter=genres, dry_run=args.dry_run, max_posts_per_genre=max_posts,
-            )
+            try:
+                result = run_channel(
+                    channel, genres_filter=genres, dry_run=args.dry_run, max_posts_per_genre=max_posts,
+                    # A rotation slot is one post: later genres are only fallbacks.
+                    max_posts_total=1 if channel.rotation_minutes else None,
+                )
+            except Exception as exc:  # one broken channel must not stop the others
+                print(f"channel={channel.id} crashed: {logsafe.redact(str(exc))}")
+                failed_any = True
+                continue
             _print_result(result)
             failed_any = failed_any or bool(result.failed)
         return 1 if failed_any else 0

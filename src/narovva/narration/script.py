@@ -48,6 +48,15 @@ def _slide_payload(i: int, spec: dict) -> dict:
     return out
 
 
+_SPELLED = re.compile(r"\b[A-Z](?: [A-Z])+\b")
+
+
+def caption_text(line: str) -> str:
+    """The spoken line as it should read on screen: letter-by-letter spellings
+    written for the voice ('A I', 'G P U') are joined back ('AI', 'GPU')."""
+    return _SPELLED.sub(lambda m: m.group(0).replace(" ", ""), line)
+
+
 _HAS_WORDS = re.compile(r"[A-Za-z0-9]{2,}")
 _GENERIC = {
     "stats": "Here are the numbers that matter.",

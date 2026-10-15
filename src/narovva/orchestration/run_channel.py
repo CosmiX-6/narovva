@@ -23,6 +23,7 @@ from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
 from ..motion import MotionRenderError, render_motion_reel, slide_specs_from_assets, total_duration
 from ..motion.slides import SCENE_OVERLAP_SECONDS, VOICE_LEAD, motion_duration
+from ..narration.script import caption_text
 from ..narration import (
     build_provider, choose_voice, default_voices, mix_voice_and_music, style_for_tone,
     synthesize_lines, write_script,
@@ -34,7 +35,7 @@ from ..settings import Settings, get_settings, resolve_env
 from ..tokens import InstagramTokenError, check_token, get_valid_token
 from ..llm import LLMUnavailable, build_llm_chain
 from ..logsafe import redact
-from ..video import VideoAssemblyError, assemble_reel, make_cover, slide_duration
+from ..video import assemble_reel, make_cover, slide_duration
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ def run_channel(
     genres_filter: list[str] | None = None,
     dry_run: bool = False,
     max_posts_per_genre: int | None = None,
+    max_posts_total: int | None = None,
 ) -> ChannelRunResult:
     """Run one channel's genres. `max_posts_per_genre` bounds how many
     successful publishes a single genre can produce in this call -- unset
@@ -99,7 +101,11 @@ def run_channel(
         sources.append(NewsAPISource(settings.newsapi_key))
     fetcher = NewsFetcher(sources=sources, store=store)
 
-    genres = [g for g in channel.genres if genres_filter is None or g.genre in genres_filter]
+    genres = list(channel.genres)
+    if genres_filter is not None:
+        # Keep the caller's order: for a rotation it is a priority list (due genre first).
+        by_name = {g.genre: g for g in channel.genres}
+        genres = [by_name[name] for name in genres_filter if name in by_name]
     genres_processed: list[str] = []
     llm_cache: dict = {}  # the text-model chain, built on first use and shared by every article
     llm_down = False
@@ -118,6 +124,8 @@ def run_channel(
             genre_posted = 0
             for article in articles:
                 if max_posts_per_genre is not None and genre_posted >= max_posts_per_genre:
+                    break
+                if max_posts_total is not None and result.posted >= max_posts_total:
                     break
                 result.considered += 1
 
@@ -180,6 +188,8 @@ def run_channel(
                     result.failed += 1
                     result.errors.append(f"{article.url}: {outcome.error}")
             if llm_down:
+                break
+            if max_posts_total is not None and result.posted >= max_posts_total:
                 break
     except Exception as exc:
         if repo and run_id is not None:
@@ -296,7 +306,8 @@ def _process_one(
                     )
         publisher = get_publisher(PublishPlatform(channel.platform))
         post_result = publisher.publish(publish_assets, caption_text, channel)
-    except (ImageHostError, JamendoError, VideoAssemblyError) as exc:
+    except Exception as exc:  # music/network/render/host errors: a failed attempt, never a crashed run
+        logger.warning("channel %s: posting %s failed: %s", channel.id, article.url, redact(str(exc)))
         return _Outcome(
             status="failed", caption_text=caption_text, hashtags=caption.hashtags,
             asset_types=asset_type_values, error=redact(str(exc)), music_track_id=music_track_id,
@@ -388,7 +399,7 @@ def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed):
         for spec, clip, line in zip(specs, clips, lines):
             spec["duration"] = motion_duration(0, spec["kind"], clip.seconds)
             if cfg.captions:  # burned-in: most viewers watch with the sound off
-                spec["caption"], spec["voice"] = line, round(clip.seconds, 3)
+                spec["caption"], spec["voice"] = caption_text(line), round(clip.seconds, 3)
         starts, t = [], 0.0
         for spec in specs:
             starts.append(t + VOICE_LEAD)  # the picture leads the voice slightly

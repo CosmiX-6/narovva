@@ -19,7 +19,7 @@ from pathlib import Path
 import imageio_ffmpeg
 
 from .photo import prepare_photo
-from .slides import total_duration
+from .slides import VOICE_LEAD, total_duration
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,7 @@ def stage_project(
         "photo": _stage_photo(photo_path, photo_credit, stage_dir / "assets"),
         "seed": int(hashlib.sha256((seed or slides[0].get("heading") or "").encode()).hexdigest()[:8], 16),
         "captions": any(s.get("caption") for s in slides),
+        "voice_lead": VOICE_LEAD,
     }
     # </script> in article text must not terminate the inline-free deck.js
     # either way, but escape '<' so the file is also safe if ever inlined.

@@ -114,7 +114,7 @@ def refresh_token(channel: ChannelConfig) -> None:
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
         try:
-            Repo(get_connection()).mark_instagram_token_refresh_failed(channel.id, str(exc))
+            Repo(get_connection()).mark_instagram_token_refresh_failed(channel.id, redact(str(exc)))  # the URL carries the token
         except Exception:
             pass
         raise InstagramTokenError(f"token refresh failed for channel {channel.id!r}: {exc}") from exc
