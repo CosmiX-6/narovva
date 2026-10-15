@@ -78,7 +78,11 @@
         if (Math.hypot(x1 - x0, y1 - y0) > 160) continue; // wrapped around the field edge mid-streak
         if (Math.hypot(x1 - x0, y1 - y0) < 1.2) { x0 = x1 - 0.6; y0 = y1 - 1; } // resting particles read as dots
         const twinkle = 0.6 + 0.4 * Math.sin(p.twPhase + p.twFreq * t);
-        const alpha = Math.min(0.9, (0.1 + 0.42 * p.depth) * twinkle * (1 + 0.9 * energy) * dim * fadeIn);
+        // Keep particles bright in the brand strip (top ~15%) and the caption/handle
+        // strip (bottom ~20%); dim them in the content zone where they compete with type.
+        const yf = y1 / H;
+        const yMask = yf < 0.15 ? 1 : yf < 0.25 ? 1 - (yf - 0.15) * 8 : yf > 0.80 ? 1 : yf > 0.70 ? 0.2 + (yf - 0.70) * 8 : 0.2;
+        const alpha = Math.min(0.9, (0.06 + 0.22 * p.depth) * twinkle * (1 + 0.9 * energy) * dim * fadeIn * yMask);
         ctx.strokeStyle = p.white ? `rgba(243,245,250,${alpha})` : `rgba(${ar},${ag},${ab},${alpha})`;
         ctx.lineWidth = 0.7 + p.depth * 1.3;
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();

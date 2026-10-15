@@ -10,6 +10,16 @@ from __future__ import annotations
 
 import re
 
+_SIMPLE_WORD_NUMS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+    "eighty": 80, "ninety": 90,
+}
+_WORD_STARTS = re.compile(r"^\s*[-–—]?\s*([A-Za-z]+)\b")
+
 _NUMBER = re.compile(
     r"(?P<prefix>[£$€₹])?\s?"
     r"(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
@@ -70,6 +80,15 @@ def parse_metric(fact: str) -> dict | None:
     # A number that opens the sentence reads as "<number> <what it counts>";
     # anywhere else the whole sentence is the caption, as on the PNG slides.
     label = fact[match.end():] if match.start() == 0 else fact
+    # Guard against a leading digit that contradicts the copy ("6 — Ten crew
+    # members…"): if the label opens with a simple word-number that disagrees
+    # with the extracted digit, the fact is malformed — show it as plain text.
+    if match.start() == 0 and not match["suffix"]:
+        m2 = _WORD_STARTS.match(label)
+        if m2:
+            word_num = _SIMPLE_WORD_NUMS.get(m2.group(1).lower())
+            if word_num is not None and word_num != round(value):
+                return None
     return {
         "prefix": prefix,
         "value": value,
