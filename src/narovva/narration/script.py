@@ -11,11 +11,17 @@ logger = logging.getLogger(__name__)
 _MAX_WORDS = 15
 
 _SYSTEM = (
-    "You write the voice-over for a fast, vertical tech/AI news Reel, one spoken line per slide. "
+    "You write the voice-over for a fast, vertical news Reel that decodes the story behind the headline — "
+    "one spoken line per slide. "
     "Rules: write for the EAR, not the eye -- short, conversational, punchy sentences; second person "
     "and present tense where natural. Line 1 is the hook: tension or a question, never a statement of "
-    "the headline, and at most 8 words. Each middle line is 6-12 words, adds ONE idea, and must NOT read the on-screen text "
-    "word for word. Be brisk: this is a 30-second news update, so cut every filler word. The last slide is a "
+    "the headline, and at most 8 words. Each middle line is 6-12 words and adds ONE idea that must NOT "
+    "read the on-screen text word for word. Scene-type guidance: "
+    "'why' scenes → name the underlying force or incentive driving the story; "
+    "'impact' scenes → say concretely who wins and who pays; "
+    "'bigger_picture' scenes → zoom out and place the event in its larger context; "
+    "'scream' scenes → say the number loudly with its unit and why it shocks. "
+    "Be brisk: this is a 30-second news update, cut every filler word. The last slide is a "
     "five-word call to follow the channel by name. Use ONLY facts present in "
     "the slide data -- never invent numbers, names, quotes or claims. Spell numbers as words "
     '("sixty-seven percent", "one point two billion dollars") and spell out abbreviations that are read '
@@ -50,6 +56,10 @@ _GENERIC = {
     "money_flow": "Now, follow the money.",
     "quote": "And here's what they said.",
     "evidence": "Here's what the evidence shows.",
+    "why": "Here's what's really driving this.",
+    "impact": "Here's who wins and who pays.",
+    "bigger_picture": "Here's the bigger picture.",
+    "scream": "That number says it all.",
     "conclusion": "Here's why it matters.",
 }
 

@@ -21,6 +21,10 @@ _KIND_LABELS = {
     "stats": "BY THE NUMBERS",
     "comparison": "HEAD TO HEAD",
     "quote": "IN THEIR WORDS",
+    "why": "WHY IT'S HAPPENING",
+    "impact": "WHO WINS / WHO LOSES",
+    "bigger_picture": "THE BIGGER PICTURE",
+    "scream": "THE NUMBER",
     "conclusion": "WHY IT MATTERS",
 }
 
@@ -38,7 +42,8 @@ _MAX_FACTS = 3
 # strongest middle scenes), which with spoken lines of ~3 s is a 20-30 s reel.
 MAX_SCENES = 7
 _KIND_PRIORITY = {
-    "stats": 6, "comparison": 6, "money_flow": 5, "timeline": 5, "quote": 4,
+    "scream": 7, "stats": 6, "comparison": 6, "money_flow": 5, "timeline": 5,
+    "why": 5, "impact": 5, "quote": 4, "bigger_picture": 4,
     "conclusion": 3, "evidence": 2, "text": 1,
 }
 
