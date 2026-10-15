@@ -179,7 +179,8 @@ def test_real_hyperframes_render_of_two_slides(tmp_path):
         accent="#EC4899", handle="contextunfiltered", brand="CONTEXT UNFILTERED",
         logo_path="assets/logo/CU.png",
     )
-    assert render_module._probe_duration(out) == pytest.approx(total_duration([4.6, 5.0]), abs=0.2)
+    expected = total_duration([s["duration"] for s in SAMPLE_SLIDES[:2]])
+    assert render_module._probe_duration(out) == pytest.approx(expected, abs=0.2)
 
 
 def _channel(**kw) -> ChannelConfig:
