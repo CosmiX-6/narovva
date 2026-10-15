@@ -33,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     refresh_p.add_argument("path", help="Path to a channel YAML config")
 
+    audio_p = sub.add_parser(
+        "audio-probe", help="Read-only check: can this channel's token search Instagram's audio library?",
+    )
+    audio_p.add_argument("path", help="Path to a channel YAML config")
+    audio_p.add_argument("--query", default=None, help="Search text (default: trending)")
+
     due_p = sub.add_parser("run-due", help="Run every channel/genre currently due, per configured cadence")
     due_p.add_argument("--channels-dir", default="config/channels")
     due_p.add_argument("--dry-run", action="store_true")
@@ -68,6 +74,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}")
             return 1
         print(f"channel={channel.id} Instagram token refreshed")
+        return 0
+
+    if args.command == "audio-probe":
+        from .publishers.audio_probe import probe_audio_api
+
+        channel = load_channel(args.path)
+        for r in probe_audio_api(channel, args.query):
+            print(f"== {r['host']} audio_type={r['audio_type']} query={r['query']} -> HTTP {r['status']}")
+            print(r["body"])
         return 0
 
     if args.command == "run-due":

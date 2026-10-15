@@ -1,0 +1,35 @@
+name: Instagram audio probe
+
+# Read-only. Asks Instagram's Audio API (GET /ig_audio) whether this channel's
+# token can search Instagram's audio library (trending or by text) and prints
+# the raw answer. Posts nothing; tokens are redacted from the output.
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: "Audio search text (blank = trending)"
+        required: false
+        type: string
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install narovva
+        run: pip install .
+      - name: Probe the Audio API
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+          IG_ACCESS_TOKEN__example_tech_ig: ${{ secrets.IG_ACCESS_TOKEN__EXAMPLE_TECH_IG }}
+        run: |
+          if [ -n "${{ inputs.query }}" ]; then
+            narovva audio-probe config/channels/example-tech-ig.yaml --query "${{ inputs.query }}"
+          else
+            narovva audio-probe config/channels/example-tech-ig.yaml
+          fi
