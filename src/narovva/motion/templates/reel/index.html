@@ -37,8 +37,8 @@
       .brand { position: absolute; left: 72px; top: 230px; display: flex; align-items: center; gap: 22px; }
       .brand img { width: 96px; height: 96px; border-radius: 22px; display: block; }
       .brand span { font-weight: 700; font-size: 30px; letter-spacing: .22em; }
-      .handle { position: absolute; left: 72px; top: 1478px; font-weight: 700; font-size: 34px; letter-spacing: .04em; opacity: .85; }
-      .progress { position: absolute; left: 72px; right: 150px; top: 1560px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; }
+      .handle { position: absolute; left: 72px; top: 1440px; font-weight: 700; font-size: 34px; letter-spacing: .04em; opacity: .85; }
+      .progress { position: absolute; left: 72px; right: 150px; top: 1490px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; }
       .progress i { display: block; height: 100%; width: 100%; background: var(--accent); border-radius: 3px; transform-origin: left center; }
 
       /* Slides live in a clipped content window so transitions never cross the brand
@@ -60,6 +60,8 @@
       /* The article's own photo: a framed card on the opening scene, a strip on the close. */
       .pcard, .pstrip { position: relative; width: 100%; overflow: hidden; border-radius: 28px; background: #05070d;
         box-shadow: 0 0 0 2px rgba(255,255,255,.1); }
+      /* Edge-bleed variant: the card touches both sides of the 1080 px frame, no rounded corners. */
+      .pcard.edge-bleed { margin-left: -72px; width: 1080px; border-radius: 0; box-shadow: none; }
       .pcard img, .pstrip img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
       .pstrip { height: 230px; margin-bottom: 40px; }
       .pstrip img { object-position: 50% 28%; }
@@ -107,8 +109,10 @@
       .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: end; margin-top: 40px; }
       .ccol { display: flex; flex-direction: column; }
       .cval { font-family: "Archivo Black", sans-serif; line-height: 1; margin-bottom: 16px; white-space: nowrap; }
-      .cbar { border-radius: 16px 16px 4px 4px; background: rgba(255,255,255,.26); transform-origin: center bottom; }
-      .ccol.b .cbar { background: var(--accent); }
+      /* Both bars use the accent colour; col A (current/before) is dimmed so the
+         smaller target bar still reads as the more important number. */
+      .cbar { border-radius: 16px 16px 4px 4px; background: var(--accent); opacity: 0.35; transform-origin: center bottom; }
+      .ccol.b .cbar { opacity: 1; }
       .ccol.b .cval { color: var(--accent); }
       .clab { margin-top: 16px; font-weight: 700; font-size: 28px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
       .delta { align-self: flex-start; margin-top: 34px; padding: 12px 30px 14px; border-radius: 18px; background: var(--accent); color: var(--navy);
@@ -259,11 +263,13 @@
         const head = (sc, s, size, maxH) => { kick(sc, s); return heading(sc, s.heading, size, maxH); };
         const introHead = (sc, a, D, slam) => {
           const k = sc.querySelector(".kicker");
-          if (k) tl.from(k, { opacity: 0, scale: 0.6, transformOrigin: "left center", duration: D(0.22), ease: "back.out(2.2)" }, a(0));
+          // immediateRender:false keeps elements at their CSS position at t=0 so
+          // the cover thumbnail frame looks settled; they fly in once the scene starts.
+          if (k) tl.from(k, { opacity: 0, scale: 0.6, transformOrigin: "left center", duration: D(0.22), ease: "back.out(2.2)", immediateRender: false }, a(0));
           const ws = sc.querySelectorAll(".h .w > span");
           if (ws.length) {
-            if (slam) tl.from(ws, { yPercent: 120, scale: 1.25, duration: D(E), ease: "power4.out", stagger: stag(ws.length, 0.05) }, a(0.04));
-            else tl.from(ws, { yPercent: 120, duration: D(E), ease: "power4.out", stagger: stag(ws.length, 0.04) }, a(0.04));
+            if (slam) tl.from(ws, { yPercent: 120, scale: 1.25, duration: D(E), ease: "power4.out", stagger: stag(ws.length, 0.05), immediateRender: false }, a(0.04));
+            else tl.from(ws, { yPercent: 120, duration: D(E), ease: "power4.out", stagger: stag(ws.length, 0.04), immediateRender: false }, a(0.04));
           }
         };
         // With captions on, the spoken line is the supporting sentence: a second
@@ -272,11 +278,11 @@
         const bodyIn = (sc, s, a, D, size, maxH, delay) => {
           if (!wantsBody(s)) return;
           const b = el("p", "body", s.body, sc); fit(b, maxH, size, 30);
-          tl.from(b, { opacity: 0, y: 24, duration: D(0.28), ease: "power3.out" }, a(delay));
+          tl.from(b, { opacity: 0, y: 24, duration: D(0.28), ease: "power3.out", immediateRender: false }, a(delay));
         };
         const barIn = (sc, a, D, delay) => {
           const b = el("div", "bar", null, sc);
-          tl.from(b, { scaleX: 0, duration: D(0.3), ease: "expo.out" }, a(delay));
+          tl.from(b, { scaleX: 0, duration: D(0.3), ease: "expo.out", immediateRender: false }, a(delay));
         };
         // A framed photo: wiped in, then pushed in slowly for as long as it is on screen.
         const reveal = (frame, img, c, from, to) => {
@@ -288,7 +294,7 @@
           const { a, D } = c;
           if (PHOTO && PHOTO.mode === "card" && c.i === opener) {
             const ch = Math.min(PHOTO.card_height, mh(592));
-            const card = el("div", "pcard", null, sc); card.style.height = ch + "px";
+            const card = el("div", "pcard edge-bleed", null, sc); card.style.height = ch + "px";
             reveal(card, image(PHOTO.src, card), c, 1.2, 1.05);
             const meta = el("div", "pmeta", null, sc);
             kick(meta, s);
@@ -301,7 +307,7 @@
           head(sc, s, 118, mh(560)); introHead(sc, a, D, true); barIn(sc, a, D, 0.2); bodyIn(sc, s, a, D, 42, 200, 0.3);
           if (PHOTO && PHOTO.credit && c.i === opener) {
             const cr = el("div", "credit", PHOTO.credit, sc); cr.style.cssText = "text-align:left;margin:36px 0 0";
-            tl.from(cr, { opacity: 0, duration: D(0.3) }, a(0.4));
+            tl.from(cr, { opacity: 0, duration: D(0.3), immediateRender: false }, a(0.4));
           }
         };
         B.text = (sc, s, c) => {

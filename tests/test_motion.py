@@ -147,6 +147,25 @@ def test_sample_deck_carries_charts_and_captions():
     json.dumps(deck)
 
 
+def test_parse_metric_rejects_digit_that_contradicts_word_in_copy():
+    from narovva.motion.dataviz import parse_metric, stats_viz
+
+    # "6 — Ten crew members…" — the leading digit disagrees with "Ten" in the copy.
+    assert parse_metric("6 — Ten crew members of the ship are presumed dead") is None
+    # Consistent: "5 — Five commercial vessels have been attacked."
+    m = parse_metric("5 — Five commercial vessels have been attacked")
+    assert m is not None and m["value"] == 5
+    # Normal percentage: suffix present so the word-check is skipped.
+    m = parse_metric("67% cheaper per token")
+    assert m is not None and m["value"] == 67 and m["suffix"] == "%"
+    # Number mid-sentence: word-check only applies when the digit opens the sentence.
+    m = parse_metric("Costs fell by $1.2 billion last year")
+    assert m is not None
+    # stats_viz treats the mismatch fact as plain text.
+    items = stats_viz(["6 — Ten crew members of the ship are presumed dead"])["items"]
+    assert items[0]["type"] == "text"
+
+
 def test_chart_specs_are_built_before_long_facts_are_trimmed():
     asset = _carousel_asset(1)
     fact = "After two years of negotiation between the regulators and the company the fine was finally set at 60%"
