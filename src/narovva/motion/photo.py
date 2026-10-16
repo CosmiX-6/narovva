@@ -75,18 +75,11 @@ def prepare_photo(src_path: str | Path, assets_dir: Path) -> dict | None:
         return None
 
     assets_dir.mkdir(parents=True, exist_ok=True)
-    upscale = max(FRAME[0] / w, FRAME[1] / h)
-    if upscale <= _FULL_BLEED_MAX_UPSCALE:
-        mode = "full"
-        sharp = _cover(img, (round(FRAME[0] * _OVERSCAN), round(FRAME[1] * _OVERSCAN)), focus_y=0.4)
-        card_height = None
-    else:
-        mode = "card"
-        card_aspect = min(max(aspect, _CARD_ASPECT[0]), _CARD_ASPECT[1])
-        card_height = round(_CARD_WIDTH / card_aspect)
-        # Up to 1.5x the on-screen card (for the push-in), but never larger than the source.
-        out_w = min(round(_CARD_WIDTH * 1.5), w)
-        sharp = _cover(img, (out_w, round(out_w / card_aspect)), focus_y=0.4)
+    # Always full-bleed: the gradient scrim in the template hides upscale softness,
+    # and the design is cleaner than the framed card for landscape article photos.
+    mode = "full"
+    sharp = _cover(img, (round(FRAME[0] * _OVERSCAN), round(FRAME[1] * _OVERSCAN)), focus_y=0.4)
+    card_height = None
     sharp.save(assets_dir / "photo.jpg", format="JPEG", quality=88)
 
     # Atmosphere: half-resolution is plenty once blurred (the template scales it up).

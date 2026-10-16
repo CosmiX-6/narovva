@@ -15,7 +15,7 @@ SAMPLE_SLIDES: list[dict] = [
     {"kind": "comparison", "kicker": "HEAD TO HEAD", "comparison": {"title": "Cost per million tokens", "label_a": "Before", "value_a": "$15", "label_b": "After", "value_b": "$5"}, "duration": 4.6},
     {"kind": "quote", "kicker": "IN THEIR WORDS", "quote": {"text": "Intelligence should be too cheap to meter.", "attribution": "Company spokesperson"}, "duration": 4.4},
     {"kind": "bigger_picture", "kicker": "THE BIGGER PICTURE", "heading": "When inference is cheap, the edge moves from the model to whoever builds the best product", "duration": 4.6},
-    {"kind": "cta", "heading": "Follow for daily AI breakdowns", "duration": 3.2},
+    {"kind": "cta", "kicker": "AI", "heading": "Follow for daily AI breakdowns", "body": "When inference is free, the advantage moves to whoever builds the best product.", "duration": 3.6},
 ]
 
 # One spoken line per sample slide, standing in for the narration script.

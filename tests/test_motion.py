@@ -110,7 +110,7 @@ def test_stage_project_stages_the_article_photo_and_a_stable_seed(tmp_path):
     kwargs = dict(accent="#3B82F6", handle="h", brand="B", logo_path="assets/logo/CU.png", audio_bytes=None)
     stage_project(tmp_path / "a", [dict(s) for s in SAMPLE_SLIDES[:2]], photo_path=photo, photo_credit="Image: Wire", seed="story-1", **kwargs)
     deck = _deck(tmp_path, "a")
-    assert deck["photo"]["mode"] == "card" and deck["photo"]["credit"] == "Image: Wire"
+    assert deck["photo"]["mode"] == "full" and deck["photo"]["credit"] == "Image: Wire"
     assert (tmp_path / "a" / "assets" / "photo.jpg").is_file() and (tmp_path / "a" / "assets" / "photo_bg.jpg").is_file()
     assert deck["captions"] is False
     for extra in ("ambient.js", "viz.js"):
