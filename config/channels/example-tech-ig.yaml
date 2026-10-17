@@ -35,12 +35,21 @@ narration:
 genres:
   - genre: tech
     country: us
-    limit: 3
+    limit: 8
     cadence_minutes: 60
     asset_types: [cover, carousel]
   - genre: ai
-    limit: 3
+    limit: 8
     cadence_minutes: 60
+    asset_types: [cover, carousel]
+  - genre: science
+    limit: 8
+    cadence_minutes: 90
+    asset_types: [cover, carousel]
+  - genre: world
+    country: us
+    limit: 8
+    cadence_minutes: 90
     asset_types: [cover, carousel]
 
 brand:
