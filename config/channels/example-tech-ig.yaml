@@ -52,6 +52,7 @@ genres:
     cadence_minutes: 90
     asset_types: [cover, carousel]
   - genre: entrepreneurs
+    country: in
     limit: 8
     cadence_minutes: 90
     asset_types: [cover, carousel]
