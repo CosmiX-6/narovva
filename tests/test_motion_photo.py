@@ -17,19 +17,17 @@ def _noise(path, size):
     return path
 
 
-def test_landscape_photo_becomes_a_card_plus_atmosphere(tmp_path):
+def test_landscape_photo_produces_full_bleed_plus_atmosphere(tmp_path):
     photo = prepare_photo(write_sample_photo(tmp_path / "in.jpg"), tmp_path / "assets")
-    assert photo["mode"] == "card" and photo["src"] == "assets/photo.jpg" and photo["bg"] == "assets/photo_bg.jpg"
-    with Image.open(tmp_path / "assets" / "photo.jpg") as sharp:
-        assert sharp.width <= 1200                      # never upscaled past the source
-        assert abs(sharp.width / sharp.height - 858 / photo["card_height"]) < 0.02
+    assert photo["mode"] == "full" and photo["src"] == "assets/photo.jpg" and photo["bg"] == "assets/photo_bg.jpg"
+    assert photo["card_height"] is None
     with Image.open(tmp_path / "assets" / "photo_bg.jpg") as atmo:
         assert abs(atmo.width / atmo.height - 9 / 16) < 0.01
 
 
-def test_card_is_never_taller_than_the_headline_can_spare(tmp_path):
+def test_square_photo_accepted_as_full_bleed(tmp_path):
     photo = prepare_photo(_noise(tmp_path / "sq.jpg", (900, 900)), tmp_path / "assets")
-    assert photo["mode"] == "card" and photo["card_height"] <= 592
+    assert photo["mode"] == "full" and photo["card_height"] is None
 
 
 def test_large_portrait_photo_goes_full_bleed(tmp_path):
@@ -59,6 +57,6 @@ def test_atmosphere_is_dark_enough_for_type_even_from_a_bright_photo(tmp_path):
     bright = Image.new("RGB", (1200, 630), (250, 250, 250))             # a product shot on white
     bright.paste(Image.new("RGB", (520, 400), (40, 90, 200)), (340, 115))
     bright.save(tmp_path / "bright.jpg")
-    assert prepare_photo(tmp_path / "bright.jpg", tmp_path / "assets")["mode"] == "card"
+    assert prepare_photo(tmp_path / "bright.jpg", tmp_path / "assets")["mode"] == "full"
     with Image.open(tmp_path / "assets" / "photo_bg.jpg") as atmo:
         assert ImageStat.Stat(atmo.convert("L")).mean[0] <= 60

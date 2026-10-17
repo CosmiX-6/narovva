@@ -21,6 +21,8 @@ dependencies = [
 dev = ["pytest>=7.0"]
 # Free local voice-over (Kokoro): no API key, runs inside the job. ~350 MB model, cached.
 narration-local = ["kokoro-onnx>=0.4", "soundfile>=0.12"]
+# Trending hashtag lookup via Google Trends (requires pandas).
+trending = ["pytrends>=4.9"]
 
 [project.scripts]
 narovva = "narovva.cli:main"

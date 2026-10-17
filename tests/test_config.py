@@ -10,7 +10,7 @@ def test_load_example_channel():
     channel = load_channel("config/channels/example-tech-ig.yaml")
     assert channel.id == "example-tech-ig"
     assert channel.platform == "instagram"
-    assert [g.genre for g in channel.genres] == ["tech", "ai"]
+    assert [g.genre for g in channel.genres] == ["tech", "ai", "science", "world", "entrepreneurs"]
     assert channel.brand.name == "CONTEXT UNFILTERED"
 
 

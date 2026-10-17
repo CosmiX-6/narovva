@@ -14,14 +14,21 @@ from poster_core.analysis.llm import LLMClient
 
 from ..config.schema import CaptionTone
 from ..platforms import PublishPlatform
+from .hashtag_pools import pool_for
 from .rules import PLATFORM_CAPTION_RULES
+from .trending import trending_for_category
 
 _SYSTEM_PROMPT = (
     "You write social media captions for a news account. Given a structured "
-    "brief of a news story, write one caption body and a list of relevant "
-    "hashtags. The caption must be grounded only in the facts given -- never "
-    "invent details. Do not repeat the headline verbatim; write something "
-    "that adds context or a hook to make someone stop scrolling. "
+    "brief of a news story, write one caption body and a list of hashtags. "
+    "The caption must be grounded only in the facts given -- never invent "
+    "details. Do not repeat the headline verbatim; write something that adds "
+    "context or a hook to make someone stop scrolling. "
+    "For hashtags: prefer tags from the provided candidate list (which combines "
+    "trending and curated tags for this topic), then add 1-2 story-specific tags "
+    "for named entities (companies, people, products) if they are genuinely "
+    "relevant. Return only the most relevant tags up to the count requested -- "
+    "quality over quantity. "
     'Respond as JSON: {"caption": "...", "hashtags": ["#example", ...]}.'
 )
 
@@ -46,7 +53,8 @@ def generate_caption(
     llm: LLMClient,
 ) -> CaptionResult:
     rules = PLATFORM_CAPTION_RULES[publish_platform]
-    user_prompt = _build_user_prompt(brief, tone)
+    max_hashtags = min(tone.max_hashtags, rules.max_hashtags)
+    user_prompt = _build_user_prompt(brief, tone, max_hashtags=max_hashtags)
     raw = llm.complete_json(_SYSTEM_PROMPT, user_prompt)
 
     caption_text = str(raw.get("caption") or brief.headline or "").strip()
@@ -64,7 +72,26 @@ def generate_caption(
     return CaptionResult(text=assembled, hashtags=hashtags, truncated=truncated)
 
 
-def _build_user_prompt(brief: ContentBrief, tone: CaptionTone) -> str:
+def _build_candidate_hashtags(brief: ContentBrief, max_candidates: int = 30) -> list[str]:
+    """Merge trending + curated pool into a ranked candidate list for the LLM."""
+    category = getattr(brief.category, "value", str(brief.category))
+    trending = trending_for_category(category)
+    pool = pool_for(category)
+    # Trending first (most timely), then curated pool. Deduplicate case-insensitively.
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for tag in trending + pool:
+        key = tag.lower()
+        if key not in seen:
+            seen.add(key)
+            candidates.append(tag)
+        if len(candidates) >= max_candidates:
+            break
+    return candidates
+
+
+def _build_user_prompt(brief: ContentBrief, tone: CaptionTone, max_hashtags: int = 8) -> str:
+    category = getattr(brief.category, "value", str(brief.category))
     lines = [
         f"Voice/tone: {tone.voice}",
         f"Headline: {brief.headline}",
@@ -81,7 +108,11 @@ def _build_user_prompt(brief: ContentBrief, tone: CaptionTone) -> str:
         lines.append("Key facts: " + "; ".join(brief.key_facts[:3]))
     if brief.closing_line:
         lines.append(f"Closing line: {brief.closing_line}")
-    lines.append(f"Category: {brief.category.value}")
+    lines.append(f"Category: {category}")
+    candidates = _build_candidate_hashtags(brief)
+    if candidates:
+        lines.append(f"Candidate hashtags (trending + curated, pick up to {max_hashtags}): "
+                     + " ".join(candidates))
     return "\n".join(lines)
 
 
