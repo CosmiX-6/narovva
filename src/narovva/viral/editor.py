@@ -9,7 +9,7 @@ import re
 from datetime import datetime
 
 from ..llm import LLMUnavailable
-from .detect import Story
+from .detect import Story, tokens
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +28,17 @@ _EDITOR_SYSTEM = (
 
 _HOOK_SYSTEM = (
     "You write the opening hook of a 30-second vertical news Reel: the first words on screen and the "
-    "first words spoken, which decide whether a viewer keeps watching. Styles: 'curiosity' opens a "
-    "question or a surprising contrast that only the story answers; 'stakes' says plainly what is at "
-    "risk or what changes for the viewer -- urgent, never alarmist. Rules: 4 to 9 words; true to the "
-    "facts given (never invent numbers, names or claims); do not restate the headline; no clickbait "
-    "phrases ('you won't believe', 'shocking', 'this one trick'); no emojis, hashtags or ALL CAPS; at "
-    'most one question mark. Respond as JSON: {"hook": "...", "style": "curiosity" or "stakes"}.'
+    "first words spoken, which decide whether a viewer keeps watching. A plain description of the event "
+    "is NOT a hook -- the headline already does that. Styles: 'curiosity' opens a gap only the story "
+    "closes (a pointed question, a surprising contrast, a 'why' the viewer cannot answer yet); 'stakes' "
+    "says plainly what is at risk or what changes for the viewer -- urgent, never alarmist. Examples "
+    "(headline -> hook): 'Fed holds rates steady' -> 'Why your loan just got more expensive.'; "
+    "'Israeli settlers attack EU diplomats in West Bank' -> 'Who attacks diplomats -- and gets away "
+    "with it?'; 'Nvidia unveils phone AI chip' -> 'Your next phone thinks without the cloud.'. "
+    "Rules: 4 to 9 words; true to the facts given (never invent numbers, names or claims); do not "
+    "restate the headline; no clickbait phrases ('you won't believe', 'shocking', 'this one trick'); "
+    "no emojis, hashtags or ALL CAPS; at most one question mark. Give three different options, best "
+    'first. Respond as JSON: {"hooks": ["...", "...", "..."], "style": "curiosity" or "stakes"}.'
 )
 
 _BANNED = ("you won't believe", "won't believe", "shocking", "this one trick", "mind-blowing", "jaw-dropping")
@@ -92,9 +97,33 @@ def clean_hook(text: str | None, headline: str = "") -> str | None:
         return None
     if sum(w.isupper() and len(w) > 4 for w in words) >= 2:  # shouting
         return None
+    if restates(hook, headline):
+        return None
     if hook[-1] not in ".?!":
         hook += "."
     return hook
+
+
+def restates(hook: str, headline: str) -> bool:
+    """A statement made mostly of the headline's own words is a summary, not a hook.
+    (A question may reuse the subject: 'Why are diplomats under attack?')"""
+    h, head = tokens(hook), tokens(headline)
+    if not h or not head:
+        return False
+    share = len(h & head) / len(h)
+    return share >= 0.75 or (share >= 0.5 and "?" not in hook)
+
+
+def _first_good(raw, headline: str) -> str | None:
+    options = []
+    if isinstance(raw, dict):
+        options = list(raw.get("hooks") or []) if isinstance(raw.get("hooks"), list) else []
+        options.append(raw.get("hook"))
+    for option in options:
+        hook = clean_hook(option, headline)
+        if hook:
+            return hook
+    return None
 
 
 def write_hook(llm, brief, style: str = "auto") -> str | None:
@@ -108,14 +137,21 @@ def write_hook(llm, brief, style: str = "auto") -> str | None:
         f"Key facts: {facts}" if facts else "",
         f"Tone: {brief.tone}",
     ]))
-    try:
-        raw = llm.complete_json(_HOOK_SYSTEM, user)
-        hook = clean_hook(raw.get("hook") if isinstance(raw, dict) else None, brief.headline)
-    except LLMUnavailable:
-        raise
-    except Exception as exc:
-        logger.warning("viral: hook call failed (%s)", exc)
-        hook = None
+    hook = None
+    for attempt in range(2):
+        try:
+            raw = llm.complete_json(_HOOK_SYSTEM, user)
+        except LLMUnavailable:
+            raise
+        except Exception as exc:
+            logger.warning("viral: hook call failed (%s)", exc)
+            break
+        hook = _first_good(raw, brief.headline)
+        if hook:
+            break
+        logger.info("viral: hooks rejected (%s); asking again", str(raw)[:200])
+        user += ("\nYour last options only described the event or broke a rule. Open a question "
+                 "or name the stakes instead.")
     if hook is None:  # poster-core's own hook, when it is short enough
         hook = clean_hook(getattr(brief, "hook", None), brief.headline)
     logger.info("viral: hook %r", hook)

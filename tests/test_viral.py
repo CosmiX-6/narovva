@@ -313,3 +313,16 @@ def test_run_due_runs_rotation_when_no_viral_slot(monkeypatch):
     monkeypatch.setattr(ov, "run_viral", lambda c, **kw: rc.ChannelRunResult(channel_id=c.id))
     monkeypatch.setattr(cli, "run_channel", lambda c, **k: ran.append(c.id) or rc.ChannelRunResult(channel_id=c.id))
     assert cli.main(["run-due"]) == 0 and ran == ["chan"]
+
+
+def test_a_hook_that_restates_the_headline_is_rejected_and_retried():
+    class Brief:
+        headline = "Israeli settlers attack European diplomats in West Bank"
+        summary, why_it_matters, key_facts, tone, hook = "S", None, [], "serious", None
+
+    llm = _LLM(
+        {"hooks": ["European diplomats face violent assault in the West Bank."]},
+        {"hooks": ["European diplomats attacked in West Bank.", "Who attacks diplomats and walks away?"]},
+    )
+    assert editor.write_hook(llm, Brief()) == "Who attacks diplomats and walks away?"
+    assert len(llm.calls) == 2 and "only described the event" in llm.calls[1]
