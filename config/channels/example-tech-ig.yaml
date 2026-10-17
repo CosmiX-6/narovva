@@ -51,6 +51,10 @@ genres:
     limit: 8
     cadence_minutes: 90
     asset_types: [cover, carousel]
+  - genre: entrepreneurs
+    limit: 8
+    cadence_minutes: 90
+    asset_types: [cover, carousel]
 
 brand:
   name: "CONTEXT UNFILTERED"
