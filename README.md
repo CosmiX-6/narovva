@@ -216,7 +216,39 @@ narovva run-due
 
 # Refresh an expiring Instagram access token (run before the 60-day expiry)
 narovva refresh-token config/channels/example-tech-ig.yaml
+
+# What is going viral right now, and what the AI editor would post (read-only)
+narovva viral-scan config/channels/example-tech-ig.yaml --editor
+
+# Post one viral story now, ignoring the peak-hour slots
+narovva run-viral config/channels/example-tech-ig.yaml --force
 ```
+
+## Viral posts
+
+On top of the genre rotation, a channel with a `viral:` section posts the story the
+internet is talking about right now, whatever its genre, in peak-hour slots
+(`slots`, local times in `timezone`; at least one post per slot, and a missed
+slot is made up in the next slot's window). `narovva run-due` checks the slots
+every hour, before the rotation; a run that posts a viral story leaves the
+rotation post for the next run.
+
+- **Viral** = the same story carried by at least `min_sources` different outlets
+  within `max_age_minutes` (about 30 big news feeds plus the channel's own genre
+  feeds), with a bonus when it is also a hot Google Trends search (`trends_geos`).
+  Google Trends alone never qualifies a story: most of its list is sports and
+  celebrities.
+- **Informative**: headlines matching `exclude_keywords` (scores, lotteries, gossip)
+  are dropped, then an AI editor picks from the top `editor_candidates`, rejecting
+  sports, gossip and stories with no wider consequence. If nothing qualifies, no
+  post; the slot stays open.
+- **Hook**: written from the analysed article's facts, 4-9 words, `curiosity` (a
+  question only the story answers) or `stakes` (what is at risk for the viewer).
+  It opens the reel on screen and in the voice-over, titles the cover under
+  TRENDING NOW, and is the caption's first line.
+- A story already posted (by either path, any outlet's link, or a similar headline
+  in the last 48 hours) is never posted again.
+- Manual: Actions -> "Hourly publish" -> Run workflow -> tick `viral`.
 
 ## Fonts
 

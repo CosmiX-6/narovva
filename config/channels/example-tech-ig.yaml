@@ -32,6 +32,27 @@ narration:
   # local voice that needs no key, so there is always a voice.
   fallback_providers: [gemini, kokoro]
 
+# Viral posts: on top of the rotation, at least one post per slot below of whatever
+# story the internet is talking about right now -- any genre, as long as it is
+# informative (an AI editor rejects sports scores, gossip, lotteries). "Viral" =
+# carried by several big outlets within the last few hours, boosted when it is also
+# a hot Google search. Each post opens on a curiosity/stakes hook. A slot missed
+# (nothing fresh, a dropped scheduler run) is made up in the next slot's window.
+# Slots are Instagram peak hours in IST: 09:00 and 13:00 for India; 19:00 and 21:30
+# IST are 09:30 and 12:00 US Eastern, the US morning and lunch peaks.
+# Check what it would pick right now: `narovva viral-scan <this file> --editor`.
+# Post one now from Actions: "Hourly publish" -> Run workflow -> viral = true.
+viral:
+  enabled: true
+  timezone: "Asia/Kolkata"
+  slots: ["09:00", "13:00", "19:00", "21:30"]
+  slot_window_minutes: 120
+  max_age_minutes: 240      # every report counted is at most 4 hours old
+  min_sources: 2            # outlets carrying the story
+  trends_geos: [US, IN]
+  hook_style: auto          # curiosity | stakes | auto (the model picks per story)
+  asset_types: [cover, carousel]
+
 genres:
   - genre: tech
     country: us

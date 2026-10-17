@@ -20,6 +20,7 @@ from ..db.repo import Repo
 from ..settings import get_settings
 
 ROTATION_GRACE_MINUTES = 20
+VIRAL_GENRE = "viral"  # post_history.genre of viral posts
 
 
 @dataclass
@@ -62,7 +63,8 @@ def _next_rotation_genre(channel: ChannelConfig, repo: Repo | None, now: datetim
         # starting the rotation from the first configured genre.
         return genre_order[0]
 
-    last = repo.last_successful_post(channel.id)
+    # Viral posts are extra, outside the genre rotation: they must not reset its order.
+    last = repo.last_successful_post(channel.id, exclude_genres=(VIRAL_GENRE,))
     if last is None:
         return genre_order[0]
 

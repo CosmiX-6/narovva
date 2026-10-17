@@ -9,6 +9,11 @@ on:
         description: "Force a specific genre now, bypassing the rotation cooldown (e.g. tech, ai). Leave blank for normal due-check behavior."
         required: false
         type: string
+      viral:
+        description: "Post one viral story now (any genre), ignoring the peak-hour slots."
+        required: false
+        type: boolean
+        default: false
 
 # One publish run at a time. GitHub's own cron is late or dropped most hours,
 # so an outside scheduler may also dispatch this workflow; a run that starts
@@ -77,8 +82,11 @@ jobs:
           JAMENDO_CLIENT_ID__example_tech_ig: ${{ secrets.JAMENDO_CLIENT_ID__EXAMPLE_TECH_IG }}
           # Passed as data, never pasted into the script (no shell injection from the input).
           FORCE_GENRE: ${{ inputs.genre }}
+          FORCE_VIRAL: ${{ inputs.viral }}
         run: |
-          if [ -n "$FORCE_GENRE" ]; then
+          if [ "$FORCE_VIRAL" = "true" ]; then
+            narovva run-viral config/channels/example-tech-ig.yaml --force
+          elif [ -n "$FORCE_GENRE" ]; then
             narovva run-channel config/channels/example-tech-ig.yaml --genre "$FORCE_GENRE" --max-posts-per-genre 1
           else
             narovva run-due

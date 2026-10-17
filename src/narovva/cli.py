@@ -39,6 +39,17 @@ def build_parser() -> argparse.ArgumentParser:
     audio_p.add_argument("path", help="Path to a channel YAML config")
     audio_p.add_argument("--query", default=None, help="Search text (default: trending)")
 
+    viral_p = sub.add_parser(
+        "run-viral", help="Post one viral story (any genre) if a peak-hour slot is open",
+    )
+    viral_p.add_argument("path", help="Path to a channel YAML config")
+    viral_p.add_argument("--force", action="store_true", help="Post now, ignoring the slots")
+    viral_p.add_argument("--dry-run", action="store_true", help="Pick and analyse, never publish")
+
+    scan_p = sub.add_parser("viral-scan", help="List the stories going viral right now (read-only)")
+    scan_p.add_argument("path", help="Path to a channel YAML config")
+    scan_p.add_argument("--editor", action="store_true", help="Also ask the AI editor which ones it would post")
+
     due_p = sub.add_parser("run-due", help="Run every channel/genre currently due, per configured cadence")
     due_p.add_argument("--channels-dir", default="config/channels")
     due_p.add_argument("--dry-run", action="store_true")
@@ -85,14 +96,45 @@ def main(argv: list[str] | None = None) -> int:
             print(r["body"])
         return 0
 
+    if args.command == "run-viral":
+        from .orchestration.viral import run_viral
+
+        channel = load_channel(args.path)
+        result = run_viral(channel, dry_run=args.dry_run, force=args.force)
+        _print_result(result)
+        return 1 if result.failed and not result.posted else 0
+
+    if args.command == "viral-scan":
+        return _viral_scan(load_channel(args.path), editor=args.editor)
+
     if args.command == "run-due":
+        from .orchestration.viral import run_viral
+
         channels = load_all_channels(args.channels_dir)
-        due = due_channels_with_genres(channels)
-        if not due:
-            print("Nothing due.")
-            return 0
-        max_posts = args.max_posts_per_genre or None
         failed_any = False
+        # Viral slots first: one post per run, so a channel that just posted a viral
+        # story waits for the next run before its rotation post.
+        viral_posted: set[str] = set()
+        for channel in channels:
+            if not (channel.enabled and channel.viral and channel.viral.enabled):
+                continue
+            try:
+                result = run_viral(channel, dry_run=args.dry_run)
+            except Exception as exc:  # a viral failure must not stop the regular post
+                print(f"channel={channel.id} viral crashed: {logsafe.redact(str(exc))}")
+                continue
+            if result.considered or result.failed:
+                print("viral:", end=" ")
+                _print_result(result)
+            if result.posted:
+                viral_posted.add(channel.id)
+            elif result.failed and not result.considered:
+                failed_any = True  # e.g. Instagram token rejected
+        due = [(c, g) for c, g in due_channels_with_genres(channels) if c.id not in viral_posted]
+        if not due:
+            print("Nothing due." if not viral_posted else "Posted a viral story; rotation waits for the next run.")
+            return 1 if failed_any else 0
+        max_posts = args.max_posts_per_genre or None
         for channel, genres in due:
             try:
                 result = run_channel(
@@ -109,6 +151,29 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if failed_any else 0
 
     return 2
+
+
+def _viral_scan(channel, *, editor: bool) -> int:
+    from datetime import datetime, timezone
+
+    from .orchestration.viral import scan, viral_due
+    from .viral.editor import editor_pick
+
+    if not channel.viral:
+        print("channel has no 'viral' section")
+        return 1
+    now = datetime.now(timezone.utc)
+    print("slot:", viral_due(channel, now)[1])
+    stories = scan(channel, now=now)
+    for i, s in enumerate(stories[:20], 1):
+        trend = f"  [search: {s.trend.query} {s.trend.traffic}+]" if s.trend else ""
+        print(f"{i:2}. {s.score:5.2f}  {len(s.sources)} outlets  {s.age_minutes(now):3.0f} min  {s.title}{trend}")
+    if editor and stories:
+        from .orchestration.run_channel import _build_llm
+
+        picks = editor_pick(_build_llm(channel), stories, now=now, limit=channel.viral.editor_candidates)
+        print("editor would post:", [p.title for p in picks] or "none")
+    return 0
 
 
 def _print_result(result) -> None:

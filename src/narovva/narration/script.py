@@ -95,9 +95,10 @@ def _fallback_line(spec: dict, brand: str, last: bool) -> str:
     return _GENERIC.get(spec.get("kind"), "Here's the next detail.")
 
 
-def write_script(llm, brief, specs: list[dict], *, brand: str) -> list[str]:
+def write_script(llm, brief, specs: list[dict], *, brand: str, hook: str | None = None) -> list[str]:
     """One line per spec. Any line the model fumbles is replaced by a safe
-    fallback derived from the slide, so the result always matches `specs`."""
+    fallback derived from the slide, so the result always matches `specs`.
+    `hook` (already written for the ear) is spoken as line 1 instead of the model's."""
     user = (
         f"Channel: {brand}\nStory tone: {brief.tone}\nHeadline: {brief.headline}\n"
         f"Summary: {brief.summary}\nSlides ({len(specs)}):\n"
@@ -117,4 +118,6 @@ def write_script(llm, brief, specs: list[dict], *, brand: str) -> list[str]:
         if not speakable(text) or len(text.split()) > _MAX_WORDS:
             text = _fallback_line(spec, brand, last=(i == len(specs) - 1))
         out.append(text)
+    if hook and out and speakable(hook):
+        out[0] = hook
     return out

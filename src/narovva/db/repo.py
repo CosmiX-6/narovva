@@ -52,18 +52,51 @@ class Repo:
         ).fetchone()
         return row[0] if row else None
 
-    def last_successful_post(self, channel_id: str) -> Optional[tuple[str, datetime]]:
-        """Most recent successful post for the channel, across all genres --
-        used to drive rotation scheduling (narovva.orchestration.due)."""
+    def last_successful_post(
+        self, channel_id: str, *, exclude_genres: tuple[str, ...] = (),
+    ) -> Optional[tuple[str, datetime]]:
+        """Most recent successful post for the channel, across all genres except
+        `exclude_genres` -- used to drive rotation scheduling (narovva.orchestration.due)."""
         row = self.conn.execute(
             """
             SELECT genre, published_at FROM post_history
-            WHERE channel_id = %s AND status = 'success'
+            WHERE channel_id = %s AND status = 'success' AND NOT (genre = ANY(%s::text[]))
             ORDER BY published_at DESC LIMIT 1
             """,
-            (channel_id,),
+            (channel_id, list(exclude_genres)),
         ).fetchone()
         return (row[0], row[1]) if row else None
+
+    def count_successful_posts_since(self, channel_id: str, genre: str, since: datetime) -> int:
+        row = self.conn.execute(
+            """
+            SELECT count(*) FROM post_history
+            WHERE channel_id = %s AND genre = %s AND status = 'success' AND published_at >= %s
+            """,
+            (channel_id, genre, since),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
+    def last_post_at(self, channel_id: str) -> Optional[datetime]:
+        """When the channel last posted anything."""
+        row = self.conn.execute(
+            "SELECT max(published_at) FROM post_history WHERE channel_id = %s AND status = 'success'",
+            (channel_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def recent_post_titles(self, channel_id: str, since: datetime, *, limit: int = 200) -> list[str]:
+        """Titles of articles posted (or tried) since `since`, so the same story
+        is not posted again from another outlet's link."""
+        rows = self.conn.execute(
+            """
+            SELECT article_title FROM post_history
+            WHERE channel_id = %s AND updated_at >= %s AND article_title IS NOT NULL
+            ORDER BY updated_at DESC LIMIT %s
+            """,
+            (channel_id, since, limit),
+        ).fetchall()
+        return [r[0] for r in rows]
 
     # -- post history -----------------------------------------------------
 
