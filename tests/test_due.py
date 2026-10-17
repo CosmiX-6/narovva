@@ -21,7 +21,8 @@ class _FakeRepo:
     def __init__(self, last):
         self._last = last
 
-    def last_successful_post(self, channel_id):
+    def last_successful_post(self, channel_id, exclude_genres=()):
+        assert "viral" in exclude_genres  # viral posts never move the rotation
         return self._last
 
     def last_successful_post_at(self, channel_id, genre):

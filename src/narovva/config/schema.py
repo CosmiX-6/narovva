@@ -84,6 +84,71 @@ class NarrationConfig(BaseModel):
     captions: bool = True
 
 
+_DEFAULT_VIRAL_EXCLUDE = [
+    # Not "informative": results, previews, gossip, luck. Matched as whole words in the headline.
+    "vs", "v", "score", "scores", "highlights", "prediction", "predictions", "odds", "betting",
+    "lottery", "jackpot", "horoscope", "nfl", "nba", "wnba", "mlb", "nhl", "ufc", "ipl",
+    "premier league", "serie a", "la liga", "champions league", "box office", "dating",
+    "red carpet", "net worth", "live stream", "watch live", "recap",
+]
+
+
+class ViralConfig(BaseModel):
+    """Extra posts for the story the internet is talking about right now, whatever
+    its genre. Slots are local times in `timezone`; each slot is one post, and a
+    missed slot is made up in the next one, so the channel gets at least
+    len(slots) viral posts a day when fresh stories exist."""
+
+    enabled: bool = False
+    timezone: str = "UTC"
+    slots: list[str] = Field(default_factory=lambda: ["09:00", "13:00", "19:00", "21:30"])
+    # A slot can fire this long after its start (the hourly scheduler is often late).
+    slot_window_minutes: int = 120
+    # "Fresh": every counted report of the story is at most this old.
+    max_age_minutes: int = 240
+    # A story counts as viral when at least this many different outlets carry it.
+    min_sources: int = 2
+    # Google Trends "trending now" regions; a story matching a hot search gets a boost.
+    trends_geos: list[str] = Field(default_factory=lambda: ["US"])
+    # News feeds scanned for coverage bursts. Unset = narovva's built-in pool.
+    feeds: list[str] | None = None
+    extra_feeds: list[str] = Field(default_factory=list)
+    # Also scan the feeds behind this channel's own genres.
+    include_genre_feeds: bool = True
+    exclude_keywords: list[str] = Field(default_factory=lambda: list(_DEFAULT_VIRAL_EXCLUDE))
+    # How many top-scored stories the AI editor chooses from.
+    editor_candidates: int = 12
+    # The opening line: "curiosity" opens a question only the story answers, "stakes"
+    # says what is at risk for the viewer, "auto" lets the model pick per story.
+    hook_style: Literal["auto", "curiosity", "stakes"] = "auto"
+    asset_types: list[str] | None = Field(default_factory=lambda: ["cover", "carousel"])
+    music_tags: list[str] | None = None
+    # Separate posts by at least this long (a viral post right after a rotation post).
+    min_gap_minutes: int = 45
+
+    @field_validator("slots")
+    @classmethod
+    def _valid_slots(cls, v: list[str]) -> list[str]:
+        out = []
+        for s in v:
+            hh, _, mm = str(s).partition(":")
+            if not (hh.isdigit() and mm.isdigit() and 0 <= int(hh) < 24 and 0 <= int(mm) < 60):
+                raise ValueError(f"viral slot must be HH:MM, got {s!r}")
+            out.append(f"{int(hh):02d}:{int(mm):02d}")
+        return sorted(set(out))
+
+    @field_validator("timezone")
+    @classmethod
+    def _valid_tz(cls, v: str) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"unknown timezone {v!r}") from exc
+        return v
+
+
 class ChannelConfig(BaseModel):
     id: str
     enabled: bool = True
@@ -113,6 +178,8 @@ class ChannelConfig(BaseModel):
     publish_format: Literal["carousel", "reel", "motion_reel"] = "carousel"
     # Voice-over for "motion_reel" (ignored by other formats). Unset = music only.
     narration: NarrationConfig | None = None
+    # Peak-hour posts of whatever story is going viral right now (any genre).
+    viral: ViralConfig | None = None
 
     @property
     def is_video(self) -> bool:

@@ -22,7 +22,7 @@ from ..db.repo import Repo
 from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
 from ..motion import render_motion_reel, slide_specs_from_assets, total_duration
-from ..motion.slides import SCENE_OVERLAP_SECONDS, VOICE_LEAD, motion_duration
+from ..motion.slides import SCENE_OVERLAP_SECONDS, VOICE_LEAD, _trim, motion_duration
 from ..narration.script import caption_text
 from ..narration import (
     build_provider, choose_voice, default_voices, mix_voice_and_music, style_for_tone,
@@ -36,6 +36,7 @@ from ..tokens import InstagramTokenError, check_token, get_valid_token
 from ..llm import LLMUnavailable, build_llm_chain
 from ..logsafe import redact
 from ..video import assemble_reel, make_cover, slide_duration
+from ..viral.editor import spoken, write_hook
 
 logger = logging.getLogger(__name__)
 
@@ -214,8 +215,12 @@ def _process_one(
     recent_music_ids: set[str] | frozenset[str] = frozenset(),
     recent_voices: set[str] | frozenset[str] = frozenset(),
     llm_cache: dict | None = None,
+    hook_style: str | None = None,
 ) -> _Outcome:
+    """`hook_style` (viral posts): write a curiosity/stakes hook and open the reel,
+    the cover and the caption with it."""
     is_reel = channel.is_video
+    hook: str | None = None
     try:
         # One chain per run, so a model whose quota is spent stays skipped for later articles.
         if llm_cache is not None and "llm" in llm_cache:
@@ -245,6 +250,10 @@ def _process_one(
         caption = generate_caption(
             brief, publish_platform=PublishPlatform(channel.platform), tone=channel.caption, llm=llm,
         )
+        if hook_style:
+            hook = write_hook(llm, brief, hook_style)
+            if hook and not caption.text.startswith(hook):
+                caption.text = f"{hook}\n\n{caption.text}"  # the line shown before "more"
     except Exception as exc:
         # A bad article (unextractable page, transient LLM/network error)
         # must not crash the whole channel run -- record it as a failed
@@ -279,7 +288,7 @@ def _process_one(
             if channel.publish_format == "motion_reel":
                 video_path, narration_voice = _try_motion_reel(
                     channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
-                    llm=llm, recent_voices=recent_voices, seed=article.content_id,
+                    llm=llm, recent_voices=recent_voices, seed=article.content_id, hook=hook,
                 )
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
                 video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
@@ -289,7 +298,7 @@ def _process_one(
                 content_type="video/mp4",
             )
             hosted.append(h)
-            cover_url = _host_cover(host, hosted, channel, article, brief, assets)
+            cover_url = _host_cover(host, hosted, channel, article, brief, assets, hook=hook)
             publish_assets.append(
                 PublishAsset(asset_type="reel", local_path=video_path, hosted_url=h.url, cover_url=cover_url)
             )
@@ -372,7 +381,7 @@ def _preflight_token(channel: ChannelConfig) -> None:
     check_token(get_valid_token(channel))
 
 
-def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed):
+def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed, hook=None):
     """Voice-over: script -> TTS (a voice not used recently) -> durations that
     follow the speech -> music ducked under the voice. Tries the configured
     provider, then each fallback. Returns (mixed_audio, voice)."""
@@ -383,7 +392,7 @@ def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed):
         "elevenlabs": channel.credentials.elevenlabs_api_key_env,
         "kokoro": None,  # local voice, no key
     }
-    lines = write_script(llm, brief, specs, brand=channel.brand.name)
+    lines = write_script(llm, brief, specs, brand=channel.brand.name, hook=spoken(hook) if hook else None)
     style = style_for_tone(brief.tone)
     failures: list[str] = []
     for n, name in enumerate([cfg.provider, *cfg.fallback_providers]):
@@ -413,7 +422,7 @@ def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed):
 
 def _try_motion_reel(
     channel, assets, brief, track: MusicTrack, output_path: str, *,
-    llm=None, recent_voices=frozenset(), seed: str = "",
+    llm=None, recent_voices=frozenset(), seed: str = "", hook: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Render the HyperFrames motion reel (optionally narrated). Returns
     (mp4 path, narration voice); path is None (after logging why) so the
@@ -421,14 +430,16 @@ def _try_motion_reel(
     try:
         category = getattr(brief.category, "value", str(brief.category))
         accent = channel.brand.category_accents.get(category) or channel.brand.accent_color
-        specs = slide_specs_from_assets(assets)
+        specs = apply_hook(slide_specs_from_assets(assets), hook, brief.headline)
         audio, voice = track.audio_bytes, None
         if channel.narration and llm is not None:
             try:
-                audio, voice = _narrate(channel, brief, specs, track, llm=llm, recent_voices=recent_voices, seed=seed)
+                audio, voice = _narrate(
+                    channel, brief, specs, track, llm=llm, recent_voices=recent_voices, seed=seed, hook=hook,
+                )
             except Exception as exc:  # no voice is better than no post
                 logger.warning("channel %s: narration failed (%s); posting music-only", channel.id, exc)
-                specs = slide_specs_from_assets(assets)
+                specs = apply_hook(slide_specs_from_assets(assets), hook, brief.headline)
                 audio, voice = track.audio_bytes, None
         # The article's own photo, when poster-core found one (it is optional:
         # the reel renders on its generative background without it).
@@ -449,7 +460,15 @@ def _try_motion_reel(
         return None, None
 
 
-def _host_cover(host, hosted: list, channel, article, brief, assets) -> str | None:
+def apply_hook(specs: list[dict], hook: str | None, headline: str) -> list[dict]:
+    """Open the reel on the hook: it becomes the first scene's headline (with the
+    story's own headline underneath) under a TRENDING NOW label."""
+    if hook and specs and specs[0].get("kind") in ("hook", "hero"):
+        specs[0] = dict(specs[0], kicker="TRENDING NOW", heading=hook, body=_trim(headline, 105))
+    return specs
+
+
+def _host_cover(host, hosted: list, channel, article, brief, assets, hook: str | None = None) -> str | None:
     """Designed thumbnail (photo + headline + logo) for the reel. Optional:
     any failure just leaves Instagram to pick a frame from the video."""
     try:
@@ -457,7 +476,7 @@ def _host_cover(host, hosted: list, channel, article, brief, assets) -> str | No
         photo = next((a for a in assets if getattr(a, "source_image_path", None)), None)
         out = f"/tmp/narovva/{channel.id}/{article.content_id}_cover.jpg"
         make_cover(
-            out, headline=brief.headline, kicker=category.replace("_", " "),
+            out, headline=hook or brief.headline, kicker="trending now" if hook else category.replace("_", " "),
             accent=channel.brand.category_accents.get(category) or channel.brand.accent_color,
             handle=channel.brand.social_handle or "", logo_path=channel.brand.logo_path,
             photo_path=photo.source_image_path if photo else None,
