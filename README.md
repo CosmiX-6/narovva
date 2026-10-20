@@ -224,6 +224,23 @@ narovva viral-scan config/channels/example-tech-ig.yaml --editor
 narovva run-viral config/channels/example-tech-ig.yaml --force
 ```
 
+## Focus mode (e.g. AI for practitioners)
+
+A channel's `focus:` section narrows everything it posts to one audience for as
+long as `enabled: true`:
+
+- the rotation posts from `focus.genres` instead of the channel's genres (the
+  live channel uses `ai_practitioner`: OpenAI, Hugging Face, GitHub changelog,
+  AWS ML, NVIDIA developer, Cursor, Simon Willison, Latent Space and the AI trade
+  press -- see `src/narovva/genres.py`);
+- articles must be fresh (`max_age_hours`), mention one of `include_keywords` and
+  none of `exclude_keywords` (funding, stock moves, lawsuits), then an AI screener
+  ranks them by how useful they are to `audience` and drops the rest;
+- viral posts must be on topic too, and the editor, hook, voice-over and caption
+  (`caption_voice`, `extra_hashtags`) speak to that audience.
+
+Set `enabled: false` to return to the normal genre mix; nothing else changes.
+
 ## Viral posts
 
 On top of the genre rotation, a channel with a `viral:` section posts the story the

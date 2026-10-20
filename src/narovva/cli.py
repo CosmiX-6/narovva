@@ -171,7 +171,9 @@ def _viral_scan(channel, *, editor: bool) -> int:
     if editor and stories:
         from .orchestration.run_channel import _build_llm
 
-        picks = editor_pick(_build_llm(channel), stories, now=now, limit=channel.viral.editor_candidates)
+        picks = editor_pick(
+            _build_llm(channel), stories, now=now, limit=channel.viral.editor_candidates, audience=channel.audience,
+        )
         print("editor would post:", [p.title for p in picks] or "none")
     return 0
 

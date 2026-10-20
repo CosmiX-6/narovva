@@ -53,6 +53,30 @@ viral:
   hook_style: auto          # curiosity | stakes | auto (the model picks per story)
   asset_types: [cover, carousel]
 
+# Temporary focus: while enabled, every post (rotation AND viral) is a practical AI
+# update for people who build with AI or use it at work. The genres below are set
+# aside, viral posts must be AI stories, and an AI screener ranks fresh articles by
+# how useful they are to this audience (no funding rounds, stock moves or drama).
+# Set enabled: false to go back to the normal mix -- nothing else needs to change.
+focus:
+  enabled: true
+  name: "AI for practitioners"
+  audience: >-
+    AI engineers, developers and anyone who uses AI tools (ChatGPT, Claude, Gemini,
+    Copilot, Cursor, agents) as a companion at work
+  genres:
+    - genre: ai_practitioner      # labs' blogs, changelogs, practitioners, AI trade press
+      limit: 25
+      cadence_minutes: 120
+      asset_types: [cover, carousel]
+      music_tags: [technology, electronic]
+  max_age_hours: 48
+  screen_with_llm: true
+  caption_voice: >-
+    practical and sharp, for engineers and people who use AI at work: what changed,
+    what it means for their workflow, and one concrete thing to try or watch; no hype
+  extra_hashtags: ["#AI", "#AIEngineering", "#GenAI", "#LLM", "#AITools"]
+
 genres:
   - genre: tech
     country: us

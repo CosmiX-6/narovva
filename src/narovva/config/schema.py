@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from poster_core import BrandKit
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class BrandKitConfig(BaseModel):
@@ -149,6 +149,43 @@ class ViralConfig(BaseModel):
         return v
 
 
+_AI_TERMS = [
+    "ai", "a.i.", "llm", "llms", "gpt", "chatgpt", "openai", "anthropic", "claude", "gemini", "copilot",
+    "cursor", "agent", "agents", "agentic", "model", "models", "hugging face", "huggingface", "llama",
+    "mistral", "deepseek", "qwen", "rag", "fine-tuning", "fine tuning", "prompt", "prompts", "inference",
+    "transformer", "embedding", "embeddings", "machine learning", "neural", "genai", "generative",
+    "codex", "mcp", "nvidia", "gpu", "gpus", "vibe coding", "chatbot", "assistant", "automation",
+]
+_FOCUS_EXCLUDE = [
+    # Money and drama, not something the viewer can use at work.
+    "raises", "funding round", "valuation", "ipo", "stock", "shares", "earnings", "lawsuit", "sues",
+    "layoffs", "acquires", "acquisition",
+]
+
+
+class FocusConfig(BaseModel):
+    """A temporary editorial focus: while enabled, the channel posts only stories for
+    `audience` -- the rotation uses `genres` instead of the channel's own, viral posts
+    must match `include_keywords`, and an AI screener ranks articles by how useful they
+    are to that audience. Turn it off (enabled: false) to go back to the normal mix."""
+
+    enabled: bool = False
+    name: str = "focus"
+    audience: str = ""
+    # Replaces the channel's genres while the focus is on.
+    genres: list[GenreSetting] = Field(default_factory=list)
+    # A story must mention at least one of these (whole words/phrases, title or summary).
+    include_keywords: list[str] = Field(default_factory=lambda: list(_AI_TERMS))
+    exclude_keywords: list[str] = Field(default_factory=lambda: list(_FOCUS_EXCLUDE))
+    # Skip articles older than this (feeds such as blogs and changelogs keep old posts).
+    max_age_hours: int = 48
+    # Rank the fresh articles with the text model by usefulness to `audience`.
+    screen_with_llm: bool = True
+    # Overrides for the caption while the focus is on (unset = keep the channel's).
+    caption_voice: str | None = None
+    extra_hashtags: list[str] | None = None
+
+
 class ChannelConfig(BaseModel):
     id: str
     enabled: bool = True
@@ -180,6 +217,28 @@ class ChannelConfig(BaseModel):
     narration: NarrationConfig | None = None
     # Peak-hour posts of whatever story is going viral right now (any genre).
     viral: ViralConfig | None = None
+    # Temporary editorial focus (e.g. "AI for practitioners"); see FocusConfig.
+    focus: FocusConfig | None = None
+
+    @property
+    def focus_on(self) -> bool:
+        return bool(self.focus and self.focus.enabled)
+
+    @property
+    def audience(self) -> str:
+        """Who the posts are for, when a focus names one (else empty)."""
+        return self.focus.audience if self.focus_on else ""
+
+    @model_validator(mode="after")
+    def _apply_focus(self) -> "ChannelConfig":
+        if self.focus_on:
+            if self.focus.genres:
+                self.genres = list(self.focus.genres)
+            if self.focus.caption_voice:
+                self.caption = self.caption.model_copy(update={"voice": self.focus.caption_voice})
+            if self.focus.extra_hashtags is not None:
+                self.caption = self.caption.model_copy(update={"extra_hashtags": list(self.focus.extra_hashtags)})
+        return self
 
     @property
     def is_video(self) -> bool:

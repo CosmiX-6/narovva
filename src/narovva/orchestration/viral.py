@@ -15,6 +15,7 @@ from ..dedup import get_store_for_channel
 from ..llm import LLMUnavailable
 from ..logsafe import redact
 from ..settings import get_settings
+from ..focus import on_topic
 from ..viral.detect import Story, find_stories
 from ..viral.editor import editor_pick
 from ..viral.schedule import local_day_start, slot_status
@@ -31,9 +32,10 @@ _MAX_TRIES = 3
 
 def viral_feeds(channel: ChannelConfig) -> list[str]:
     cfg = channel.viral
-    feeds = list(cfg.feeds) if cfg.feeds is not None else list(DEFAULT_FEEDS)
-    feeds += cfg.extra_feeds
-    if cfg.include_genre_feeds:
+    feeds = (list(cfg.feeds) if cfg.feeds is not None else list(DEFAULT_FEEDS)) + list(cfg.extra_feeds)
+    # With a focus on, the focus genres' feeds always count; stories are then kept only
+    # if on topic (an AI story the general press also carries is the strongest signal).
+    if cfg.include_genre_feeds or channel.focus_on:
         for g in channel.genres:
             try:
                 gc = get_genre(g.genre)
@@ -69,6 +71,9 @@ def scan(channel: ChannelConfig, *, now: datetime | None = None, repo=None, stor
         headlines, trends, now=now, max_age_minutes=cfg.max_age_minutes, min_sources=cfg.min_sources,
         exclude_keywords=cfg.exclude_keywords, skip_titles=recent,
     )
+    if channel.focus_on:
+        stories = [s for s in stories
+                   if any(on_topic(h.title, h.summary, channel.focus) for h in s.headlines)]
     if store is not None and stories:
         # Any outlet's link to the story already posted (e.g. by the genre rotation) rules it out.
         ids = {make_content_id(url=h.url, title=h.title, source_name=h.source): s
@@ -131,7 +136,7 @@ def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = Fa
 
     try:
         stories = scan(channel, now=now, repo=repo, store=store)
-        picks = editor_pick(llm_cache["llm"], stories, now=now, limit=cfg.editor_candidates)
+        picks = editor_pick(llm_cache["llm"], stories, now=now, limit=cfg.editor_candidates, audience=channel.audience)
         if not picks:
             logger.info("channel %s: no informative viral story right now; the slot stays open", channel.id)
         tries = 0

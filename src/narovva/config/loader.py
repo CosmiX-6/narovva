@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from .. import genres as _genres  # noqa: F401  (registers narovva's extra genres)
 from .schema import ChannelConfig
 
 
