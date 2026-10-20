@@ -95,12 +95,16 @@ def _fallback_line(spec: dict, brand: str, last: bool) -> str:
     return _GENERIC.get(spec.get("kind"), "Here's the next detail.")
 
 
-def write_script(llm, brief, specs: list[dict], *, brand: str, hook: str | None = None) -> list[str]:
+def write_script(
+    llm, brief, specs: list[dict], *, brand: str, hook: str | None = None, audience: str = "",
+) -> list[str]:
     """One line per spec. Any line the model fumbles is replaced by a safe
     fallback derived from the slide, so the result always matches `specs`.
     `hook` (already written for the ear) is spoken as line 1 instead of the model's."""
     user = (
-        f"Channel: {brand}\nStory tone: {brief.tone}\nHeadline: {brief.headline}\n"
+        f"Channel: {brand}\n"
+        + (f"Audience: {audience}. Speak to them: what this changes in how they build or work.\n" if audience else "")
+        + f"Story tone: {brief.tone}\nHeadline: {brief.headline}\n"
         f"Summary: {brief.summary}\nSlides ({len(specs)}):\n"
         + json.dumps([_slide_payload(i, s) for i, s in enumerate(specs)], ensure_ascii=False)
     )

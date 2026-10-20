@@ -10,7 +10,17 @@ def test_load_example_channel():
     channel = load_channel("config/channels/example-tech-ig.yaml")
     assert channel.id == "example-tech-ig"
     assert channel.platform == "instagram"
-    assert [g.genre for g in channel.genres] == ["tech", "ai", "science", "world", "entrepreneurs"]
+    # The AI-practitioner focus is on: it replaces the rotation's genres...
+    assert [g.genre for g in channel.genres] == ["ai_practitioner"]
+    # ...and turning it off restores the normal mix.
+    import yaml
+
+    from narovva.config.schema import ChannelConfig
+
+    raw = yaml.safe_load(open("config/channels/example-tech-ig.yaml"))
+    raw["focus"]["enabled"] = False
+    normal = ChannelConfig.model_validate({**raw, "id": "example-tech-ig"})
+    assert [g.genre for g in normal.genres] == ["tech", "ai", "science", "world", "entrepreneurs"]
     assert channel.brand.name == "CONTEXT UNFILTERED"
 
 

@@ -44,7 +44,9 @@ _HOOK_SYSTEM = (
 _BANNED = ("you won't believe", "won't believe", "shocking", "this one trick", "mind-blowing", "jaw-dropping")
 
 
-def editor_pick(llm, stories: list[Story], *, now: datetime, limit: int = 12) -> list[Story]:
+def editor_pick(
+    llm, stories: list[Story], *, now: datetime, limit: int = 12, audience: str = "",
+) -> list[Story]:
     """The stories worth posting, best first. If the model is unavailable or
     answers badly, the detection order stands (the keyword filter already ran)."""
     shortlist = stories[:limit]
@@ -62,7 +64,11 @@ def editor_pick(llm, stories: list[Story], *, now: datetime, limit: int = 12) ->
         for i, s in enumerate(shortlist)
     ]
     try:
-        raw = llm.complete_json(_EDITOR_SYSTEM, "Candidates:\n" + json.dumps(payload, ensure_ascii=False))
+        system = _EDITOR_SYSTEM + (
+            f" This channel currently serves one audience: {audience}. Choose only stories this audience "
+            "can use in their work, however viral the others are." if audience else ""
+        )
+        raw = llm.complete_json(system, "Candidates:\n" + json.dumps(payload, ensure_ascii=False))
         picks = raw.get("picks") if isinstance(raw, dict) else None
         if not isinstance(picks, list):
             raise ValueError(f"no picks list in {str(raw)[:120]!r}")
@@ -126,11 +132,12 @@ def _first_good(raw, headline: str) -> str | None:
     return None
 
 
-def write_hook(llm, brief, style: str = "auto") -> str | None:
+def write_hook(llm, brief, style: str = "auto", audience: str = "") -> str | None:
     """Opening hook from the analysed story (so it can only use real facts)."""
     facts = "; ".join(list(getattr(brief, "key_facts", []) or [])[:4])
     user = "\n".join(filter(None, [
         f"Wanted style: {style if style != 'auto' else 'whichever fits this story better'}",
+        f"Audience: {audience} -- 'stakes' means what changes in their work" if audience else "",
         f"Headline: {brief.headline}",
         f"Summary: {brief.summary}",
         f"Why it matters: {brief.why_it_matters}" if getattr(brief, "why_it_matters", None) else "",

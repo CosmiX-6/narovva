@@ -36,6 +36,7 @@ from ..tokens import InstagramTokenError, check_token, get_valid_token
 from ..llm import LLMUnavailable, build_llm_chain
 from ..logsafe import redact
 from ..video import assemble_reel, make_cover, slide_duration
+from ..focus import keep_on_topic, screen
 from ..viral.editor import spoken, write_hook
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,8 @@ def run_channel(
                 limit=genre_setting.limit,
                 mark_seen=False,
             )
+            if channel.focus_on:
+                articles = _focus_articles(channel, articles, llm_cache)
             genre_posted = 0
             for article in articles:
                 if max_posts_per_genre is not None and genre_posted >= max_posts_per_genre:
@@ -210,6 +213,17 @@ def run_channel(
     return result
 
 
+def _focus_articles(channel: ChannelConfig, articles: list, llm_cache: dict) -> list:
+    """Fresh, on-topic articles for the focus audience, most useful first."""
+    kept = keep_on_topic(articles, channel.focus)
+    logger.info("channel %s: focus %r keeps %d of %d fetched", channel.id, channel.focus.name, len(kept), len(articles))
+    if not kept or not channel.focus.screen_with_llm:
+        return kept
+    if "llm" not in llm_cache:
+        llm_cache["llm"] = _build_llm(channel)
+    return screen(llm_cache["llm"], kept, channel.focus.audience)
+
+
 def _process_one(
     article: FeedArticle, genre_setting: GenreSetting, channel: ChannelConfig, *, dry_run: bool,
     recent_music_ids: set[str] | frozenset[str] = frozenset(),
@@ -251,7 +265,7 @@ def _process_one(
             brief, publish_platform=PublishPlatform(channel.platform), tone=channel.caption, llm=llm,
         )
         if hook_style:
-            hook = write_hook(llm, brief, hook_style)
+            hook = write_hook(llm, brief, hook_style, audience=channel.audience)
             if hook and not caption.text.startswith(hook):
                 caption.text = f"{hook}\n\n{caption.text}"  # the line shown before "more"
     except Exception as exc:
@@ -392,7 +406,9 @@ def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed, hook=Non
         "elevenlabs": channel.credentials.elevenlabs_api_key_env,
         "kokoro": None,  # local voice, no key
     }
-    lines = write_script(llm, brief, specs, brand=channel.brand.name, hook=spoken(hook) if hook else None)
+    lines = write_script(
+        llm, brief, specs, brand=channel.brand.name, hook=spoken(hook) if hook else None, audience=channel.audience,
+    )
     style = style_for_tone(brief.tone)
     failures: list[str] = []
     for n, name in enumerate([cfg.provider, *cfg.fallback_providers]):
