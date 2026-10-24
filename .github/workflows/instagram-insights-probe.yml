@@ -1,0 +1,26 @@
+name: Instagram insights probe
+
+# Read-only. Lists the channel's recent posts and asks Instagram for one reel's
+# insights (views, reach, likes, saves, shares, watch time), metric by metric, to
+# show whether the token can read them (instagram_business_manage_insights).
+# Posts nothing; tokens are redacted from the output.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install narovva
+        run: pip install .
+      - name: Probe insights
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+          IG_ACCESS_TOKEN__example_tech_ig: ${{ secrets.IG_ACCESS_TOKEN__EXAMPLE_TECH_IG }}
+        run: narovva insights-probe config/channels/example-tech-ig.yaml

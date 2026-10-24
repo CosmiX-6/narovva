@@ -21,7 +21,7 @@ from ..viral.editor import editor_pick
 from ..viral.schedule import local_day_start, slot_status
 from ..viral.sources import DEFAULT_FEEDS, fetch_headlines, fetch_trends
 from .due import VIRAL_GENRE
-from .run_channel import ChannelRunResult, _build_llm, _open_repo, _preflight_token, _process_one
+from .run_channel import ChannelRunResult, _build_llm, _open_repo, _preflight_token, _process_one, hook_fields
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +165,7 @@ def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = Fa
                         asset_types=outcome.asset_types, caption=outcome.caption_text, hashtags=outcome.hashtags,
                         status=outcome.status, platform_post_id=outcome.platform_post_id, error=outcome.error,
                         music_track_id=outcome.music_track_id, narration_voice=outcome.narration_voice,
+                        **hook_fields(outcome.hook),
                     )
                 if outcome.status == "success":
                     # Every outlet's copy, so the rotation does not post the same story again.

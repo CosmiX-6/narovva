@@ -224,6 +224,30 @@ narovva viral-scan config/channels/example-tech-ig.yaml --editor
 narovva run-viral config/channels/example-tech-ig.yaml --force
 ```
 
+## Hooks, packaging and voice
+
+Every post (with `hooks.enabled`; viral posts always) opens on a formula hook:
+
+- **Formulas**: `src/narovva/hooks/formulas.yaml` holds 18 hook shapes (The Mistake,
+  The Warning, The Comparison, The Deadline, ...) adapted from
+  [youtube-agent-skill](https://github.com/Jakeschincariol/youtube-agent-skill) (MIT).
+  `hooks.formulas` picks the ones a channel uses.
+- **One call, five options**: the model writes five packages, each a hook from a
+  different formula plus a 2-4 word **cover** title and the caption's **opener**.
+- **Rules in code**: a hook is rejected if it restates the headline, answers itself,
+  uses a number the article does not contain, or a banned word. The cover must not
+  share the hook's words; the opener fits the 125 characters shown before "more".
+- **Score**: `src/narovva/hooks/score.py` rates each hook 0-100 on specific / talks to
+  you / stakes / open question / length (60% mean, 40% weakest); below
+  `hooks.min_score` is rejected. A heuristic: it filters summaries and hype, it does
+  not predict views. Each post records `hook_text`, `hook_formula`, `hook_score` and
+  `cover_text` in `post_history`.
+- **Voice**: the `voice:` block (audience, banned words, claims we never make,
+  format) goes to every writer; banned words are also stripped from the caption.
+
+Check whether the token can read post insights (for the performance report):
+Actions -> "Instagram insights probe" -> Run workflow.
+
 ## Focus mode (e.g. AI for practitioners)
 
 A channel's `focus:` section narrows everything it posts to one audience for as

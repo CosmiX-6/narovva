@@ -54,8 +54,15 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[st
 
 
 def _fit_headline(draw, text: str, font_path: str | None, max_width: int):
-    """Largest size (<=104 px) at which the headline fits 4 lines, else 5."""
+    """Largest size (<=104 px) at which the headline fits 4 lines, else 5. Short
+    cover text (2-4 words) goes much bigger, up to 3 lines, to read at grid size."""
     text = " ".join(text.split())
+    if len(text.split()) <= 4:
+        for size in range(176, 107, -6):
+            font = _font(font_path, size)
+            lines = _wrap(draw, text, font, max_width)
+            if len(lines) <= 3 and all(draw.textlength(w, font=font) <= max_width for w in text.split()):
+                return font, lines
     for max_lines, lo in ((4, 60), (5, 52)):
         for size in range(104, lo - 1, -4):
             font = _font(font_path, size)

@@ -127,6 +127,10 @@ class Repo:
         error: str | None = None,
         music_track_id: str | None = None,
         narration_voice: str | None = None,
+        hook_text: str | None = None,
+        hook_formula: str | None = None,
+        hook_score: int | None = None,
+        cover_text: str | None = None,
     ) -> None:
         """Upsert one post_history row keyed on (channel_id, content_id).
 
@@ -139,13 +143,15 @@ class Repo:
             INSERT INTO post_history (
                 channel_id, genre, content_id, article_url, article_title, platform,
                 asset_types, caption, hashtags, status, platform_post_id, attempt_count,
-                last_error, published_at, music_track_id, narration_voice
+                last_error, published_at, music_track_id, narration_voice,
+                hook_text, hook_formula, hook_score, cover_text
             ) VALUES (
                 %(channel_id)s, %(genre)s, %(content_id)s, %(article_url)s, %(article_title)s,
                 %(platform)s, %(asset_types)s, %(caption)s, %(hashtags)s, %(status)s,
                 %(platform_post_id)s, 1, %(error)s,
                 CASE WHEN %(status)s = 'success' THEN now() ELSE NULL END,
-                %(music_track_id)s, %(narration_voice)s
+                %(music_track_id)s, %(narration_voice)s,
+                %(hook_text)s, %(hook_formula)s, %(hook_score)s, %(cover_text)s
             )
             ON CONFLICT (channel_id, content_id) DO UPDATE SET
                 status = EXCLUDED.status,
@@ -157,6 +163,10 @@ class Repo:
                 asset_types = EXCLUDED.asset_types,
                 music_track_id = COALESCE(EXCLUDED.music_track_id, post_history.music_track_id),
                 narration_voice = COALESCE(EXCLUDED.narration_voice, post_history.narration_voice),
+                hook_text = COALESCE(EXCLUDED.hook_text, post_history.hook_text),
+                hook_formula = COALESCE(EXCLUDED.hook_formula, post_history.hook_formula),
+                hook_score = COALESCE(EXCLUDED.hook_score, post_history.hook_score),
+                cover_text = COALESCE(EXCLUDED.cover_text, post_history.cover_text),
                 updated_at = now(),
                 published_at = CASE
                     WHEN EXCLUDED.status = 'success' THEN now()
@@ -178,6 +188,10 @@ class Repo:
                 "error": error,
                 "music_track_id": music_track_id,
                 "narration_voice": narration_voice,
+                "hook_text": hook_text,
+                "hook_formula": hook_formula,
+                "hook_score": hook_score,
+                "cover_text": cover_text,
             },
         )
 

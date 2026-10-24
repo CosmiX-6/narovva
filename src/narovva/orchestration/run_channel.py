@@ -39,7 +39,9 @@ from ..llm import LLMUnavailable, build_llm_chain
 from ..logsafe import redact
 from ..video import assemble_reel, make_cover, slide_duration
 from ..focus import keep_on_topic, screen
-from ..viral.editor import spoken, write_hook
+from ..hooks.voice import drop_banned_sentences
+from ..hooks.writer import HookPackage, write_package
+from ..viral.editor import spoken
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +67,7 @@ class _Outcome:
     music_track_id: str | None = None
     narration_voice: str | None = None
     fatal: bool = False  # no text model is left: stop the run rather than fail every article
+    hook: HookPackage | None = None  # the hook package the post opened with
 
 
 def run_channel(
@@ -184,6 +187,7 @@ def run_channel(
                         error=outcome.error,
                         music_track_id=outcome.music_track_id,
                         narration_voice=outcome.narration_voice,
+                        **hook_fields(outcome.hook),
                     )
 
                 if outcome.status == "success":
@@ -223,7 +227,7 @@ def _focus_articles(channel: ChannelConfig, articles: list, llm_cache: dict) -> 
         return kept
     if "llm" not in llm_cache:
         llm_cache["llm"] = _build_llm(channel)
-    return screen(llm_cache["llm"], kept, channel.focus.audience)
+    return screen(llm_cache["llm"], kept, channel.audience)
 
 
 def _process_one(
@@ -233,10 +237,15 @@ def _process_one(
     llm_cache: dict | None = None,
     hook_style: str | None = None,
 ) -> _Outcome:
-    """`hook_style` (viral posts): write a curiosity/stakes hook and open the reel,
-    the cover and the caption with it."""
+    """`hook_style` (viral posts, or every post when channel.hooks.enabled): write a
+    formula hook with its cover text and caption opener (narovva.hooks), open the
+    reel with the hook, title the cover with the cover text, lead the caption with
+    the opener."""
     is_reel = channel.is_video
     hook: str | None = None
+    package: HookPackage | None = None
+    if hook_style is None and channel.hooks.enabled:
+        hook_style = "auto"
     try:
         # One chain per run, so a model whose quota is spent stays skipped for later articles.
         if llm_cache is not None and "llm" in llm_cache:
@@ -266,10 +275,18 @@ def _process_one(
         caption = generate_caption(
             brief, publish_platform=PublishPlatform(channel.platform), tone=channel.caption, llm=llm,
         )
+        banned = channel.banned_words
+        if banned:
+            caption.text = drop_banned_sentences(caption.text, banned)
         if hook_style:
-            hook = write_hook(llm, brief, hook_style, audience=channel.audience)
-            if hook and not caption.text.startswith(hook):
-                caption.text = f"{hook}\n\n{caption.text}"  # the line shown before "more"
+            package = write_package(
+                llm, brief, formulas=channel.hooks.formulas, style=hook_style, audience=channel.audience,
+                banned=banned, min_score=channel.hooks.min_score, candidates=channel.hooks.candidates,
+            )
+            hook = package.hook if package else None
+            lead = (package.opener or package.hook) if package else None
+            if lead and not caption.text.startswith(lead):
+                caption.text = f"{lead}\n\n{caption.text}"  # the line shown before "more"
     except Exception as exc:
         # A bad article (unextractable page, transient LLM/network error)
         # must not crash the whole channel run -- record it as a failed
@@ -283,7 +300,7 @@ def _process_one(
     if dry_run:
         return _Outcome(
             status="dry_run", caption_text=caption.text, hashtags=caption.hashtags,
-            asset_types=asset_type_values,
+            asset_types=asset_type_values, hook=package,
         )
 
     host = VercelBlobImageHost()
@@ -306,6 +323,7 @@ def _process_one(
                     channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
                     llm=llm, recent_voices=recent_voices, seed=article.content_id, hook=hook,
                     when=article.published_at, article=article_full,
+                    trending=genre_setting.genre == "viral",
                 )
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
                 video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
@@ -315,7 +333,10 @@ def _process_one(
                 content_type="video/mp4",
             )
             hosted.append(h)
-            cover_url = _host_cover(host, hosted, channel, article, brief, assets, hook=hook)
+            cover_url = _host_cover(
+                host, hosted, channel, article, brief, assets, hook=hook,
+                cover_text=package.cover if package else None, trending=genre_setting.genre == "viral",
+            )
             publish_assets.append(
                 PublishAsset(asset_type="reel", local_path=video_path, hosted_url=h.url, cover_url=cover_url)
             )
@@ -352,7 +373,16 @@ def _process_one(
         error=post_result.error,
         music_track_id=music_track_id,
         narration_voice=narration_voice,
+        hook=package,
     )
+
+
+def hook_fields(package: HookPackage | None) -> dict:
+    """post_history columns for a hook package (all None without one)."""
+    if package is None:
+        return {}
+    return {"hook_text": package.hook, "hook_formula": package.formula,
+            "hook_score": package.score, "cover_text": package.cover}
 
 
 def _slide_char_counts(assets: list) -> list[int]:
@@ -446,7 +476,7 @@ def _narrate(channel, brief, specs, track, *, recent_voices, seed, **timing):
 def _try_motion_reel(
     channel, assets, brief, track: MusicTrack, output_path: str, *,
     llm=None, recent_voices=frozenset(), seed: str = "", hook: str | None = None,
-    when: datetime | None = None, article=None,
+    when: datetime | None = None, article=None, trending: bool = False,
 ) -> tuple[str | None, str | None]:
     """Render the HyperFrames motion reel (optionally narrated). Returns
     (mp4 path, narration voice); path is None (after logging why) so the
@@ -471,11 +501,11 @@ def _try_motion_reel(
                 when=(when or datetime.now()).strftime("%d %b %Y"), hook=hook, audience=channel.audience,
             )
         if board is not None:
-            hook_board(board, hook, said, brief.headline)
+            hook_board(board, hook, said, brief.headline, trending=trending)
             build = lambda: beat_specs(board, stamp_colors=stamp_colors(look), heading_marks=look.heading_marks)
             subject, timing = board.subject, {"min_hold": BEAT_MIN, "tail": BEAT_TAIL}
         else:
-            slides = lambda: apply_hook(slide_specs_from_assets(assets), hook, brief.headline)
+            slides = lambda: apply_hook(slide_specs_from_assets(assets), hook, brief.headline, trending=trending)
             script = None
             if llm is not None and (channel.narration or look.wants_direction):
                 script = write_script(
@@ -517,23 +547,30 @@ def _try_motion_reel(
         return None, None
 
 
-def apply_hook(specs: list[dict], hook: str | None, headline: str) -> list[dict]:
+def apply_hook(specs: list[dict], hook: str | None, headline: str, trending: bool = True) -> list[dict]:
     """Open the reel on the hook: it becomes the first scene's headline (with the
-    story's own headline underneath) under a TRENDING NOW label."""
+    story's own headline underneath), under a TRENDING NOW label for viral posts."""
     if hook and specs and specs[0].get("kind") in ("hook", "hero"):
-        specs[0] = dict(specs[0], kicker="TRENDING NOW", heading=hook, body=_trim(headline, 105))
+        extra = {"kicker": "TRENDING NOW"} if trending else {}
+        specs[0] = dict(specs[0], heading=hook, body=_trim(headline, 105), **extra)
     return specs
 
 
-def _host_cover(host, hosted: list, channel, article, brief, assets, hook: str | None = None) -> str | None:
-    """Designed thumbnail (photo + headline + logo) for the reel. Optional:
-    any failure just leaves Instagram to pick a frame from the video."""
+def _host_cover(
+    host, hosted: list, channel, article, brief, assets, hook: str | None = None,
+    cover_text: str | None = None, trending: bool = False,
+) -> str | None:
+    """Designed thumbnail (photo + title + logo) for the reel. The title is the
+    package's short cover text when there is one (so cover and hook say different
+    things), else the hook, else the headline. Optional: any failure just leaves
+    Instagram to pick a frame from the video."""
     try:
         category = getattr(brief.category, "value", str(brief.category))
         photo = next((a for a in assets if getattr(a, "source_image_path", None)), None)
         out = f"/tmp/narovva/{channel.id}/{article.content_id}_cover.jpg"
         make_cover(
-            out, headline=hook or brief.headline, kicker="trending now" if hook else category.replace("_", " "),
+            out, headline=cover_text or hook or brief.headline,
+            kicker="trending now" if trending else category.replace("_", " "),
             accent=channel.brand.category_accents.get(category) or channel.brand.accent_color,
             handle=channel.brand.social_handle or "", logo_path=channel.brand.logo_path,
             photo_path=photo.source_image_path if photo else None,

@@ -64,8 +64,8 @@ focus:
   enabled: true
   name: "AI for practitioners"
   audience: >-
-    AI engineers, developers and anyone who uses AI tools (ChatGPT, Claude, Gemini,
-    Copilot, Cursor, agents) as a companion at work
+    an engineer or knowledge worker who uses ChatGPT, Claude, Copilot or Cursor every
+    day and wants to know what changed this week and what to do about it
   genres:
     - genre: ai_practitioner      # labs' blogs, changelogs, practitioners, AI trade press
       limit: 25
@@ -167,6 +167,38 @@ brand:
   # no code change needed.
   font_path_bold: "assets/fonts/DejaVuSans-Bold.ttf"
   font_path_regular: "assets/fonts/DejaVuSans-Regular.ttf"
+
+# The channel's voice: every writer (hook, cover, caption, storyboard, script, the
+# story editors) gets these rules, and banned words are also filtered in code from
+# the hook, the cover and the caption. While the focus above is on, its audience
+# replaces the one here. Edit freely -- no code change needed.
+voice:
+  audience: >-
+    a curious professional who follows tech and AI and wants the context behind the
+    headline in 30 seconds, without hype
+  banned_words: [game-changer, game changer, dive in, deep dive, unlock, revolutionary,
+                 mind-blowing, insane, crazy, "let's get into it", buckle up, "in today's video",
+                 skyrocket, supercharge, "the future is here", jaw-dropping, smash that]
+  never_claim:
+    - performance numbers, prices or dates that are not in the article
+    - that we tested or used a product ourselves
+    - predictions stated as facts
+    - financial or legal advice
+  format: >-
+    about 30 seconds; no channel intro; the first line is the hook; one idea per scene;
+    one ask at the end (follow the channel)
+
+# Formula hooks (narovva/hooks/formulas.yaml) on EVERY post, not just viral ones: five
+# options per post, each from a different formula, scored (narovva/hooks/score.py);
+# the best one opens the reel, with a 2-4 word cover title and a caption first line
+# that say different things. Viral posts always get one.
+hooks:
+  enabled: true
+  formulas: [the-mistake, the-warning, the-comparison, the-stack, the-deadline,
+             the-question, the-direct-address, the-statistic, the-before-after,
+             the-impossible-claim]
+  min_score: 45
+  candidates: 5
 
 caption:
   voice: "sharp, informative, no clickbait, written for a tech-savvy audience"
