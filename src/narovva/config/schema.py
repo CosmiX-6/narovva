@@ -189,6 +189,11 @@ class HooksConfig(BaseModel):
     min_score: int = 45
     # Options the model writes per post, each from a different formula.
     candidates: int = 5
+    # Lean toward formulas that beat the channel's median (narovva.metrics.learn). Does
+    # nothing until a formula has `learn_min_posts` measured posts; 20% of posts still
+    # get every formula.
+    learn: bool = False
+    learn_min_posts: int = 20
 
     @field_validator("formulas")
     @classmethod

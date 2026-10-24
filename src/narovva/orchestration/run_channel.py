@@ -40,7 +40,9 @@ from ..logsafe import redact
 from ..video import assemble_reel, make_cover, slide_duration
 from ..focus import keep_on_topic, screen
 from ..hooks.voice import drop_banned_sentences
+from ..hooks.score import formulas_by_id
 from ..hooks.writer import HookPackage, write_package
+from ..metrics.learn import choose_formulas, formula_stats
 from ..viral.editor import spoken
 
 logger = logging.getLogger(__name__)
@@ -115,6 +117,7 @@ def run_channel(
         genres = [by_name[name] for name in genres_filter if name in by_name]
     genres_processed: list[str] = []
     llm_cache: dict = {}  # the text-model chain, built on first use and shared by every article
+    hook_stats = load_hook_stats(repo, channel)
     llm_down = False
     recent_music_ids: set[str] = set(repo.recent_music_track_ids(channel.id)) if repo and channel.is_video else set()
     recent_voices: set[str] = set(repo.recent_narration_voices(channel.id)) if repo and channel.narration else set()
@@ -151,7 +154,7 @@ def run_channel(
 
                 outcome = _process_one(
                     article, genre_setting, channel, dry_run=dry_run, recent_music_ids=recent_music_ids,
-                    recent_voices=recent_voices, llm_cache=llm_cache,
+                    recent_voices=recent_voices, llm_cache=llm_cache, hook_stats=hook_stats,
                 )
                 if outcome.fatal:
                     # Not the article's fault: leave it unrecorded (no burnt attempt) and stop.
@@ -236,6 +239,7 @@ def _process_one(
     recent_voices: set[str] | frozenset[str] = frozenset(),
     llm_cache: dict | None = None,
     hook_style: str | None = None,
+    hook_stats: dict | None = None,
 ) -> _Outcome:
     """`hook_style` (viral posts, or every post when channel.hooks.enabled): write a
     formula hook with its cover text and caption opener (narovva.hooks), open the
@@ -279,8 +283,12 @@ def _process_one(
         if banned:
             caption.text = drop_banned_sentences(caption.text, banned)
         if hook_style:
+            formulas = channel.hooks.formulas
+            if hook_stats:
+                formulas = choose_formulas(formulas or list(formulas_by_id()), hook_stats,
+                                           seed=article.content_id, min_posts=channel.hooks.learn_min_posts)
             package = write_package(
-                llm, brief, formulas=channel.hooks.formulas, style=hook_style, audience=channel.audience,
+                llm, brief, formulas=formulas, style=hook_style, audience=channel.audience,
                 banned=banned, min_score=channel.hooks.min_score, candidates=channel.hooks.candidates,
             )
             hook = package.hook if package else None
@@ -375,6 +383,17 @@ def _process_one(
         narration_voice=narration_voice,
         hook=package,
     )
+
+
+def load_hook_stats(repo, channel: ChannelConfig) -> dict | None:
+    """Per-formula results for hooks.learn (None when off, no DB, or on any error)."""
+    if repo is None or not channel.hooks.learn:
+        return None
+    try:
+        return formula_stats(repo, channel.id) or None
+    except Exception as exc:  # learning is optional; never block a post on it
+        logger.warning("channel %s: hook stats unavailable (%s)", channel.id, exc)
+        return None
 
 
 def hook_fields(package: HookPackage | None) -> dict:
