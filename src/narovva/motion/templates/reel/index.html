@@ -7,12 +7,17 @@
     <script src="vendor/gsap.min.js"></script>
     <script src="ambient.js"></script>
     <script src="viz.js"></script>
+    <script src="icons.js"></script>
+    <script src="scenes.js"></script>
+    <link rel="stylesheet" href="scenes.css" />
     <!-- Staged per render by narovva.motion.stage: defines window.CU_DECK. -->
     <script src="deck.js"></script>
     <style>
       @font-face { font-family: "Archivo Black"; src: url("fonts/archivo-black-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
       @font-face { font-family: "Inter"; src: url("fonts/inter-latin-500-normal.woff2") format("woff2"); font-weight: 500; }
       @font-face { font-family: "Inter"; src: url("fonts/inter-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
+      @font-face { font-family: "JetBrains Mono"; src: url("fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; }
+      @font-face { font-family: "JetBrains Mono"; src: url("fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
 
       * { margin: 0; padding: 0; box-sizing: border-box; }
       :root { --navy: #0A0E1A; --ink: #F3F5FA; --muted: #9AA3BA; --accent: #3B82F6; --card: rgba(255,255,255,.07); }
@@ -33,6 +38,8 @@
       #field { left: 0; top: 0; width: 1080px; height: 1920px; }
       .grid { inset: 0; background-image: linear-gradient(rgba(255,255,255,.035) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,.035) 2px, transparent 2px); background-size: 90px 90px; }
       .vignette { inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(10,14,26,0) 38%, rgba(10,14,26,.88) 100%); }
+      /* A full-frame accent wash behind headline numbers (DECK.ui.flood), for rhythm between dark scenes. */
+      .flood { inset: 0; opacity: 0; background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--accent) 100%, white 12%) 0%, var(--accent) 45%, color-mix(in srgb, var(--accent) 70%, black) 100%); }
 
       .brand { position: absolute; left: 72px; top: 230px; display: flex; align-items: center; gap: 22px; }
       .brand img { width: 96px; height: 96px; border-radius: 22px; display: block; }
@@ -40,6 +47,20 @@
       .handle { position: absolute; left: 72px; top: 1440px; font-weight: 700; font-size: 34px; letter-spacing: .04em; opacity: .85; }
       .progress { position: absolute; left: 72px; right: 150px; top: 1490px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; }
       .progress i { display: block; height: 100%; width: 100%; background: var(--accent); border-radius: 3px; transform-origin: left center; }
+
+      /* Investigative header (DECK.ui.hud): recording dot, case-file label typed on, timecode or
+         date, and the story's progress on the top edge or under the header. */
+      .hudshade { left: 0; top: 0; width: 1080px; height: 470px; background: linear-gradient(rgba(10,14,26,.8), rgba(10,14,26,0)); display: none; }
+      .hud { position: absolute; left: 72px; right: 72px; top: 222px; height: 46px; display: none; align-items: center; gap: 16px;
+        font-family: "JetBrains Mono", monospace; font-weight: 500; font-size: 28px; letter-spacing: .12em; text-transform: uppercase;
+        color: var(--muted); white-space: nowrap; }
+      .hud .rec { flex: none; width: 18px; height: 18px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 16px 4px rgba(239,68,68,.5); }
+      .hud .rectxt { flex: none; margin-right: 6px; }
+      .hud .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; color: var(--ink); }
+      .hud .meta { flex: none; margin-left: auto; padding-left: 24px; }
+      .hudline { position: absolute; left: 72px; right: 72px; top: 290px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.1); display: none; }
+      .topbar { position: absolute; left: 0; top: 0; width: 1080px; height: 10px; background: rgba(255,255,255,.08); display: none; }
+      .hudline i, .topbar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left center; }
 
       /* Slides live in a clipped content window so transitions never cross the brand
          header, the captions or the handle/progress footer. Heights are set from JS:
@@ -70,6 +91,27 @@
       .credit { font-weight: 500; font-size: 22px; letter-spacing: .04em; color: var(--muted); text-align: right; margin-left: auto; }
 
       .card { background: var(--card); border-left: 10px solid var(--accent); border-radius: 18px; padding: 28px 34px; font-weight: 500; line-height: 1.28; margin-top: 22px; }
+
+      /* Evidence cards: a mono tag (the date, or 01/02/03) over one bold fact. They arrive one at
+         a time; the newest is lit and the earlier ones step back. */
+      .ecards { display: flex; flex-direction: column; gap: 20px; margin-top: 34px; }
+      .ecard { position: relative; background: rgba(255,255,255,.055); border: 2px solid rgba(255,255,255,.07);
+        border-left: 8px solid var(--accent); border-radius: 18px; padding: 20px 30px 22px; }
+      .etag { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 25px; line-height: 1.2; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+      .etxt { font-weight: 700; line-height: 1.24; color: var(--ink); }
+
+      /* Verdict stamp: inked (speckled by a fixed-seed noise mask), slammed onto its evidence. */
+      .stamp { position: absolute; z-index: 4; right: -14px; top: -40px; padding: 8px 24px 12px;
+        border: 6px solid var(--stamp, #F43F5E); border-radius: 12px; color: var(--stamp, #F43F5E); background: rgba(10,14,26,.66);
+        font-family: "Archivo Black", sans-serif; font-size: 50px; line-height: 1; letter-spacing: .02em; text-transform: uppercase;
+        white-space: nowrap; opacity: 0;
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -4 3.05'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -4 3.05'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        -webkit-mask-size: 260px 260px; mask-size: 260px 260px; }
+      .stamp-slot { display: flex; margin-top: 50px; padding-left: 8px; }
+      .stamp.inline { position: relative; right: auto; top: auto; }
+      .srow, .cmp, .vs, .node { position: relative; }
 
       /* Key numbers: one row per stated figure (ring / count-up / shared-scale bar). */
       .stats { display: flex; flex-direction: column; gap: 22px; margin-top: 34px; }
@@ -137,6 +179,17 @@
       #captions { position: absolute; left: 72px; top: 1290px; width: 858px; height: 150px; display: none; }
       .cap { position: absolute; left: 0; right: 0; bottom: 0; font-weight: 700; line-height: 1.24; text-shadow: 0 2px 16px rgba(10,14,26,.9); }
       .cap span { color: rgba(243,245,250,.42); }
+      /* karaoke: a few words at a time in bold capitals, the one being said lit up. */
+      .kchunk { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center; white-space: nowrap; opacity: 0;
+        font-family: "Archivo Black", sans-serif; font-size: 68px; line-height: 1.1; text-transform: uppercase;
+        text-shadow: 0 4px 0 rgba(0,0,0,.55), 0 0 26px rgba(10,14,26,.95); }
+      .kchunk span { color: rgba(243,245,250,.55); }
+      /* pill: the whole line, words arriving as they are said, the key phrase on a highlight pill. */
+      .pcap { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-weight: 700; line-height: 1.42;
+        text-shadow: 0 2px 16px rgba(10,14,26,.9); }
+      .pcap .pw { display: inline-block; opacity: 0; }
+      .pcap .pill { display: inline-block; padding: 0 .28em .04em; border-radius: .24em; background: var(--hl, #FACC15); opacity: 0; }
+      .pcap .pill .pw { color: #0A0E1A; text-shadow: none; }
     </style>
   </head>
   <body>
@@ -148,8 +201,13 @@
         <canvas id="field" width="540" height="960" data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion></canvas>
         <div class="grid" id="grid"></div>
         <div class="vignette"></div>
+        <div class="flood" id="flood" data-layout-allow-overlap></div>
+        <div class="hudshade" id="hudshade" data-layout-allow-overlap></div>
       </div>
-      <div class="brand"><img id="logo" src="assets/logo.png" alt="" /><span id="brandname"></span></div>
+      <div class="brand" id="brand"><img id="logo" src="assets/logo.png" alt="" /><span id="brandname"></span></div>
+      <div class="hud" id="hud" data-layout-allow-overflow><span class="rec" id="rec"></span><span class="rectxt" id="rectxt">REC</span><span class="label" id="hudlabel"></span><span class="meta" id="hudmeta"></span></div>
+      <div class="hudline" id="hudline"><i id="hudprog"></i></div>
+      <div class="topbar" id="topbar"><i id="topprog"></i></div>
       <div id="scenes"></div>
       <div id="captions" data-layout-allow-overlap></div>
       <div class="handle" id="handle"></div>
@@ -162,10 +220,18 @@
           document.fonts.load('400 40px "Archivo Black"'),
           document.fonts.load('500 40px "Inter"'),
           document.fonts.load('700 40px "Inter"'),
+          document.fonts.load('500 40px "JetBrains Mono"'),
+          document.fonts.load('700 40px "JetBrains Mono"'),
         ]);
         const DECK = window.CU_DECK;
         const PHOTO = DECK.photo || null;
         const CAPTIONS = !!DECK.captions;
+        // The configurable look (narovva.motion.style.deck_ui). An empty `ui` is the original
+        // reel: brand header, bottom progress bar, plainly brightening captions, timeline spine.
+        const UI = DECK.ui || {};
+        const HUD = UI.hud || { style: "brand" };
+        const CAP = UI.captions || { style: "brighten" };
+        const PROGRESS = UI.progress || "bottom";
         const OV = 0.3; // scene overlap == the transition (keep in sync with motion/slides.py)
         const LEAD = DECK.voice_lead ?? 0.15; // the voice starts this long after its scene (VOICE_LEAD in motion/slides.py)
         // With captions on, the scene window gives up its bottom strip to them.
@@ -176,6 +242,17 @@
         document.getElementById("handle").textContent = "@" + DECK.handle;
         document.getElementById("scenes").style.height = (CAPTIONS ? 965 : 1130) + "px";
         if (CAPTIONS) document.getElementById("captions").style.display = "block";
+        if (CAP.highlight) document.documentElement.style.setProperty("--hl", CAP.highlight);
+        const show = (id, on, display) => { document.getElementById(id).style.display = on ? (display || "block") : "none"; };
+        const investigative = HUD.style === "case_file" || HUD.style === "breakdown";
+        show("brand", HUD.style === "brand", "flex");
+        show("hud", investigative, "flex");
+        show("hudshade", investigative);
+        show("hudline", investigative && PROGRESS === "hud");
+        show("topbar", PROGRESS === "top");
+        document.querySelector(".progress").style.display = PROGRESS === "bottom" ? "block" : "none";
+        if (UI.grid === false) show("grid", false);
+        if (UI.handle === false) show("handle", false);
 
         const el = (tag, cls, text, parent) => {
           const e = document.createElement(tag);
@@ -189,12 +266,33 @@
           let s = start; node.style.fontSize = s + "px";
           while (node.offsetHeight > maxH && s > min) { s -= 2; node.style.fontSize = s + "px"; }
         };
-        const words = (node, text) => {
-          text.trim().split(/\s+/).forEach((w) => {
+        // Indexes of the tokens that spell `phrase` (whole words, any case, edge punctuation ignored).
+        const norm = (w) => w.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+        const phraseAt = (tokens, phrase) => {
+          const p = String(phrase || "").trim().split(/\s+/).map(norm).filter(Boolean);
+          if (!p.length) return new Set();
+          const t = tokens.map(norm);
+          for (let i = 0; i + p.length <= t.length; i++) {
+            if (p.every((w, j) => t[i + j] === w)) return new Set(p.map((_, j) => i + j));
+          }
+          return new Set();
+        };
+        const words = (node, text, mark) => {
+          const toks = text.trim().split(/\s+/);
+          const marked = phraseAt(toks, mark);
+          toks.forEach((w, j) => {
             const o = el("span", "w", null, node);
             o.setAttribute("data-layout-allow-overflow", ""); o.setAttribute("data-layout-allow-occlusion", "");
-            const i = el("span", /\d/.test(w) ? "num" : null, w, o); // the figures in a headline carry the accent
+            // the figures in a headline, and its key word(s), carry the accent
+            const i = el("span", /\d/.test(w) || marked.has(j) ? "num" : null, w, o);
             i.setAttribute("data-layout-allow-occlusion", "");
+          });
+        };
+        // Body text with its figures in the accent colour.
+        const figures = (node, text) => {
+          String(text || "").split(/(\s+)/).forEach((part) => {
+            if (/\d/.test(part)) el("span", "acc", part, node);
+            else node.appendChild(document.createTextNode(part));
           });
         };
 
@@ -205,14 +303,38 @@
         let t = 0;
         const starts = slides.map((s) => { const st = t; t += s.duration - OV; return st; });
         const total = starts.length ? starts[starts.length - 1] + slides[slides.length - 1].duration : 1;
-        const opener = slides.findIndex((s) => s.kind === "hook" || s.kind === "hero");
+        const opener = slides.findIndex((s) => s.kind === "hook" || s.kind === "hero" || s.kind === "headline");
         const closer = slides.findIndex((s) => s.kind === "conclusion");
 
         // Ambient + global progress across the whole reel.
         tl.fromTo("#glow", { x: -80, y: 40, scale: 0.9 }, { x: 80, y: -60, scale: 1.12, duration: total, ease: "sine.inOut" }, 0);
         tl.fromTo("#grid", { y: 0 }, { y: 180, duration: total, ease: "none" }, 0);
         tl.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
+        tl.fromTo("#hudprog", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
+        tl.fromTo("#topprog", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
         tl.from(".brand", { opacity: 0, x: -30, duration: 0.25, ease: "power4.out" }, 0);
+
+        // The header: the label types itself on, the REC dot blinks once a second, and the
+        // right-hand side runs a 30 fps timecode (painted from timeline time) or shows the date.
+        let tcEl = null;
+        if (investigative) {
+          if (!HUD.rec) { show("rec", false); show("rectxt", false); }
+          if (HUD.style !== "case_file") show("rectxt", false);
+          const label = document.getElementById("hudlabel");
+          const glyphs = [...(HUD.label || "")].map((ch) => el("span", null, ch, label));
+          const per = Math.min(0.03, 0.6 / Math.max(glyphs.length, 1));
+          glyphs.forEach((g, j) => tl.fromTo(g, { opacity: 0 }, { opacity: 1, duration: 0.01, ease: "none" }, 0.08 + j * per));
+          const meta = document.getElementById("hudmeta");
+          if (HUD.meta === "timecode") tcEl = meta;
+          else if (HUD.meta === "date") meta.textContent = HUD.date || "";
+          tl.fromTo(meta, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 0.1);
+          if (HUD.rec) tl.fromTo("#rec", { opacity: 1 }, { opacity: 0.15, duration: 0.5, ease: "steps(1)", repeat: Math.ceil(total / 0.5), yoyo: true }, 0);
+        }
+        const pad2 = (n) => String(n).padStart(2, "0");
+        const timecode = (sec) => {
+          const f = Math.floor(sec * 30 + 1e-6);
+          return [Math.floor(f / 108000), Math.floor(f / 1800) % 60, Math.floor(f / 30) % 60, f % 30].map(pad2).join(":");
+        };
 
         // The generative field is redrawn from timeline time alone, so any frame can
         // be reached in any order (see ambient.js). No film grain on top of it: noise
@@ -221,7 +343,7 @@
           seed: DECK.seed, accent: DECK.accent, cuts: starts, dim: PHOTO ? 0.75 : 1,
         });
         const clock = { t: 0 };
-        const paint = () => drawField(clock.t);
+        const paint = () => { drawField(clock.t); if (tcEl) tcEl.textContent = timecode(clock.t); };
         tl.fromTo(clock, { t: 0 }, { t: total, duration: total, ease: "none", onUpdate: paint }, 0);
         paint();
 
@@ -231,7 +353,8 @@
           const atmo = document.getElementById("atmo");
           const atmoImg = image(PHOTO.bg, atmo);
           document.getElementById("glow").style.opacity = ".14";
-          const LEVEL = { hook: 0.95, hero: 0.95, text: 0.75, conclusion: 0.85, quote: 0.75, evidence: 0.55, why: 0.75, impact: 0.55, bigger_picture: 0.85, scream: 0.45, cta: 0.8 };
+          const LEVEL = { hook: 0.95, hero: 0.95, text: 0.75, conclusion: 0.85, quote: 0.75, evidence: 0.55, why: 0.75, impact: 0.55, bigger_picture: 0.85, scream: 0.45, cta: 0.8,
+            headline: 0.9, question: 0.6, number: 0.4, dates: 0.5, chain: 0.4, grid: 0.4, cards: 0.5, split: 0.45, excerpt: 0.6, terminal: 0.35, checklist: 0.7, endcard: 0.8 };
           let prev = 0;
           slides.forEach((s, i) => {
             const v = LEVEL[s.kind] == null ? 0.42 : LEVEL[s.kind];
@@ -257,12 +380,12 @@
         const stag = (n, per) => Math.min(per, 0.35 / Math.max(n, 1));
         const B = {};
         const kick = (sc, s) => (s.kicker ? el("div", "kicker", s.kicker, sc) : null);
-        const heading = (sc, text, size, maxH) => {
+        const heading = (sc, text, size, maxH, mark) => {
           if (!text) return null;
-          const h = el("h1", "h", null, sc); words(h, text); fit(h, maxH, size, 44);
+          const h = el("h1", "h", null, sc); words(h, text, mark); fit(h, maxH, size, 44);
           return h;
         };
-        const head = (sc, s, size, maxH) => { kick(sc, s); return heading(sc, s.heading, size, maxH); };
+        const head = (sc, s, size, maxH) => { kick(sc, s); return heading(sc, s.heading, size, maxH, s.hmark); };
         const introHead = (sc, a, D, slam) => {
           const k = sc.querySelector(".kicker");
           // immediateRender:false keeps elements at their CSS position at t=0 so
@@ -290,6 +413,39 @@
         const reveal = (frame, img, c, from, to) => {
           tl.fromTo(frame, { clipPath: "inset(0% 100% 0% 0% round 28px)" }, { clipPath: "inset(0% 0% 0% 0% round 28px)", duration: c.D(0.45), ease: "expo.out" }, c.a(0));
           tl.fromTo(img, { scale: from, xPercent: -1.5 }, { scale: to, xPercent: 1.5, duration: c.dur, ease: "none" }, c.t0);
+        };
+        // Evidence cards, built one at a time across the first half of the scene: each new card
+        // lands lit while the ones before it step back. A stamp, if the scene has one, hits the last.
+        const cards = (sc, items, c) => {
+          const { a, D } = c;
+          const box = el("div", "ecards", null, sc);
+          const n = items.length;
+          const size = n > 3 ? 34 : n > 2 ? 38 : 42;
+          const gap = n > 1 ? Math.min(0.7, Math.max(0.18, ((c.dur - OV) * 0.45) / (n - 1))) : 0;
+          let prev = null, at = a(0.15);
+          items.forEach((it, i) => {
+            const card = el("div", "ecard", null, box);
+            if (it.tag) el("div", "etag", it.tag, card);
+            const tx = el("div", "etxt", null, card); tx.style.fontSize = size + "px";
+            figures(tx, it.text);
+            at = a(0.15) + i * gap;
+            tl.fromTo(card, { opacity: 0, y: 46 }, { opacity: 1, y: 0, duration: D(0.26), ease: "power4.out" }, at);
+            if (prev) tl.fromTo(prev, { opacity: 1 }, { opacity: 0.55, duration: 0.2, ease: "power2.out", immediateRender: false }, at);
+            prev = card;
+          });
+          c.stampTarget = prev; c.stampAt = at + 0.45;
+        };
+        // The verdict stamp: slammed down (oversized, tilted, fast) onto its target -- the last
+        // evidence card, the key number -- or under the headline, and the scene jolts as it lands.
+        const stampIn = (inner, s, c) => {
+          if (!s.stamp || !s.stamp.text) return;
+          const host = c.stampTarget || el("div", "stamp-slot", null, inner);
+          const st = el("div", "stamp" + (c.stampTarget ? "" : " inline"), s.stamp.text, host);
+          st.style.setProperty("--stamp", s.stamp.color || "#F43F5E");
+          const earliest = c.a(0.35), latest = c.t0 + c.dur - OV - 0.6;
+          const T = Math.max(earliest, Math.min(c.stampAt != null ? c.stampAt : c.a(0.6), latest));
+          tl.fromTo(st, { opacity: 0, scale: 2.5, rotation: -18 }, { opacity: 1, scale: 1, rotation: -7, duration: 0.17, ease: "power4.in" }, T);
+          tl.fromTo(inner, { x: 16 }, { x: 0, duration: 0.45, ease: "elastic.out(1, 0.3)", immediateRender: false }, T + 0.17);
         };
 
         B.hook = B.hero = (sc, s, c) => {
@@ -340,12 +496,8 @@
           const { a, D } = c;
           head(sc, s, 80, mh(260)); introHead(sc, a, D);
           const facts = (s.facts || []).slice(0, 4);
-          const size = facts.length > 3 ? 36 : 42;
-          facts.forEach((f, i) => {
-            const card = el("div", "card", f, sc); card.style.fontSize = size + "px";
-            tl.from(card, { opacity: 0, x: -70, duration: D(0.24), ease: "power4.out" }, a(0.18 + i * stag(facts.length, 0.12)));
-          });
-          if (!facts.length) bodyIn(sc, s, a, D, 44, mh(460), 0.28);
+          if (facts.length) cards(sc, facts.map((f, i) => ({ tag: String(i + 1).padStart(2, "0"), text: f })), c);
+          else bodyIn(sc, s, a, D, 44, mh(460), 0.28);
         };
         B.stats = (sc, s, c) => {
           const { a, D } = c;
@@ -372,11 +524,13 @@
             }
             tl.fromTo(row, { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: D(0.26), ease: "power4.out" }, at);
           });
+          c.stampTarget = box.firstChild; c.stampAt = a(0.16) + D(0.6) + 0.2; // once the first number has counted up
         };
         B.timeline = (sc, s, c) => {
           const { a, D } = c;
           head(sc, s, 68, mh(200)); introHead(sc, a, D);
           const evs = (s.timeline || []).slice(0, 4);
+          if (UI.timeline === "cards") { cards(sc, evs.map((e) => ({ tag: e.when, text: e.what })), c); return; }
           const box = el("div", "tl", null, sc);
           const line = el("div", "line", null, box);
           const rows = evs.map((e) => {
@@ -396,6 +550,7 @@
             const at = t1 + run * Math.min(1, row.offsetTop / H);
             tl.fromTo(row, { opacity: 0, x: 50 }, { opacity: 1, x: 0, duration: D(0.22), ease: "power4.out" }, at);
           });
+          c.stampAt = t1 + run + 0.25; // under the spine: its rows run full width, a stamp on one would cover text
         };
         B.money_flow = (sc, s, c) => {
           const { a, D } = c;
@@ -419,6 +574,7 @@
             el("div", "actor", st.actor, n).style.fontSize = (steps.length > 3 ? 36 : 44) + "px";
             if (st.detail) el("div", "detail", st.detail, n).style.fontSize = "28px";
             tl.from(n, { opacity: 0, scale: 0.88, duration: D(0.22), ease: "back.out(1.8)" }, at);
+            c.stampTarget = n; c.stampAt = at + 0.4;
           });
           sc.querySelectorAll(".pulse").forEach((p) => tl.set(p, { opacity: 0 }, 0));
         };
@@ -435,6 +591,7 @@
               el("div", "lab", lab, side).style.fontSize = "28px";
               tl.from(side, { opacity: 0, y: 50, duration: D(0.26), ease: "power4.out" }, a(0.1 + i * 0.1));
             });
+            c.stampTarget = vs; c.stampAt = a(0.5);
             return;
           }
           const wrap = el("div", "cmp", null, sc);
@@ -454,6 +611,7 @@
             const d = el("div", "delta", v.delta, sc);
             tl.fromTo(d, { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: D(0.3), ease: "back.out(2.4)" }, a(0.62));
           }
+          c.stampTarget = wrap; c.stampAt = a(0.28) + D(0.6) + 0.15; // once both bars have grown
         };
         B.quote = (sc, s, c) => {
           const { a, D } = c;
@@ -500,6 +658,12 @@
         B.why = B.bigger_picture = B.text;
         B.impact = B.evidence;
         B.scream = B.stats;
+        // The explainer storyboard's scenes (scenes.js): date tracks, chains, grids, numbers...
+        Object.assign(B, window.CUScenes({
+          tl, el, image, fit, words, figures, phraseAt, heading, kick, introHead, barIn, V, mh, SH, OV, PHOTO, UI, DECK, opener,
+        }));
+        // Headline numbers sit on a full-frame accent wash (unless they are falling, which reads red on dark).
+        const flooded = slides.map((s) => UI.flood !== false && s.kind === "number" && !(s.data && s.data.down));
 
         const scs = slides.map((s, i) => {
           const sc = el("div", "scene", null, scenesEl); sc.setAttribute("data-layout-allow-overlap", ""); sc.setAttribute("data-layout-allow-overflow", "");
@@ -508,37 +672,119 @@
           const dur = s.duration, t0 = starts[i];
           const k = Math.min(1, Math.max(0.5, (dur - OV - 0.2) / 1.0));
           const a = (x) => t0 + x * k, D = (x) => x * k;
-          (B[s.kind] || B.text)(inner, s, { a, D, t0, dur, i });
+          const c = { a, D, t0, dur, i };
+          if (flooded[i]) sc.classList.add("flooded");
+          (B[s.kind] || B.text)(inner, s, c);
+          stampIn(inner, s, c);
           // Safety net: content taller than the window is scaled to fit rather than clipped.
-          const over = inner.scrollHeight / SH;
+          // (Layout height, not scrollHeight: the entrance transforms -- a stamp at 2.5x, cards
+          // offset below their place -- would otherwise count as overflow.)
+          const over = inner.offsetHeight / SH;
           if (over > 1) gsap.set(inner, { scale: 1 / over, transformOrigin: "left center" });
-          // Nothing on screen is ever perfectly still: a held scene keeps drifting upward.
+          // Nothing on screen is ever perfectly still: a held scene keeps drifting upward while
+          // the camera pushes in a touch.
           tl.fromTo(inner, { y: 7 }, { y: -7, duration: dur, ease: "none" }, t0);
+          if (over <= 1) {
+            gsap.set(inner, { transformOrigin: "50% 50%" });
+            tl.fromTo(inner, { scale: 1 }, { scale: 1.035, duration: dur, ease: "none" }, t0);
+          }
           return sc;
         });
+        let floodWas = 0;
+        slides.forEach((s, i) => {
+          const v = flooded[i] ? 0.95 : 0;
+          if (v !== floodWas) tl.fromTo("#flood", { opacity: floodWas }, { opacity: v, duration: OV, ease: "power2.out", immediateRender: false }, starts[i]);
+          floodWas = v;
+        });
 
-        // Captions: one line per narrated scene, each word brightening as it is spoken
-        // (timed across the clip in proportion to word length).
+        // Captions: one line per narrated scene. Each word gets a time across the spoken clip in
+        // proportion to its length; the style (DECK.ui.captions) decides what happens at that time.
+        const brighten = (box, toks, at, end, appear) => {
+          const cap = el("div", "cap", null, box);
+          const spans = toks.map((w) => el("span", null, w + " ", cap));
+          fit(cap, 150, 42, 28);
+          spans.forEach((sp, j) => tl.fromTo(sp, { color: "rgba(243,245,250,.42)" }, { color: "rgba(243,245,250,1)", duration: 0.09, ease: "none" }, at[j]));
+          tl.fromTo(cap, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.18, ease: "power3.out" }, appear);
+          tl.fromTo(cap, { opacity: 1 }, { opacity: 0, duration: 0.1, ease: "power2.in", immediateRender: false }, end);
+        };
+        // karaoke: a few words at a time (a chunk also ends at punctuation); within a chunk the
+        // word being said is lit, the ones said are white and the ones coming are dimmed.
+        const karaoke = (box, toks, at, end) => {
+          const N = Math.max(1, CAP.chunk || 3);
+          const groups = [];
+          let cur = [];
+          toks.forEach((w, j) => {
+            cur.push(j);
+            if (cur.length >= N || /[,.;:!?…]$/.test(w)) { groups.push(cur); cur = []; }
+          });
+          if (cur.length) {
+            const prev = groups[groups.length - 1];
+            // A lone last word rides with the chunk before it rather than flashing up alone.
+            if (cur.length === 1 && prev && prev.length <= N && !/[.!?…]$/.test(toks[prev[prev.length - 1]])) prev.push(...cur);
+            else groups.push(cur);
+          }
+          const HL = CAP.highlight || "#FACC15", UP = "rgba(243,245,250,.55)", DONE = "rgba(243,245,250,1)";
+          groups.forEach((g, gi) => {
+            const chunk = el("div", "kchunk", null, box);
+            const spans = g.map((j, k) => {
+              // Big capitals read cleaner without commas and full stops (? and ! carry tone, so stay).
+              const sp = el("span", null, toks[j].replace(/[,.;:]+$/, "") || toks[j], chunk);
+              if (k < g.length - 1) chunk.appendChild(document.createTextNode(" "));
+              return sp;
+            });
+            let size = 68;
+            chunk.style.fontSize = size + "px";
+            while (chunk.scrollWidth > 858 && size > 40) { size -= 3; chunk.style.fontSize = size + "px"; }
+            const from = at[g[0]] - 0.05;
+            const to = gi + 1 < groups.length ? at[groups[gi + 1][0]] - 0.05 : end;
+            tl.fromTo(chunk, { opacity: 0, scale: 0.86, y: 10 }, { opacity: 1, scale: 1, y: 0, duration: 0.12, ease: "back.out(2.2)" }, from);
+            tl.fromTo(chunk, { opacity: 1 }, { opacity: 0, duration: 0.05, ease: "none", immediateRender: false }, Math.max(from + 0.12, to));
+            spans.forEach((sp, k) => {
+              tl.fromTo(sp, { color: UP }, { color: HL, duration: 0.05, ease: "none" }, at[g[k]]);
+              if (k + 1 < spans.length) tl.fromTo(sp, { color: HL }, { color: DONE, duration: 0.08, ease: "none", immediateRender: false }, at[g[k + 1]]);
+            });
+          });
+        };
+        // pill: the whole line, each word arriving as it is said; the key phrase (s.cmark) sits
+        // on a highlight pill that pops when its first word is spoken.
+        const pill = (box, toks, at, end, mark, appear) => {
+          const line = el("div", "pcap", null, box);
+          const marked = phraseAt(toks, mark);
+          let pillEl = null;
+          const spans = toks.map((w, j) => {
+            if (marked.has(j) && !pillEl) pillEl = el("span", "pill", null, line);
+            const endsPill = marked.has(j) && !marked.has(j + 1);
+            // Punctuation after the key phrase sits outside the pill.
+            const tail = endsPill ? (w.match(/[,.;:!?…]+$/) || [""])[0] : "";
+            const sp = [el("span", "pw", tail ? w.slice(0, -tail.length) : w, marked.has(j) ? pillEl : line)];
+            if (tail) sp.push(el("span", "pw", tail, line));
+            if (j < toks.length - 1) (marked.has(j) && marked.has(j + 1) ? pillEl : line).appendChild(document.createTextNode(" "));
+            return sp;
+          });
+          fit(line, 150, 46, 30);
+          tl.fromTo(line, { opacity: 0 }, { opacity: 1, duration: 0.1, ease: "none" }, appear);
+          spans.forEach((sp, j) => tl.fromTo(sp, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.12, ease: "power3.out" }, at[j]));
+          if (pillEl) tl.fromTo(pillEl, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.16, ease: "back.out(2.6)" }, at[Math.min(...marked)]);
+          tl.fromTo(line, { opacity: 1 }, { opacity: 0, duration: 0.1, ease: "power2.in", immediateRender: false }, end);
+        };
         if (CAPTIONS) {
           const capBox = document.getElementById("captions");
           slides.forEach((s, i) => {
-            if (!s.caption) return;
-            const cap = el("div", "cap", null, capBox);
-            const spans = s.caption.trim().split(/\s+/).map((w) => el("span", null, w + " ", cap));
-            fit(cap, 150, 42, 28);
-            const t0 = starts[i], voice = s.voice || Math.max(0.6, s.duration - 2 * LEAD);
-            const chars = spans.reduce((n, sp) => n + sp.textContent.length, 0);
-            let done = 0;
-            spans.forEach((sp) => {
-              tl.fromTo(sp, { color: "rgba(243,245,250,.42)" }, { color: "rgba(243,245,250,1)", duration: 0.09, ease: "none" }, t0 + LEAD + voice * (done / chars));
-              done += sp.textContent.length;
+            const parts = (s.parts || []).filter((p) => p.caption);
+            parts.forEach((p, j) => {
+              const t0 = starts[i] + p.at; // this line starts being spoken
+              const toks = p.caption.trim().split(/\s+/);
+              const chars = toks.reduce((n, w) => n + w.length + 1, 0);
+              let done = 0;
+              const at = toks.map((w) => { const tw = t0 + p.voice * (done / chars); done += w.length + 1; return tw; });
+              // Leave once the line is spoken, before the next line (or the next scene's) arrives.
+              const last = i === slides.length - 1 && j === parts.length - 1;
+              const next = j + 1 < parts.length ? starts[i] + parts[j + 1].at - 0.1 : starts[i] + s.duration - OV - 0.04;
+              const end = last ? starts[i] + s.duration - 0.25 : Math.max(t0 + 0.3, Math.min(t0 + p.voice + 0.12, next));
+              if (CAP.style === "karaoke") karaoke(capBox, toks, at, end);
+              else if (CAP.style === "pill") pill(capBox, toks, at, end, p.cmark, t0 - 0.09);
+              else brighten(capBox, toks, at, end, t0 - 0.09);
             });
-            tl.fromTo(cap, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.18, ease: "power3.out" }, t0 + 0.06);
-            const last = i === slides.length - 1;
-            // Leave once the line is spoken, but before the next scene's caption arrives.
-            const nextIn = t0 + s.duration - OV + 0.06;
-            const fadeAt = last ? t0 + s.duration - 0.25 : Math.min(t0 + LEAD + voice, nextIn - 0.1);
-            tl.fromTo(cap, { opacity: 1 }, { opacity: 0, duration: 0.1, ease: "power2.in", immediateRender: false }, fadeAt);
           });
         }
 

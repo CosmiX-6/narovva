@@ -186,6 +186,90 @@ class FocusConfig(BaseModel):
     extra_hashtags: list[str] | None = None
 
 
+class HudConfig(BaseModel):
+    """The header across the top of a motion reel."""
+
+    # case_file: "● REC  CASE FILE: STARLINK ........ 00:00:04:29", progress bar on the top edge.
+    # breakdown: "● STARLINK BREAKDOWN ........ 24 OCT 2026", progress line under it.
+    # brand: the channel logo and name (the original header). none: no header.
+    style: Literal["case_file", "breakdown", "brand", "none"] = "case_file"
+    # Header text; unset = the style's own. Placeholders: {subject} (what the story is
+    # about in 1-3 words, chosen by the script writer, else the brief's main entity,
+    # else the category), {category}, {brand}, {date}. Always shown in capitals.
+    label: str | None = None
+    # Right-hand side: a running timecode, the story's date, or nothing. Unset = the style's own.
+    meta: Literal["timecode", "date", "none"] | None = None
+    # The blinking red recording dot before the label.
+    rec_dot: bool = True
+
+
+class MotionCaptionStyle(BaseModel):
+    """How the burned-in voice-over captions look (switched on/off by narration.captions)."""
+
+    # karaoke: a few words at a time in bold capitals, the word being spoken lit in `highlight`.
+    # pill: the whole line, words appearing as they are said, the key phrase on a `highlight` pill.
+    # brighten: the whole line, each word brightening as it is said.
+    style: Literal["karaoke", "pill", "brighten"] = "karaoke"
+    highlight: str = "#FACC15"
+    # karaoke only: most words on screen at once (a chunk also ends at punctuation).
+    chunk_words: int = Field(3, ge=1, le=6)
+
+
+class StampConfig(BaseModel):
+    """Verdict stamps ("BLOCKED", "FALSE", "-20%") slammed onto the evidence. The
+    script writer proposes them only where a slide's own data supports one, and
+    any number in a stamp must appear in that slide's data."""
+
+    enabled: bool = True
+    max_per_reel: int = Field(3, ge=0, le=8)
+    negative_color: str = "#F43F5E"
+    positive_color: str = "#22C55E"
+    neutral_color: str = "#FACC15"
+
+
+class StoryConfig(BaseModel):
+    """How the motion reel tells the story."""
+
+    # storyboard: the script writer directs a purpose-built explainer -- beats of date
+    # tracks, cause-and-effect chains, grids, numbers and quotes that build in sync with
+    # the voice (hook, context, what happened, fallout, verdict, follow). Falls back to
+    # "slides" when its reply doesn't validate.
+    # slides: re-animate poster-core's carousel slides, one spoken line each.
+    mode: Literal["storyboard", "slides"] = "storyboard"
+    max_beats: int = Field(10, ge=5, le=14)
+    # Length the writer aims for (Instagram accepts much longer Reels).
+    target_seconds: int = Field(45, ge=20, le=90)
+    # A full-frame accent wash behind headline numbers, for rhythm between dark scenes.
+    flood: bool = True
+
+
+class MotionStyleConfig(BaseModel):
+    """Look of the motion reel ("motion_reel" format); every part can be switched off."""
+
+    story: StoryConfig = Field(default_factory=StoryConfig)
+    hud: HudConfig = Field(default_factory=HudConfig)
+    # Story progress: on the top edge, under the header, above the footer, or hidden.
+    # auto = top for case_file, hud for breakdown, bottom otherwise.
+    progress: Literal["auto", "top", "hud", "bottom", "none"] = "auto"
+    captions: MotionCaptionStyle = Field(default_factory=MotionCaptionStyle)
+    stamps: StampConfig = Field(default_factory=StampConfig)
+    # cards: dated evidence cards that build up one by one (newest lit, earlier ones dimmed).
+    # spine: a vertical line with a travelling dot.
+    timeline: Literal["cards", "spine"] = "cards"
+    # Colour the key word(s) of each headline (chosen by the script writer); figures always are.
+    heading_marks: bool = True
+    grid: bool = True
+    show_handle: bool = True
+
+    @property
+    def wants_direction(self) -> bool:
+        """True if the look needs the script writer's direction even without a voice-over."""
+        label = self.hud.label or ""
+        return (self.stamps.enabled and self.stamps.max_per_reel > 0) or self.heading_marks or (
+            self.hud.style in ("case_file", "breakdown") and (not label or "{subject}" in label)
+        )
+
+
 class ChannelConfig(BaseModel):
     id: str
     enabled: bool = True
@@ -219,6 +303,8 @@ class ChannelConfig(BaseModel):
     viral: ViralConfig | None = None
     # Temporary editorial focus (e.g. "AI for practitioners"); see FocusConfig.
     focus: FocusConfig | None = None
+    # Look of "motion_reel": header, captions, stamps, evidence cards (ignored by other formats).
+    motion: MotionStyleConfig = Field(default_factory=MotionStyleConfig)
 
     @property
     def focus_on(self) -> bool:

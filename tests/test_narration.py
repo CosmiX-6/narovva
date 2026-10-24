@@ -10,7 +10,7 @@ import wave
 import pytest
 from poster_core.models import AssetPlan, AssetType, ContentBrief, DeckSlide, GeneratedAsset, Platform, SlideKind
 
-from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting, NarrationConfig
+from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting, MotionStyleConfig, NarrationConfig
 from narovva.motion.render import _probe_duration
 from narovva.narration import (
     NarrationError, build_provider, choose_voice, default_voices, mix_voice_and_music,
@@ -84,17 +84,69 @@ SPECS = [
 
 def test_write_script_uses_llm_lines_and_sends_slide_data():
     llm = _LLM(["Hook line?", "Numbers line.", "Follow us."])
-    assert write_script(llm, _brief(), SPECS, brand="CU") == ["Hook line?", "Numbers line.", "Follow us."]
+    assert write_script(llm, _brief(), SPECS, brand="CU").lines == ["Hook line?", "Numbers line.", "Follow us."]
     assert "67% cheaper" in llm.seen[1] and "EXACTLY one line per slide" in llm.seen[0]
+    assert '"stamps"' not in llm.seen[0]                       # not asked for unless wanted
+    write_script(llm, _brief(), SPECS, brand="CU", max_stamps=2)
+    assert '"stamps"' in llm.seen[0] and "at most 2 stamps" in llm.seen[0]
 
 
 def test_write_script_replaces_bad_lines_and_survives_llm_failure():
     too_long = " ".join(["word"] * 40)
-    out = write_script(_LLM([too_long, "", "ok"]), _brief(), SPECS, brand="Context Unfiltered")
+    out = write_script(_LLM([too_long, "", "ok"]), _brief(), SPECS, brand="Context Unfiltered").lines
     assert out[0] == "Chips just got cheaper." and out[1] == "The numbers." and out[2] == "ok"
     out = write_script(_LLM(boom=True), _brief(), SPECS, brand="Context Unfiltered")
-    assert len(out) == 3 and "Context Unfiltered" in out[2]
-    assert len(write_script(_LLM(["only one"]), _brief(), SPECS, brand="CU")) == 3
+    assert len(out.lines) == len(out.screen) == len(out.stamps) == 3 and "Context Unfiltered" in out.lines[2]
+    assert out.subject is None and out.stamps == [None, None, None]
+    assert len(write_script(_LLM(["only one"]), _brief(), SPECS, brand="CU").lines) == 3
+
+
+class _Director:
+    """An LLM that returns a full script with on-screen direction."""
+
+    def __init__(self, **extra):
+        self.reply = {"lines": ["Why now?", "Sixty-seven percent cheaper, overnight.", "Follow CU."], **extra}
+
+    def complete_json(self, system, user):
+        return self.reply
+
+
+def test_direction_is_kept_when_it_checks_out():
+    llm = _Director(
+        screen=["Why now?", "67% cheaper, overnight.", "Follow CU."],
+        marks=[{"line": "now"}, {"line": "67%", "heading": "numbers"}, {"line": "cu"}],
+        subject="chip prices",
+        stamps=[None, {"text": "-67%", "tone": "negative"}, None],
+    )
+    script = write_script(llm, _brief(), SPECS, brand="CU", max_stamps=3)
+    assert script.subject == "CHIP PRICES"
+    assert script.screen[1] == "67% cheaper, overnight."       # digits on screen, words in the voice
+    assert script.line_marks[1] == "67%" and script.heading_marks[1] == "numbers"
+    assert script.line_marks[2] == "CU"                        # as written in the caption
+    assert script.stamps == [None, {"text": "-67%", "tone": "negative"}, None]
+
+
+def test_direction_never_invents_a_number_or_stamps_the_ends():
+    llm = _Director(
+        screen=["Why now?", "90% cheaper, overnight.", "Follow CU."],           # 90 is not in the slide
+        marks=[{"line": "not in the line"}, {"heading": "three words here"}, "Follow"],
+        subject="a subject far too long to fit the header",
+        stamps=[{"text": "HOOKED"}, {"text": "DOWN 90%", "tone": "negative"}, {"text": "FOLLOW"}],
+    )
+    script = write_script(llm, _brief(), SPECS, brand="CU", max_stamps=3)
+    assert script.screen[1] == "Sixty-seven percent cheaper, overnight."      # the spoken line instead
+    assert script.stamps == [None, None, None]                                # ends never; 90% ungrounded
+    assert script.subject is None and script.heading_marks[1] is None
+    assert script.line_marks[0] != "not in the line" and script.line_marks[2] == "Follow"
+
+
+def test_stamps_are_capped_and_unknown_tones_default_to_negative():
+    specs = [{"kind": "hook", "heading": "H"}] + [{"kind": "evidence", "facts": ["Banned"]}] * 3 + [{"kind": "cta"}]
+    llm = _Director(lines=["a b"] * 5, stamps=[None] + [{"text": "BANNED", "tone": "loud"}] * 3 + [None])
+    script = write_script(llm, _brief(), specs, brand="CU", max_stamps=2)
+    assert [st and st["text"] for st in script.stamps] == [None, "BANNED", "BANNED", None, None]
+    assert script.stamps[1]["tone"] == "negative"
+    assert write_script(llm, _brief(), specs, brand="CU", max_stamps=0).stamps == [None] * 5
 
 
 # -- providers --------------------------------------------------------------
@@ -206,6 +258,7 @@ def _channel(**kw):
         id="c", ig_business_account_id="1", genres=[GenreSetting(genre="tech")],
         brand=BrandKitConfig(name="Context Unfiltered", social_handle="cu", logo_path="assets/logo/CU.png"),
         publish_format="motion_reel", narration=NarrationConfig(provider="openai", voices=["v1", "v2"]),
+        motion=MotionStyleConfig.model_validate({"story": {"mode": "slides"}}),  # these test the slide-based reel
     )
     base.update(kw)
     return ChannelConfig(**base)
@@ -243,8 +296,9 @@ def test_narrated_reel_uses_unused_voice_and_speech_sets_durations(monkeypatch):
     assert [round(s["duration"], 2) for s in captured["specs"]] == [1.84, 1.84, 1.84]  # 1.5 s voice sped up 1.08x = 1.39 s, + 0.15 lead + 0.3 tail
     assert len(captured["audio"]) > 1000
     # each slide carries its spoken line and how long it takes to say, for the burned-in captions
-    assert [s["caption"] for s in captured["specs"]] == ["One.", "Two.", "Three."]
-    assert all(s["voice"] == pytest.approx(1.5 / 1.08, abs=0.1) for s in captured["specs"])
+    assert [s["parts"][0]["caption"] for s in captured["specs"]] == ["One.", "Two.", "Three."]
+    assert all(s["parts"][0]["voice"] == pytest.approx(1.5 / 1.08, abs=0.1) for s in captured["specs"])
+    assert all(s["parts"][0]["at"] == pytest.approx(0.15) for s in captured["specs"])
 
 
 def test_captions_can_be_switched_off(monkeypatch):
@@ -254,7 +308,8 @@ def test_captions_can_be_switched_off(monkeypatch):
     monkeypatch.setattr(rc, "render_motion_reel", lambda specs, audio, out, **kw: (captured.update(specs=specs), out)[1])
     channel = _channel(narration=NarrationConfig(provider="openai", voices=["v1"], captions=False))
     path, voice = rc._try_motion_reel(channel, [_asset(2)], _brief(), _Track(), "/tmp/o.mp4", llm=_LLM(["One.", "Two."]), seed="s")
-    assert voice == "v1" and not any("caption" in s for s in captured["specs"])
+    assert voice == "v1" and not any(p.get("caption") for s in captured["specs"] for p in s["parts"])
+    assert all(s["parts"] for s in captured["specs"])                 # the timing stays, for the builds
 
 
 def test_narration_failure_degrades_to_music_only(monkeypatch):
@@ -271,7 +326,7 @@ def test_narration_failure_degrades_to_music_only(monkeypatch):
     assert path == "/tmp/o.mp4" and voice is None
     assert captured["audio"] == track.audio_bytes                      # untouched music bed
     assert all(1.7 <= s["duration"] <= 3.6 for s in captured["specs"])  # brisk timing restored
-    assert not any("caption" in s for s in captured["specs"])           # no voice, so nothing to caption
+    assert not any(s.get("parts") for s in captured["specs"])           # no voice, so nothing to caption
 
 
 def test_no_narration_config_means_no_tts(monkeypatch):
@@ -447,7 +502,7 @@ def test_script_never_produces_an_unspeakable_line():
         {"kind": "cta", "heading": "Follow"},
     ]
     brief = type("B", (), {"tone": "neutral", "headline": "h", "summary": "s"})()
-    lines = write_script(_LLM(), brief, specs, brand="Context Unfiltered")
+    lines = write_script(_LLM(), brief, specs, brand="Context Unfiltered").lines
     assert len(lines) == 4 and all(speakable(line) for line in lines)
     assert lines[0] == "67% cheaper." and lines[1] == "Here's what the evidence shows."
     assert lines[3] == "Real line about prices." or lines[3].startswith("Follow")

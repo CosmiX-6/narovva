@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from info_snipe import NewsAPISource, NewsFetcher, RSSSource
@@ -22,8 +23,9 @@ from ..db.repo import Repo
 from ..dedup import get_store_for_channel
 from ..imagehost import ImageHostError, VercelBlobImageHost
 from ..motion import render_motion_reel, slide_specs_from_assets, total_duration
-from ..motion.slides import SCENE_OVERLAP_SECONDS, VOICE_LEAD, _trim, motion_duration
-from ..narration.script import caption_text
+from ..motion.slides import SCENE_OVERLAP_SECONDS, _trim, time_parts
+from ..motion.storyboard import BEAT_MIN, BEAT_TAIL, beat_specs, hook_board, write_storyboard
+from ..motion.style import category_label, deck_ui, direct_scenes, stamp_colors, story_subject
 from ..narration import (
     build_provider, choose_voice, default_voices, mix_voice_and_music, style_for_tone,
     synthesize_lines, write_script,
@@ -303,6 +305,7 @@ def _process_one(
                 video_path, narration_voice = _try_motion_reel(
                     channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
                     llm=llm, recent_voices=recent_voices, seed=article.content_id, hook=hook,
+                    when=article.published_at, article=article_full,
                 )
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
                 video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
@@ -395,10 +398,14 @@ def _preflight_token(channel: ChannelConfig) -> None:
     check_token(get_valid_token(channel))
 
 
-def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed, hook=None):
-    """Voice-over: script -> TTS (a voice not used recently) -> durations that
-    follow the speech -> music ducked under the voice. Tries the configured
-    provider, then each fallback. Returns (mixed_audio, voice)."""
+def _narrate(channel, brief, specs, track, *, recent_voices, seed, **timing):
+    """Voice-over for specs that carry `lines` (one to three spoken lines
+    each): one TTS clip per scene in a voice not used recently (a scene's
+    lines read as one passage, which sounds natural and keeps requests to
+    one per scene) -> each line's share of the clip by length -> every scene
+    timed to its speech (`time_parts`, so captions and builds follow the
+    voice) -> music ducked under the voice. Tries the configured provider,
+    then each fallback. Returns (mixed_audio, voice)."""
     cfg = channel.narration
     env_names = {
         "openai": channel.credentials.openai_api_key_env,
@@ -406,28 +413,27 @@ def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed, hook=Non
         "elevenlabs": channel.credentials.elevenlabs_api_key_env,
         "kokoro": None,  # local voice, no key
     }
-    lines = write_script(
-        llm, brief, specs, brand=channel.brand.name, hook=spoken(hook) if hook else None, audience=channel.audience,
-    )
+    passages = [" ".join(spec["lines"]) for spec in specs]
     style = style_for_tone(brief.tone)
     failures: list[str] = []
-    for n, name in enumerate([cfg.provider, *cfg.fallback_providers]):
+    for attempt, name in enumerate([cfg.provider, *cfg.fallback_providers]):
         try:
-            provider = build_provider(name, resolve_env(env_names[name]) or "", cfg.model if n == 0 else None)
-            pool = (cfg.voices if n == 0 and cfg.voices else None) or default_voices(name)
+            provider = build_provider(name, resolve_env(env_names[name]) or "", cfg.model if attempt == 0 else None)
+            pool = (cfg.voices if attempt == 0 and cfg.voices else None) or default_voices(name)
             voice = choose_voice(pool, recent_voices, seed)
-            clips = synthesize_lines(provider, lines, voice=voice, style=style)
+            clips = synthesize_lines(provider, passages, voice=voice, style=style)
         except Exception as exc:
             failures.append(f"{name}: {exc}")
             logger.warning("channel %s: narration via %s failed (%s)", channel.id, name, exc)
             continue
-        for spec, clip, line in zip(specs, clips, lines):
-            spec["duration"] = motion_duration(0, spec["kind"], clip.seconds)
-            if cfg.captions:  # burned-in: most viewers watch with the sound off
-                spec["caption"], spec["voice"] = caption_text(line), round(clip.seconds, 3)
         starts, t = [], 0.0
-        for spec in specs:
-            starts.append(t + VOICE_LEAD)  # the picture leads the voice slightly
+        for spec, clip in zip(specs, clips):
+            share = [len(line) + 1 for line in spec["lines"]]
+            time_parts(spec, [clip.seconds * n / sum(share) for n in share], gap=0.0, **timing)
+            starts.append(t + spec["parts"][0]["at"])  # the picture leads the voice slightly
+            if not cfg.captions:  # the timing still drives the scene's builds
+                for part in spec["parts"]:
+                    part.pop("caption", None)
             t += spec["duration"] - SCENE_OVERLAP_SECONDS
         total = total_duration([s["duration"] for s in specs])
         audio = mix_voice_and_music(clips, starts, track.audio_bytes, total)
@@ -439,24 +445,57 @@ def _narrate(channel, brief, specs, track, *, llm, recent_voices, seed, hook=Non
 def _try_motion_reel(
     channel, assets, brief, track: MusicTrack, output_path: str, *,
     llm=None, recent_voices=frozenset(), seed: str = "", hook: str | None = None,
+    when: datetime | None = None, article=None,
 ) -> tuple[str | None, str | None]:
     """Render the HyperFrames motion reel (optionally narrated). Returns
     (mp4 path, narration voice); path is None (after logging why) so the
-    caller falls back to the Ken-Burns reel. A narration failure only drops the voice."""
+    caller falls back to the Ken-Burns reel.
+
+    The story comes from the explainer storyboard (motion.story.mode
+    "storyboard"), else from poster-core's carousel slides with a one-line-
+    per-slide script. A narration failure only drops the voice; the story,
+    stamps and emphasis stay."""
     try:
         category = getattr(brief.category, "value", str(brief.category))
         accent = channel.brand.category_accents.get(category) or channel.brand.accent_color
-        specs = apply_hook(slide_specs_from_assets(assets), hook, brief.headline)
-        audio, voice = track.audio_bytes, None
-        if channel.narration and llm is not None:
-            try:
-                audio, voice = _narrate(
-                    channel, brief, specs, track, llm=llm, recent_voices=recent_voices, seed=seed, hook=hook,
+        look = channel.motion
+        stamps = look.stamps.max_per_reel if look.stamps.enabled else 0
+        brand = channel.brand.name.title() if channel.brand.name.isupper() else channel.brand.name
+        said = spoken(hook) if hook else None  # the hook as the voice reads it
+        board = None
+        if llm is not None and look.story.mode == "storyboard":
+            board = write_storyboard(
+                llm, brief, article, brand=brand, max_beats=look.story.max_beats,
+                target_seconds=look.story.target_seconds, max_stamps=stamps,
+                when=(when or datetime.now()).strftime("%d %b %Y"), hook=hook, audience=channel.audience,
+            )
+        if board is not None:
+            hook_board(board, hook, said, brief.headline)
+            build = lambda: beat_specs(board, stamp_colors=stamp_colors(look), heading_marks=look.heading_marks)
+            subject, timing = board.subject, {"min_hold": BEAT_MIN, "tail": BEAT_TAIL}
+        else:
+            slides = lambda: apply_hook(slide_specs_from_assets(assets), hook, brief.headline)
+            script = None
+            if llm is not None and (channel.narration or look.wants_direction):
+                script = write_script(
+                    llm, brief, slides(), brand=channel.brand.name, max_stamps=stamps,
+                    hook=said, hook_screen=hook, audience=channel.audience,
                 )
+            build = lambda: direct_scenes(slides(), script, look) if script else slides()
+            subject, timing = (script.subject if script else None), {}
+        specs = build()
+        audio, voice = track.audio_bytes, None
+        if channel.narration and all(spec.get("lines") for spec in specs):
+            try:
+                audio, voice = _narrate(channel, brief, specs, track, recent_voices=recent_voices, seed=seed, **timing)
             except Exception as exc:  # no voice is better than no post
                 logger.warning("channel %s: narration failed (%s); posting music-only", channel.id, exc)
-                specs = apply_hook(slide_specs_from_assets(assets), hook, brief.headline)
+                specs = build()
                 audio, voice = track.audio_bytes, None
+        ui = deck_ui(
+            look, subject=story_subject(subject, brief),
+            category=category_label(category), brand=channel.brand.name, when=when,
+        )
         # The article's own photo, when poster-core found one (it is optional:
         # the reel renders on its generative background without it).
         photo = next((a for a in assets if getattr(a, "source_image_path", None)), None)
@@ -469,6 +508,7 @@ def _try_motion_reel(
             photo_path=photo.source_image_path if photo else None,
             photo_credit=photo.credit if photo else None,
             seed=seed,
+            ui=ui,
         )
         return path, voice
     except Exception as exc:  # any failure (render, staging, bad data) must degrade, not skip the post

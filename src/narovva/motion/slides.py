@@ -50,6 +50,28 @@ _KIND_PRIORITY = {
 }
 
 
+LINE_GAP = 0.18  # pause between two spoken lines of one scene
+
+
+def time_parts(spec: dict, seconds: list[float], *, min_hold: float = _MIN_HOLD, tail: float = _VOICE_TAIL,
+               gap: float = LINE_GAP) -> dict:
+    """Lay the scene's spoken lines (`spec["screens"]`, as captioned) out in
+    time: `parts[j]` says when line j starts (seconds into the scene), how
+    long it takes and what the caption shows. The scene lasts until its last
+    line ends plus `tail`, with `gap` between lines (0 when they are one
+    continuous clip). Builders reveal their elements on these times, so the
+    picture moves with the voice."""
+    screens = spec.get("screens") or spec.get("lines") or []
+    cmarks = spec.get("cmarks") or [None] * len(screens)
+    at, parts = VOICE_LEAD, []
+    for screen, cmark, sec in zip(screens, cmarks, seconds):
+        parts.append({"at": round(at, 3), "voice": round(sec, 3), "caption": screen, "cmark": cmark})
+        at += sec + gap
+    spec["parts"] = parts
+    spec["duration"] = round(max(min_hold, at - gap + tail), 3)
+    return spec
+
+
 def motion_duration(char_count: int, kind: str = "text", voice_seconds: float | None = None) -> float:
     """Seconds a slide stays on screen. With narration the spoken line sets
     the length (plus a short lead/tail); without it, a brisk reading time."""

@@ -302,7 +302,8 @@ the post falls back to the plain `reel` format, so nothing is skipped.
 - Preview everything locally: `python -m narovva.motion out.mp4` renders a
   sample deck covering every slide kind, with a synthetic photo and captions.
 - Templates live in `src/narovva/motion/templates/reel/`; GSAP and the
-  Archivo Black / Inter fonts (OFL) are vendored so renders need no CDN.
+  Archivo Black / Inter / JetBrains Mono fonts (OFL) are vendored so renders
+  need no CDN.
 - Each Reel records its music track in `post_history.music_track_id`
   (migration `0002`), and later posts avoid recently used tracks. Track tags
   come from the genre, `brief.tone`, `brief.emotions` and `brief.category`.
@@ -325,14 +326,77 @@ the post falls back to the plain `reel` format, so nothing is skipped.
   the category accent (`templates/reel/ambient.js`), seeded per story so no
   two reels match, which flares at each cut and settles while the text is
   read.
+- **An investigative frame.** A header styled as a case file
+  (`● REC  CASE FILE: STARLINK … 00:00:04:29`, progress on the top edge) or a
+  breakdown (`● STARLINK BREAKDOWN … 24 OCT 2026`, progress under it). Dated
+  evidence cards build up one at a time, the newest lit, and verdict stamps
+  (`BLOCKED`, `FALSE`, `-20%`) slam onto the evidence. Key headline words take
+  the accent colour.
 - Everything is a pure function of timeline time (no clocks, no unseeded
   randomness), because HyperFrames renders by seeking to frames in any order.
+
+### The explainer storyboard
+
+By default (`motion.story.mode: storyboard`) the reel is not the carousel
+re-animated: one LLM call (`narovva.motion.storyboard`) writes an explainer
+for video from the brief and the article text -- hook, context, what
+happened, fallout, verdict, call to follow -- as 8-12 beats. Each beat is one
+to three spoken lines plus the scene that shows them, picked from a library
+in `templates/reel/scenes.js`:
+
+| scene | what moves |
+|---|---|
+| `headline` | the statement slams in; an icon draws itself on (the opener sits on the article photo) |
+| `question` | "WHY?" letter by letter, a floating icon |
+| `dates` | a date track whose focus moves to the next date with each spoken line |
+| `chain` | nodes joined by links a pulse runs down; a broken link shows hazard tape |
+| `grid` | tiles pop in with drawn icons; stamps (`BLOCKED`) hit the ones they apply to |
+| `cards` | evidence cards, one per line, each with its own verdict stamp |
+| `number` | one figure counts up (or from one figure to another) on an accent wash |
+| `stats`, `compare` | rings, bars and the change between two figures |
+| `split` | who wins and who pays |
+| `quote` | the real quote on a card, its key words marked as they are said |
+| `terminal` | facts typed out like a log |
+| `checklist` | the verdict, then what to watch |
+| `cta` | the end card: logo, handle, follow button |
+
+Icons are Lucide's (ISC, vendored in `icons.js`). The voice-over is
+synthesised line by line and every scene is timed to it, so elements arrive
+as they are mentioned; without a voice the lines are timed by reading pace
+and burned in as captions. The reply is checked before use: unknown scenes
+and malformed data are dropped, every figure on screen must appear in the
+brief or the article, quotes must be word for word, and the reel always ends
+on the call to follow. If fewer than five beats survive, the reel falls back
+to `slides` mode. `python -m narovva.motion.preview out/` renders the sample
+storyboard (`narovva.motion.sample.SAMPLE_STORYBOARD`), which goes through the
+same checks; `--story slides` shows the slide-based reel.
+
+### Configuring the look
+
+`motion:` in the channel YAML (see `config/channels/example-tech-ig.yaml`,
+schema `MotionStyleConfig`) sets the story mode, beat count, target length and
+number flood (`story:`), the header style (`case_file`, `breakdown`,
+`brand`, `none`), a custom header label (`{subject}`, `{category}`, `{brand}`,
+`{date}`), timecode or date, where the progress runs, the caption style
+(`karaoke`, `pill`, `brighten`) and its highlight colour, stamps (on/off, how
+many, colours per tone), the timeline style (`cards`, `spine`), headline
+marks, the grid and the handle. A channel without a `motion:` block gets the
+case-file look.
+
+The stamps, the emphasised words and the header's subject come from the same
+LLM call that writes the voice-over (`narration.script.write_script`), so they
+cost nothing extra when narration is on. Everything it returns is checked
+before use: a stamp must be 1-3 words and any number in it must appear in
+that slide's data, the first and last slides are never stamped, emphasised
+words must occur in the caption or headline, and a caption with figures the
+slide doesn't state falls back to the spoken words.
 
 Work on the template without the Node toolchain:
 `python -m narovva.motion.preview out/` screenshots two frames of every scene
 from a local Chrome and writes a contact sheet (`--photo PATH|none`,
 `--no-captions`, `--at 1.5,4`, `--via T` to check a frame is the same when
-reached out of order).
+reached out of order, and `--hud`, `--captions-style`, `--timeline`,
+`--no-stamps` to try the looks).
 
 ### Pacing and narration
 
@@ -350,9 +414,11 @@ reached out of order).
   not used recently is chosen (`post_history.narration_voice`), each slide lasts
   as long as its line, and the music ducks under the voice (-14 LUFS master). If
   anything in that chain fails the reel still posts, music only.
-- With narration on, the spoken line is burned in as captions that light up word
-  by word (most people watch with the sound off); the on-screen paragraph gives
-  way to it. `narration.captions: false` turns them off.
+- With narration on, the spoken line is burned in as captions (most people
+  watch with the sound off), with numbers written as digits; the on-screen
+  paragraph gives way to it. `motion.captions.style` picks karaoke (a few words
+  at a time, the spoken one lit), pill (the whole line, its key phrase on a
+  highlight) or brighten; `narration.captions: false` turns them off.
 - Audition voices by ear: run **Actions → Audition narration voices** (or
   `python -m narovva.narration.demo openai out/`) and listen to the MP3 artifact.
 

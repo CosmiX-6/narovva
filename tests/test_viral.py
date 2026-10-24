@@ -227,7 +227,7 @@ def test_hook_opens_the_reel_and_is_spoken_first():
 
     lines = write_script(_LLM({"lines": ["model hook", "line two words here"]}), Brief(), specs, brand="CU",
                          hook="Your data is the price.")
-    assert lines[0] == "Your data is the price."
+    assert lines.lines[0] == "Your data is the price." and lines.screen[0] == "Your data is the price."
 
 
 # -- the viral run ---------------------------------------------------------

@@ -77,6 +77,43 @@ focus:
     what it means for their workflow, and one concrete thing to try or watch; no hype
   extra_hashtags: ["#AI", "#AIEngineering", "#GenAI", "#LLM", "#AITools"]
 
+# Look of the motion reel. Every value below is the default; delete a line to keep it,
+# change it to restyle the next reel (no code change needed).
+motion:
+  story:
+    # storyboard: an explainer written for video -- hook, context, what happened, fallout,
+    # verdict, follow -- where every line gets a motion graphic that shows it (date track,
+    # cause-and-effect chain, grid, counting number, quote, log, checklist). Falls back to
+    # "slides" (re-animated carousel slides) if the writer's reply doesn't check out.
+    mode: storyboard
+    max_beats: 10        # 5-14
+    target_seconds: 45   # what the writer aims for
+    flood: true          # full-frame accent wash behind headline numbers
+  hud:
+    # case_file: "(rec dot) REC  CASE FILE: <SUBJECT> ..... 00:00:04:29"
+    # breakdown: "(rec dot) <SUBJECT> BREAKDOWN ..... 24 OCT 2026" with the progress line under it
+    # brand: the CU logo + name header. none: no header.
+    style: case_file
+    # Optional custom header text: {subject} {category} {brand} {date}. Unset = the style's own.
+    # label: "{subject} FILE"
+    # meta: timecode     # timecode | date | none (unset = the style's own)
+    rec_dot: true
+  progress: auto         # auto | top | hud | bottom | none
+  captions:
+    style: karaoke       # karaoke | pill | brighten  (on/off is narration.captions)
+    highlight: "#FACC15"
+    chunk_words: 3       # karaoke: most words on screen at once
+  stamps:
+    enabled: true        # verdict stamps like BLOCKED / FALSE / -20%, only where a slide's data backs one
+    max_per_reel: 3
+    negative_color: "#F43F5E"
+    positive_color: "#22C55E"
+    neutral_color: "#FACC15"
+  timeline: cards        # cards (dated evidence cards) | spine (line + travelling dot)
+  heading_marks: true    # key headline words in the accent colour
+  grid: true
+  show_handle: true
+
 genres:
   - genre: tech
     country: us

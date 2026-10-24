@@ -3,6 +3,10 @@ working on the template without the HyperFrames toolchain (Node 22):
 
     python -m narovva.motion.preview out_dir [--at 0.4,2.5,6] [--photo PATH|none]
                                              [--no-captions] [--via 9.0]
+                                             [--hud case_file|breakdown|brand|none]
+                                             [--captions-style karaoke|pill|brighten]
+                                             [--timeline cards|spine] [--no-stamps]
+                                             [--story storyboard|slides]
 
 Stages the sample deck, then for each timestamp loads the composition in
 headless Chrome, seeks its timeline there and saves a 1080x1920 PNG, plus a
@@ -22,9 +26,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ..config.schema import MotionStyleConfig
 from .render import stage_project
-from .sample import sample_deck, write_sample_photo
+from .sample import SAMPLE_SUBJECT, sample_deck, sample_story, write_sample_photo
 from .slides import SCENE_OVERLAP_SECONDS, total_duration
+from .style import deck_ui
 
 _CHROME_NAMES = ("chrome", "google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "msedge")
 _CHROME_PATHS = (
@@ -63,10 +69,13 @@ def find_chrome() -> str:
 
 
 def scene_times(slides: list[dict]) -> list[float]:
-    """Two looks at every scene: mid-entrance, and settled."""
+    """Looks at every scene: mid-entrance, once into each later spoken line
+    (where a storyboard scene builds), and settled."""
     times, start = [], 0.0
     for slide in slides:
-        times += [round(start + 0.45, 2), round(start + slide["duration"] - SCENE_OVERLAP_SECONDS - 0.15, 2)]
+        times.append(round(start + 0.45, 2))
+        times += [round(start + part["at"] + 0.8, 2) for part in (slide.get("parts") or [])[1:]]
+        times.append(round(start + slide["duration"] - SCENE_OVERLAP_SECONDS - 0.15, 2))
         start += slide["duration"] - SCENE_OVERLAP_SECONDS
     return times
 
@@ -107,18 +116,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--via", type=float, help="seek here first, then to each timestamp")
     parser.add_argument("--logo", default="assets/logo/CU.png")
     parser.add_argument("--accent", default="#3B82F6")
+    parser.add_argument("--hud", choices=["case_file", "breakdown", "brand", "none"])
+    parser.add_argument("--captions-style", choices=["karaoke", "pill", "brighten"])
+    parser.add_argument("--timeline", choices=["cards", "spine"])
+    parser.add_argument("--no-stamps", action="store_true")
+    parser.add_argument("--story", choices=["storyboard", "slides"], default="storyboard",
+                        help="the explainer storyboard sample, or the slide-based reel")
     args = parser.parse_args(argv)
+    look = MotionStyleConfig()
+    if args.hud:
+        look.hud.style = args.hud
+    if args.captions_style:
+        look.captions.style = args.captions_style
+    if args.timeline:
+        look.timeline = args.timeline
+    look.stamps.enabled = not args.no_stamps
 
     out = Path(args.out_dir)
     project = out / "project"
     if project.exists():
         shutil.rmtree(project)
     out.mkdir(parents=True, exist_ok=True)
-    slides = sample_deck(captions=not args.no_captions)
+    if args.story == "storyboard":
+        slides, subject = sample_story(captions=not args.no_captions, look=look)
+    else:
+        slides, subject = sample_deck(captions=not args.no_captions, look=look), SAMPLE_SUBJECT
     photo = None if args.photo == "none" else args.photo or write_sample_photo(out / "sample-photo.jpg")
+    ui = deck_ui(look, subject=subject, category="AI", brand="CONTEXT UNFILTERED")
     stage_project(
         project, slides, accent=args.accent, handle="contextunfiltered", brand="CONTEXT UNFILTERED",
-        logo_path=args.logo, audio_bytes=None, photo_path=photo, photo_credit="Image: sample", seed="sample",
+        logo_path=args.logo, audio_bytes=None, photo_path=photo, photo_credit="Image: sample", seed="sample", ui=ui,
     )
     html = (project / "index.html").read_text(encoding="utf-8")
     html = html.replace("<script src=\"vendor/gsap.min.js\">", _SHIM_HEAD + "\n    <script src=\"vendor/gsap.min.js\">", 1)

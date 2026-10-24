@@ -84,11 +84,14 @@ def stage_project(
     stage_dir: Path, slides: list[dict], *, accent: str, handle: str, brand: str,
     logo_path: str, audio_bytes: bytes | None,
     photo_path: str | None = None, photo_credit: str | None = None, seed: str = "",
+    ui: dict | None = None,
 ) -> float:
     """Populate `stage_dir` with a renderable HyperFrames project; returns the
     total reel duration in seconds. `seed` (e.g. the article id) fixes the
     generative background and transition order, so a story always renders
-    the same way but no two stories look alike."""
+    the same way but no two stories look alike. `ui` is the look from
+    narovva.motion.style.deck_ui; without it the reel keeps the original
+    brand header, bottom progress bar and plain captions."""
     if not slides:
         raise MotionRenderError("no slides to render")
     if not Path(logo_path).is_file():
@@ -102,8 +105,9 @@ def stage_project(
         "slides": slides, "accent": accent, "handle": handle, "brand": brand,
         "photo": _stage_photo(photo_path, photo_credit, stage_dir / "assets"),
         "seed": int(hashlib.sha256((seed or slides[0].get("heading") or "").encode()).hexdigest()[:8], 16),
-        "captions": any(s.get("caption") for s in slides),
+        "captions": any(part.get("caption") for s in slides for part in s.get("parts") or []),
         "voice_lead": VOICE_LEAD,
+        "ui": ui or {},
     }
     # </script> in article text must not terminate the inline-free deck.js
     # either way, but escape '<' so the file is also safe if ever inlined.
@@ -137,7 +141,7 @@ def render_motion_reel(
     slides: list[dict], audio_bytes: bytes | None, output_path: str, *,
     accent: str, handle: str, brand: str, logo_path: str,
     photo_path: str | None = None, photo_credit: str | None = None, seed: str = "",
-    stage_dir: str | None = None,
+    ui: dict | None = None, stage_dir: str | None = None,
 ) -> str:
     """Render `slides` (see narovva.motion.slides) to an MP4 at `output_path`
     (1080x1920, 30fps). `photo_path` is the article's own photo, if it has
@@ -149,7 +153,7 @@ def render_motion_reel(
         total = stage_project(
             stage, slides, accent=accent, handle=handle, brand=brand,
             logo_path=logo_path, audio_bytes=audio_bytes,
-            photo_path=photo_path, photo_credit=photo_credit, seed=seed,
+            photo_path=photo_path, photo_credit=photo_credit, seed=seed, ui=ui,
         )
         cmd = [*_hyperframes_command(), "render", str(stage), "--quality", "looks", "--fps", "30",
                "--output", str(out)]
