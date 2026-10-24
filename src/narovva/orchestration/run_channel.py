@@ -117,6 +117,7 @@ def run_channel(
         genres = [by_name[name] for name in genres_filter if name in by_name]
     genres_processed: list[str] = []
     llm_cache: dict = {}  # the text-model chain, built on first use and shared by every article
+    blocked_domains: set[str] = set()  # sites that refused the article download (403) this run
     hook_stats = load_hook_stats(repo, channel)
     llm_down = False
     recent_music_ids: set[str] = set(repo.recent_music_track_ids(channel.id)) if repo and channel.is_video else set()
@@ -137,6 +138,8 @@ def run_channel(
             for article in articles:
                 if max_posts_per_genre is not None and genre_posted >= max_posts_per_genre:
                     break
+                if _domain(article.url) in blocked_domains:
+                    continue  # this site already refused us in this run; don't burn an attempt
                 if max_posts_total is not None and result.posted >= max_posts_total:
                     break
                 result.considered += 1
@@ -169,6 +172,8 @@ def run_channel(
                     recent_voices.add(outcome.narration_voice)
                 if outcome.status == "failed":
                     logger.warning("channel %s: %s failed: %s", channel.id, article.url, outcome.error)
+                    if _refused(outcome.error):
+                        blocked_domains.add(_domain(article.url))
 
                 if outcome.status == "dry_run":
                     result.skipped += 1
@@ -383,6 +388,18 @@ def _process_one(
         narration_voice=narration_voice,
         hook=package,
     )
+
+
+def _domain(url: str | None) -> str:
+    from urllib.parse import urlparse
+
+    host = urlparse(url or "").netloc.lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _refused(error: str | None) -> bool:
+    """The site refused the article download (not a transient or model error)."""
+    return bool(error) and ("403 Forbidden" in error or "401 Unauthorized" in error) and "Failed to fetch" in error
 
 
 def load_hook_stats(repo, channel: ChannelConfig) -> dict | None:

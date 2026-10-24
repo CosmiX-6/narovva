@@ -22,7 +22,7 @@ AI_PRACTITIONER_FEEDS = [
     "https://www.interconnects.ai/feed",
     "https://www.oneusefulthing.org/feed",
     "https://the-decoder.com/feed/",
-    "https://www.marktechpost.com/feed/",
+    # marktechpost.com dropped: its feed works but every article page answers 403.
     "https://thenewstack.io/ai/feed/",
     "https://stackoverflow.blog/feed/",
     "https://techcrunch.com/category/artificial-intelligence/feed/",

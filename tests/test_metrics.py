@@ -126,3 +126,14 @@ def test_hook_stats_off_without_learn_or_db():
             raise RuntimeError("db down")
 
     assert rc.load_hook_stats(Broken(), ch) is None
+
+
+def test_late_measurements_are_not_compared_and_prehook_posts_are_not_a_formula():
+    posts, snaps = _data([100] * 8, [None] * 8)
+    for s in snaps[:3]:
+        s["fetched_at"] += timedelta(days=5)  # backfilled long after 48 h
+    rows = measure(posts, snaps, now=NOW)
+    assert all(m.multiple is None for m in rows if m.late) and sum(m.late for m in rows) == 3
+    text = build_report("chan", posts, snaps, now=NOW)
+    assert "3 posts were first measured more than a day after" in text
+    assert "none:" not in text  # posts from before hooks are not a 'formula'

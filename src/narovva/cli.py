@@ -87,7 +87,9 @@ def main(argv: list[str] | None = None) -> int:
             max_posts_per_genre=args.max_posts_per_genre,
         )
         _print_result(result)
-        return 1 if result.failed else 0
+        # A run that posted is a success even if other articles failed (e.g. a site
+        # refused the download); the failures are still printed above.
+        return 1 if result.failed and not result.posted else 0
 
     if args.command == "refresh-token":
         from .tokens import InstagramTokenError, refresh_token
@@ -173,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                 failed_any = True
                 continue
             _print_result(result)
-            failed_any = failed_any or bool(result.failed)
+            failed_any = failed_any or bool(result.failed and not result.posted)
         return 1 if failed_any else 0
 
     return 2
