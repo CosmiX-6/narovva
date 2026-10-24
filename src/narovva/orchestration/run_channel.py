@@ -420,6 +420,7 @@ def _narrate(channel, brief, specs, track, *, recent_voices, seed, **timing):
         try:
             provider = build_provider(name, resolve_env(env_names[name]) or "", cfg.model if attempt == 0 else None)
             pool = (cfg.voices if attempt == 0 and cfg.voices else None) or default_voices(name)
+            pool = [v for v in pool if v not in cfg.exclude_voices]  # all excluded: skip to the next provider
             voice = choose_voice(pool, recent_voices, seed)
             clips = synthesize_lines(provider, passages, voice=voice, style=style)
         except Exception as exc:

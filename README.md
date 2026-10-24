@@ -421,6 +421,8 @@ reached out of order, and `--hud`, `--captions-style`, `--timeline`,
   highlight) or brighten; `narration.captions: false` turns them off.
 - Audition voices by ear: run **Actions → Audition narration voices** (or
   `python -m narovva.narration.demo openai out/`) and listen to the MP3 artifact.
+  `narration.exclude_voices` drops the ones you don't want from every provider's
+  pool (a provider whose voices are all excluded is skipped).
 
 ## Logs and secrets
 

@@ -476,6 +476,23 @@ def test_channel_falls_through_to_kokoro_when_keys_are_missing_or_broken(monkeyp
     assert voice in default_voices("kokoro") and local.voices
 
 
+def test_excluded_voices_are_never_picked_from_any_provider(monkeypatch):
+    local = _FakeProvider()
+    monkeypatch.setattr(rc, "build_provider", lambda name, key, model=None: local)
+    monkeypatch.setattr(rc, "resolve_env", lambda name: "key")
+    monkeypatch.setattr(rc, "render_motion_reel", lambda specs, audio, out, **kw: out)
+    pool = default_voices("kokoro")
+    ch = _channel(narration=NarrationConfig(provider="kokoro", exclude_voices=pool[1:]))
+    for seed in ("a", "b", "c", "d"):
+        assert rc._try_motion_reel(ch, [_asset(2)], _brief(), _Track(), "/tmp/o.mp4", llm=_LLM(["a", "b"]), seed=seed)[1] == pool[0]
+    # a provider whose every voice is excluded is skipped for the next one
+    built = []
+    monkeypatch.setattr(rc, "build_provider", lambda name, key, model=None: (built.append(name), local)[1])
+    ch = _channel(narration=NarrationConfig(provider="kokoro", fallback_providers=["gemini"], exclude_voices=pool))
+    path, voice = rc._try_motion_reel(ch, [_asset(2)], _brief(), _Track(), "/tmp/o.mp4", llm=_LLM(["a", "b"]), seed="s")
+    assert built == ["kokoro", "gemini"] and voice in default_voices("gemini")
+
+
 def _kokoro_models_present() -> bool:
     d = tts_module.kokoro_dir()
     return (d / "kokoro-v1.0.onnx").exists() and (d / "voices-v1.0.bin").exists()

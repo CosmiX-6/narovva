@@ -31,6 +31,8 @@ narration:
   # Tried in order if the primary fails (quota, outage, missing key). 'kokoro' is a free
   # local voice that needs no key, so there is always a voice.
   fallback_providers: [gemini, kokoro]
+  # Never used, whichever provider reads (picked by ear from the voice samples).
+  exclude_voices: [af_nicole]
 
 # Viral posts: on top of the rotation, at least one post per slot below of whatever
 # story the internet is talking about right now -- any genre, as long as it is
