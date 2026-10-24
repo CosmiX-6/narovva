@@ -44,6 +44,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ins_p.add_argument("path", help="Path to a channel YAML config")
 
+    met_p = sub.add_parser("collect-metrics", help="Snapshot insights for recent posts (run daily)")
+    met_p.add_argument("path", help="Path to a channel YAML config")
+    met_p.add_argument("--days", type=int, default=14, help="Posts published in the last N days")
+
+    rep_p = sub.add_parser("performance-report", help="Posts vs the channel's own median, by hook formula/topic")
+    rep_p.add_argument("path", help="Path to a channel YAML config")
+    rep_p.add_argument("--days", type=int, default=90, help="Posts published in the last N days")
+    rep_p.add_argument("--out", default=None, help="Also append the markdown report to this file")
+
     viral_p = sub.add_parser(
         "run-viral", help="Post one viral story (any genre) if a peak-hour slot is open",
     )
@@ -110,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
             print(logsafe.redact(line))
         return 0
 
+    if args.command in ("collect-metrics", "performance-report"):
+        return _metrics_command(args)
+
     if args.command == "run-viral":
         from .orchestration.viral import run_viral
 
@@ -165,6 +177,40 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if failed_any else 0
 
     return 2
+
+
+def _metrics_command(args) -> int:
+    from datetime import datetime, timedelta, timezone
+
+    from .db.engine import ensure_schema, get_connection
+    from .db.repo import Repo
+    from .settings import get_settings
+
+    channel = load_channel(args.path)
+    if not get_settings().database_url:
+        print("error: DATABASE_URL is required (post history and metrics live in Postgres)")
+        return 1
+    conn = get_connection()
+    ensure_schema(conn)
+    repo = Repo(conn)
+    if args.command == "collect-metrics":
+        from .metrics.collect import collect
+        from .tokens import get_valid_token
+
+        result = collect(channel, repo, get_valid_token(channel), days=args.days)
+        print(f"channel={channel.id} metrics fetched={result.fetched} skipped={result.skipped} failed={result.failed}")
+        for err in result.errors[:5]:
+            print(f"  error: {logsafe.redact(err)}")
+        return 1 if result.failed and not result.fetched and not result.skipped else 0
+    from .metrics.report import build_report
+
+    since = datetime.now(timezone.utc) - timedelta(days=args.days)
+    text = build_report(channel.id, repo.published_posts(channel.id, since), repo.metrics_snapshots(channel.id, since))
+    print(text)
+    if args.out:
+        with open(args.out, "a", encoding="utf-8") as fh:
+            fh.write(text + "\n")
+    return 0
 
 
 def _viral_scan(channel, *, editor: bool) -> int:

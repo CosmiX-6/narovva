@@ -248,6 +248,24 @@ Every post (with `hooks.enabled`; viral posts always) opens on a formula hook:
 Check whether the token can read post insights (for the performance report):
 Actions -> "Instagram insights probe" -> Run workflow.
 
+## Performance report: learning from our own results
+
+The "Performance metrics" workflow runs daily (and on demand):
+
+1. `narovva collect-metrics` snapshots each post from the last 14 days through
+   Instagram's insights API -- views, reach, likes, comments, saves, shares, average
+   and total watch time -- into `post_metrics`, one row per post per day.
+2. `narovva performance-report` judges every post by its **multiple**: its views 48 h
+   after posting divided by the median of the channel's previous 30 posts (raw views
+   mostly track follower growth). It lists the top and bottom posts, the average
+   multiple per hook formula and per topic (once a group has 5 posts), average
+   watch time, and one recommendation. The report is on the workflow run's summary page.
+3. With `hooks.learn: true` the hook writer leans on formulas that beat the median:
+   once a formula has 20 measured posts, a proven-weak one (under 0.85x) is left out
+   and proven-strong ones come first; 20% of posts still get every formula.
+
+Check the token can read insights: Actions -> "Instagram insights probe".
+
 ## Focus mode (e.g. AI for practitioners)
 
 A channel's `focus:` section narrows everything it posts to one audience for as

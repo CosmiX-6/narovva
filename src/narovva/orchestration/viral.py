@@ -21,7 +21,9 @@ from ..viral.editor import editor_pick
 from ..viral.schedule import local_day_start, slot_status
 from ..viral.sources import DEFAULT_FEEDS, fetch_headlines, fetch_trends
 from .due import VIRAL_GENRE
-from .run_channel import ChannelRunResult, _build_llm, _open_repo, _preflight_token, _process_one, hook_fields
+from .run_channel import (
+    ChannelRunResult, _build_llm, _open_repo, _preflight_token, _process_one, hook_fields, load_hook_stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +135,7 @@ def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = Fa
     recent_music = set(repo.recent_music_track_ids(channel.id)) if repo and channel.is_video else set()
     recent_voices = set(repo.recent_narration_voices(channel.id)) if repo and channel.narration else set()
     genre = GenreSetting(genre=VIRAL_GENRE, asset_types=cfg.asset_types, music_tags=cfg.music_tags)
+    hook_stats = load_hook_stats(repo, channel)
 
     try:
         stories = scan(channel, now=now, repo=repo, store=store)
@@ -153,6 +156,7 @@ def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = Fa
                 outcome = _process_one(
                     article, genre, channel, dry_run=dry_run, recent_music_ids=recent_music,
                     recent_voices=recent_voices, llm_cache=llm_cache, hook_style=cfg.hook_style,
+                    hook_stats=hook_stats,
                 )
                 if outcome.status == "dry_run":
                     result.skipped += 1

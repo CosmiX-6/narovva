@@ -199,6 +199,9 @@ hooks:
              the-impossible-claim]
   min_score: 45
   candidates: 5
+  # Lean toward formulas that beat this channel's median (from the daily metrics).
+  # Inactive until a formula has 20 measured posts; 20% of posts still try them all.
+  learn: true
 
 caption:
   voice: "sharp, informative, no clickbait, written for a tech-savvy audience"

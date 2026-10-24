@@ -222,6 +222,63 @@ class Repo:
 
     # -- instagram tokens ---------------------------------------------------
 
+    # -- performance metrics ---------------------------------------------
+
+    def published_posts(self, channel_id: str, since: datetime) -> list[dict]:
+        """Successful posts with a platform id published since `since`, oldest first."""
+        rows = self.conn.execute(
+            """
+            SELECT platform_post_id, published_at, genre, article_title,
+                   hook_text, hook_formula, hook_score, cover_text
+            FROM post_history
+            WHERE channel_id = %s AND status = 'success' AND platform_post_id IS NOT NULL
+              AND published_at >= %s
+            ORDER BY published_at
+            """,
+            (channel_id, since),
+        ).fetchall()
+        keys = ("platform_post_id", "published_at", "genre", "article_title",
+                "hook_text", "hook_formula", "hook_score", "cover_text")
+        return [dict(zip(keys, r)) for r in rows]
+
+    def has_metrics_snapshot(self, channel_id: str, platform_post_id: str, day) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM post_metrics WHERE channel_id = %s AND platform_post_id = %s AND snapshot_date = %s",
+            (channel_id, platform_post_id, day),
+        ).fetchone()
+        return row is not None
+
+    def upsert_metrics(self, channel_id: str, platform_post_id: str, day, metrics: dict) -> None:
+        cols = ("views", "reach", "likes", "comments", "saved", "shares", "total_interactions",
+                "avg_watch_ms", "total_watch_ms")
+        values = {c: metrics.get(c) for c in cols}
+        self.conn.execute(
+            f"""
+            INSERT INTO post_metrics (channel_id, platform_post_id, snapshot_date, {", ".join(cols)})
+            VALUES (%(channel_id)s, %(pid)s, %(day)s, {", ".join(f"%({c})s" for c in cols)})
+            ON CONFLICT (channel_id, platform_post_id, snapshot_date) DO UPDATE SET
+                fetched_at = now(), {", ".join(f"{c} = EXCLUDED.{c}" for c in cols)}
+            """,
+            {"channel_id": channel_id, "pid": platform_post_id, "day": day, **values},
+        )
+
+    def metrics_snapshots(self, channel_id: str, since: datetime) -> list[dict]:
+        """Every snapshot for posts published since `since`, with when it was fetched."""
+        rows = self.conn.execute(
+            """
+            SELECT m.platform_post_id, m.fetched_at, m.views, m.reach, m.likes, m.comments, m.saved,
+                   m.shares, m.total_interactions, m.avg_watch_ms, m.total_watch_ms
+            FROM post_metrics m
+            JOIN post_history p ON p.channel_id = m.channel_id AND p.platform_post_id = m.platform_post_id
+            WHERE m.channel_id = %s AND p.published_at >= %s
+            ORDER BY m.fetched_at
+            """,
+            (channel_id, since),
+        ).fetchall()
+        keys = ("platform_post_id", "fetched_at", "views", "reach", "likes", "comments", "saved",
+                "shares", "total_interactions", "avg_watch_ms", "total_watch_ms")
+        return [dict(zip(keys, r)) for r in rows]
+
     def get_instagram_token(self, channel_id: str) -> Optional[dict]:
         row = self.conn.execute(
             """
