@@ -155,3 +155,33 @@ def test_voice_timing_leaves_room_for_the_transition_and_reaches_the_template(tm
     stage_project(tmp_path, [{"kind": "text", "heading": "h", "duration": dur}], accent="#3B82F6",
                   handle="h", brand="B", logo_path="assets/logo/CU.png", audio_bytes=None)
     assert f'"voice_lead": {VOICE_LEAD}' in (tmp_path / "deck.js").read_text()
+
+
+def test_a_site_that_refuses_is_skipped_for_the_rest_of_the_run_and_a_post_is_success(monkeypatch, capsys):
+    from info_snipe.models import Article
+
+    from narovva import cli
+
+    arts = [Article(content_id=f"c{i}", title=f"t{i}", url=u, source_name="s", genre="tech")
+            for i, u in enumerate(["https://www.blocked.example/a", "https://blocked.example/b",
+                                   "https://ok.example/c"])]
+    tried = []
+
+    def process(article, genre, channel, **kw):
+        tried.append(article.url)
+        if "blocked" in article.url:
+            return rc._Outcome(status="failed", caption_text="", hashtags=[], asset_types=[],
+                               error=f"Failed to fetch {article.url}: Client error '403 Forbidden'")
+        return rc._Outcome(status="success", caption_text="c", hashtags=[], asset_types=["reel"])
+
+    ch = _channel()
+    _wire_run(monkeypatch, {ch.genres[0].genre: list(arts)}, process)
+    result = rc.run_channel(ch, max_posts_total=1)
+    assert tried == ["https://www.blocked.example/a", "https://ok.example/c"]
+    assert result.posted == 1 and result.failed == 1
+
+    monkeypatch.setattr(cli, "load_channel", lambda p: _channel())
+    monkeypatch.setattr(cli, "run_channel", lambda *a, **k: rc.ChannelRunResult(channel_id="c", posted=1, failed=1))
+    assert cli.main(["run-channel", "x.yaml"]) == 0
+    monkeypatch.setattr(cli, "run_channel", lambda *a, **k: rc.ChannelRunResult(channel_id="c", failed=1))
+    assert cli.main(["run-channel", "x.yaml"]) == 1

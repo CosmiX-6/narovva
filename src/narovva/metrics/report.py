@@ -53,8 +53,12 @@ def measure(posts: list[dict], snapshots: list[dict], *, now: datetime | None = 
         m = _at_age(post, by_post.get(post["platform_post_id"], []), timedelta(hours=age_hours), now)
         if m:
             measured.append(m)
-    for i, m in enumerate(measured):
-        prior = [x.value for x in measured[max(0, i - baseline_posts):i] if x.metric == m.metric]
+    # Late measurements (first snapshot long after the target age, e.g. posts from before
+    # collection started) include extra days of views, so they are not comparable: they
+    # get no multiple and are not used as anyone's baseline.
+    on_time = [m for m in measured if not m.late]
+    for i, m in enumerate(on_time):
+        prior = [x.value for x in on_time[max(0, i - baseline_posts):i] if x.metric == m.metric]
         if len(prior) >= min_baseline:
             base = statistics.median(prior)
             m.multiple = round(m.value / base, 2) if base > 0 else None
@@ -64,8 +68,8 @@ def measure(posts: list[dict], snapshots: list[dict], *, now: datetime | None = 
 def _groups(rows: list[Measured], key: str, min_group: int) -> list[tuple[str, int, float]]:
     g: dict[str, list[float]] = {}
     for m in rows:
-        if m.multiple is not None:
-            g.setdefault(m.post.get(key) or "none", []).append(m.multiple)
+        if m.multiple is not None and m.post.get(key):  # posts from before hooks have no formula
+            g.setdefault(m.post[key], []).append(m.multiple)
     out = [(k, len(v), round(statistics.mean(v), 2)) for k, v in g.items() if len(v) >= min_group]
     return sorted(out, key=lambda t: -t[2])
 
@@ -90,9 +94,17 @@ def build_report(channel_id: str, posts: list[dict], snapshots: list[dict], *, n
     lines = [f"# Performance report: {channel_id}", "",
              f"{now:%Y-%m-%d}. {len(posts)} posts in range, {len(rows)} at least 48 h old with stats, "
              f"{len(judged)} with a baseline (the median of up to 30 earlier posts).", ""]
+    late = sum(m.late for m in rows)
+    if late:
+        lines += [f"{late} posts were first measured more than a day after their 48 h mark (they were "
+                  "published before collection started, or a daily run was missed); their views include "
+                  "extra days, so they are left out of the comparisons.", ""]
     if not judged:
-        lines.append("Nothing to compare yet: the report needs posts that are 48 h old and have at "
-                     "least 5 measured posts before them.")
+        lines.append("Nothing to compare yet: the report needs posts measured at 48 h old, with at "
+                     "least 5 such posts before them.")
+        watch = [m.avg_watch_ms for m in rows if m.avg_watch_ms]
+        if watch:
+            lines += ["", f"Average watch time so far: {statistics.mean(watch) / 1000:.1f} s per view."]
         return "\n".join(lines)
 
     def row(m: Measured) -> str:
