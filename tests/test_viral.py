@@ -207,8 +207,11 @@ def test_write_hook_falls_back_to_the_briefs_hook():
         hook = "What changes for your bills next month?"
 
     assert editor.write_hook(_LLM({"hook": "SHOCKING!!"}), Brief()) == "What changes for your bills next month?"
+    # A summary-like line scores too low and the retry gets nothing: the brief's hook stands.
     assert editor.write_hook(_LLM({"hook": "The rules on your data just changed"}), Brief()) == \
-        "The rules on your data just changed."
+        "What changes for your bills next month?"
+    assert editor.write_hook(_LLM({"hook": "You're still sharing your data with every chat"}), Brief()) == \
+        "You're still sharing your data with every chat."
 
 
 def test_spoken_spells_short_acronyms():
@@ -325,4 +328,4 @@ def test_a_hook_that_restates_the_headline_is_rejected_and_retried():
         {"hooks": ["European diplomats attacked in West Bank.", "Who attacks diplomats and walks away?"]},
     )
     assert editor.write_hook(llm, Brief()) == "Who attacks diplomats and walks away?"
-    assert len(llm.calls) == 2 and "only described the event" in llm.calls[1]
+    assert len(llm.calls) == 2 and "Your last options failed" in llm.calls[1]

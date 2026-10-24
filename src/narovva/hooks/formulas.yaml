@@ -1,0 +1,147 @@
+# Hook formulas for vertical news reels.
+#
+# Adapted from the 21 YouTube hook formulas in
+# https://github.com/Jakeschincariol/youtube-agent-skill (MIT, (c) Jake Schincariol):
+# shapes and failure modes kept, examples rewritten for news reels, three formulas
+# dropped because they need a person on camera (I Tried It, The Receipt, The Origin).
+#
+# A reel hook is the first line on screen and the first line spoken. It has to
+# confirm what the cover promised, open a question the viewer cannot close yet,
+# and show the payoff exists. A hook that only summarises the story leaks.
+#
+# `match` patterns (case-insensitive regex) classify a written hook; they judge the
+# words, not why a post worked.
+
+rules:
+  - "Confirm the cover: the hook delivers the promise of the cover text, in other words."
+  - "One idea. A hook carrying two promises keeps neither."
+  - "Specific beats big: a number, a name or a date beats any adjective."
+  - "Never answer your own question in the hook; the reel answers it."
+  - "Never invent a number, a name or a date. Only facts given in the story."
+
+formulas:
+  - id: the-statistic
+    name: The Statistic
+    shape: A number the viewer did not know, stated flat, then the consequence.
+    example: "40% of your new code now comes from Copilot."
+    fails_when: The number is vague or not in the story.
+    match: ['\b\d+(\.\d+)?\s?%', '\b\d+ (out of|in) \d+\b', '\b\d+(\.\d+)?\s?(x|times)\b', '\$\d']
+
+  - id: someone-elses-result
+    name: Someone Else's Result
+    shape: A named company's or person's outcome, then the mechanism.
+    example: "Shopify halved its support tickets with one agent."
+    fails_when: The result or the name is not in the story.
+    match: ['\bwent from .* to\b', '\b(cut|doubled|halved|tripled)\b', '\bin (a|one|two|three|\d+) (day|week|month|year)s?\b']
+
+  - id: the-mistake
+    name: The Mistake
+    shape: Name the error the viewer is probably making right now.
+    example: "You're still pasting secrets into your AI chats."
+    fails_when: The mistake is not common, or the viewer cannot check it in one second.
+    match: ["\\byou('re| are) (probably |still )?\\w+ing\\b", '\bthe (mistake|reason) (everyone|most people|nobody)\b', '\bstop (doing |using )?\b', '\bstill\b']
+
+  - id: contrarian-flip
+    name: Contrarian Flip
+    shape: State the accepted belief, then reject it.
+    example: "Everyone says bigger models win. Not this week."
+    fails_when: The story does not support the flip within seconds.
+    match: ['\beveryone (says|thinks|tells you)\b', '\bis (actually )?wrong\b', '\bnobody (tells|talks about)\b', '\bnot what you think\b']
+
+  - id: the-reveal
+    name: The Reveal
+    shape: Promise a specific thing will be shown, then show it.
+    example: "Here's the setting that stops training on your chats."
+    fails_when: The reel does not show it early.
+    match: ["\\bhere('s| is) (the|exactly|how|what)\\b", '\bthe exact\b', "\\bI('ll| will) show\\b"]
+
+  - id: the-superlative
+    name: The Superlative
+    shape: The single best, worst, fastest or cheapest of a category, named against what it beat.
+    example: "The cheapest open model that runs on your laptop just got faster."
+    fails_when: It does not name what it beat.
+    match: ['\bthe (best|worst|fastest|cheapest|biggest|smallest|first|only)\b', '\bnumber one\b']
+
+  - id: the-clock
+    name: The Clock
+    shape: Bound the payoff in time.
+    example: "In 30 seconds: what changes in Copilot this week."
+    fails_when: The reel cannot deliver it in that time.
+    match: ['\bin (the next )?\d+ (seconds|minutes)\b', '\bthis week\b', '\bby (tomorrow|friday|monday)\b']
+
+  - id: the-question
+    name: The Question
+    shape: Ask the exact question the viewer would type into search.
+    example: "Can your voice agent finally speak in real time?"
+    fails_when: It is the channel's question, not the viewer's.
+    match: ['^(why|how|what|when|should|can|do|does|is|are|will|who|which)\b', '\?\s*$']
+
+  - id: the-before-after
+    name: Before and After
+    shape: Two states, one change between them.
+    example: "Yesterday: a GPU cluster. Today: your phone."
+    fails_when: The two states are not concrete.
+    match: ['\bbefore\b.*\bafter\b', '\byesterday\b.*\btoday\b', '\bused to\b', '\bno longer\b']
+
+  - id: the-teardown
+    name: The Teardown
+    shape: Take a real thing apart in public.
+    example: "Inside DeepSeek's new engine: three tricks you can copy."
+    fails_when: There is no real artefact to take apart.
+    match: ['\b(broke|break|breaking|pulled) (it )?(down|apart)\b', '\bteardown\b', '\binside\b']
+
+  - id: the-stack
+    name: The Stack
+    shape: Two named tools combined into one outcome.
+    example: "Claude plus your terminal now ships the pull request for you."
+    fails_when: The outcome does not need both tools.
+    match: ['\b\w+ (plus|\+) (your )?\w+\b', '\bcombine[sd]?\b', '\btogether\b']
+
+  - id: the-warning
+    name: The Warning
+    shape: A cost the viewer is about to pay.
+    example: "Your API bill doubles on November 1 unless you switch."
+    fails_when: The cost is small or not in the story; then it is a lie.
+    match: ['\bunless\b', '\bbefore (you|it)\b', '\b(lose|cost|costs|break|breaks|leak|leaks|exposed|risk)\b', '\bwarning\b']
+
+  - id: the-list
+    name: The List
+    shape: A counted set, with the count in the first line.
+    example: "Three things change in ChatGPT today."
+    fails_when: The count is not exact or the items are the same kind of thing.
+    match: ['^(two|three|four|five|\d+) (things|ways|changes|features|reasons|tools|models)\b', '\b(two|three|four|five|\d+) (things|ways|changes|features|reasons)\b']
+
+  - id: the-insider
+    name: The Insider
+    shape: Information from inside a system, attributed.
+    example: "OpenAI's own docs quietly changed this limit."
+    fails_when: It claims access the channel does not have.
+    match: ['\bquietly\b', '\bown (docs|data|numbers|report)\b', '\bbehind the scenes\b', '\binternal\b']
+
+  - id: the-impossible-claim
+    name: The Impossible Claim
+    shape: Something that sounds untrue, then the proof.
+    example: "A model this small should not beat GPT. It just did."
+    fails_when: The proof is not in the next few seconds.
+    match: ['\bshould(n.t| not)\b', '\bimpossible\b', '\bit just did\b']
+
+  - id: the-comparison
+    name: The Comparison
+    shape: Two named options, one winner, the loser said out loud.
+    example: "Cursor or Copilot for big refactors? One just pulled ahead."
+    fails_when: There is no loser; then it is an advert.
+    match: ['\b(vs\.?|versus)\b', '\b\w+ or \w+\b.*\?', '\bbeats?\b', '\bpulled ahead\b']
+
+  - id: the-deadline
+    name: The Deadline
+    shape: Something changes on a real date.
+    example: "On November 1, your free Gemini quota shrinks."
+    fails_when: The date is not real and checkable in the story.
+    match: ['\b(on|from|by|until) (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}\b', '\b(today|tomorrow|tonight|next week)\b', '\bdeadline\b']
+
+  - id: the-direct-address
+    name: The Direct Address
+    shape: Name the exact viewer in the first six words.
+    example: "If you review code with Copilot, read this."
+    fails_when: The address is broad ('if you use AI' addresses nobody).
+    match: ['^if you\b', '^(developers|engineers|anyone|everyone) (who|using)\b', '^your\b']

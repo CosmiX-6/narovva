@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     audio_p.add_argument("path", help="Path to a channel YAML config")
     audio_p.add_argument("--query", default=None, help="Search text (default: trending)")
 
+    ins_p = sub.add_parser(
+        "insights-probe", help="Read-only check: can this channel's token read its posts' insights?",
+    )
+    ins_p.add_argument("path", help="Path to a channel YAML config")
+
     viral_p = sub.add_parser(
         "run-viral", help="Post one viral story (any genre) if a peak-hour slot is open",
     )
@@ -94,6 +99,15 @@ def main(argv: list[str] | None = None) -> int:
         for r in probe_audio_api(channel, args.query):
             print(f"== {r['host']} audio_type={r['audio_type']} query={r['query']} -> HTTP {r['status']}")
             print(r["body"])
+        return 0
+
+    if args.command == "insights-probe":
+        from .publishers.insights import probe
+        from .tokens import get_valid_token
+
+        channel = load_channel(args.path)
+        for line in probe(channel.ig_business_account_id, get_valid_token(channel)):
+            print(logsafe.redact(line))
         return 0
 
     if args.command == "run-viral":

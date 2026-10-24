@@ -165,6 +165,43 @@ _FOCUS_EXCLUDE = [
 ]
 
 
+class VoiceConfig(BaseModel):
+    """The channel's voice, given to every writer (hook, cover, caption, storyboard,
+    script, editors). `banned_words` is also enforced in code on the hook, the cover
+    and the caption."""
+
+    # One specific person, not "creators" or "everyone".
+    audience: str = ""
+    banned_words: list[str] = Field(default_factory=list)
+    house_phrases: list[str] = Field(default_factory=list)
+    never_claim: list[str] = Field(default_factory=list)
+    format: str = ""
+
+
+class HooksConfig(BaseModel):
+    """Formula hooks with a packaged cover and caption opener (narovva.hooks). Viral
+    posts always get one; `enabled` adds them to every regular post too."""
+
+    enabled: bool = False
+    # Preferred formula ids from narovva/hooks/formulas.yaml (unset = all of them).
+    formulas: list[str] | None = None
+    # Hooks scoring below this (0-100, narovva.hooks.score) are rejected.
+    min_score: int = 45
+    # Options the model writes per post, each from a different formula.
+    candidates: int = 5
+
+    @field_validator("formulas")
+    @classmethod
+    def _known_formulas(cls, v: list[str] | None) -> list[str] | None:
+        if v:
+            from ..hooks.score import formulas_by_id
+
+            unknown = sorted(set(v) - set(formulas_by_id()))
+            if unknown:
+                raise ValueError(f"unknown hook formula(s) {unknown}; see narovva/hooks/formulas.yaml")
+        return v
+
+
 class FocusConfig(BaseModel):
     """A temporary editorial focus: while enabled, the channel posts only stories for
     `audience` -- the rotation uses `genres` instead of the channel's own, viral posts
@@ -305,6 +342,10 @@ class ChannelConfig(BaseModel):
     viral: ViralConfig | None = None
     # Temporary editorial focus (e.g. "AI for practitioners"); see FocusConfig.
     focus: FocusConfig | None = None
+    # The channel's voice (audience, banned words, claims we never make).
+    voice: VoiceConfig | None = None
+    # Formula hooks + packaged cover/caption opener; see HooksConfig.
+    hooks: HooksConfig = Field(default_factory=HooksConfig)
     # Look of "motion_reel": header, captions, stamps, evidence cards (ignored by other formats).
     motion: MotionStyleConfig = Field(default_factory=MotionStyleConfig)
 
@@ -314,8 +355,17 @@ class ChannelConfig(BaseModel):
 
     @property
     def audience(self) -> str:
-        """Who the posts are for, when a focus names one (else empty)."""
-        return self.focus.audience if self.focus_on else ""
+        """Who the posts are for (a focus overrides the voice's audience) plus the
+        voice's house rules, as one block every writer gets."""
+        from ..hooks.voice import voice_brief
+
+        who = (self.focus.audience if self.focus_on and self.focus.audience else "") or (
+            self.voice.audience if self.voice else "")
+        return voice_brief(who, self.voice)
+
+    @property
+    def banned_words(self) -> list[str]:
+        return list(self.voice.banned_words) if self.voice else []
 
     @model_validator(mode="after")
     def _apply_focus(self) -> "ChannelConfig":
@@ -326,6 +376,16 @@ class ChannelConfig(BaseModel):
                 self.caption = self.caption.model_copy(update={"voice": self.focus.caption_voice})
             if self.focus.extra_hashtags is not None:
                 self.caption = self.caption.model_copy(update={"extra_hashtags": list(self.focus.extra_hashtags)})
+        # After the focus overrides, so a focus caption voice keeps the house rules.
+        if self.voice and (self.voice.banned_words or self.voice.never_claim):
+            rules = []
+            if self.voice.banned_words:
+                rules.append("never use: " + ", ".join(self.voice.banned_words))
+            if self.voice.never_claim:
+                rules.append("never claim: " + "; ".join(self.voice.never_claim))
+            if "never use:" not in self.caption.voice:
+                self.caption = self.caption.model_copy(
+                    update={"voice": f"{self.caption.voice}; " + "; ".join(rules)})
         return self
 
     @property

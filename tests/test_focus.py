@@ -152,7 +152,7 @@ def test_audience_reaches_editor_hook_and_script():
 
     hook_llm = _LLM({"hooks": ["Your code reviews just got a robot colleague."]})
     editor.write_hook(hook_llm, Brief(), audience="AI engineers")
-    assert "Audience: AI engineers" in hook_llm.calls[0][1]
+    assert "Audience and house rules: AI engineers" in hook_llm.calls[0][1]
 
     script_llm = _LLM({"lines": ["one two three", "four five six"]})
     write_script(script_llm, Brief(), [{"kind": "hook", "heading": "x"}, {"kind": "cta"}], brand="CU",

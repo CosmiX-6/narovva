@@ -407,15 +407,17 @@ def write_storyboard(llm, brief, article, *, brand: str, max_beats: int = 10, ta
     return board
 
 
-def hook_board(board: Storyboard, written: str | None, said: str | None, headline: str) -> Storyboard:
-    """Open on a pre-written hook (viral posts): it becomes the first line, as
-    spoken (`said`) and on screen (`written`), under a TRENDING NOW label; a
-    headline opener shows it with the story's own headline underneath."""
+def hook_board(board: Storyboard, written: str | None, said: str | None, headline: str,
+               trending: bool = True) -> Storyboard:
+    """Open on a pre-written hook: it becomes the first line, as spoken (`said`)
+    and on screen (`written`) -- under a TRENDING NOW label for viral posts
+    (`trending`); a headline opener shows it with the story's own headline underneath."""
     if not written or not board.beats or not speakable(said or written):
         return board
     first = board.beats[0]
     first["lines"][0], first["screens"][0], first["cmarks"][0] = said or written, written, auto_mark(written)
-    first["kicker"] = "TRENDING NOW"
+    if trending:
+        first["kicker"] = "TRENDING NOW"
     if first["scene"] == "headline":
         first["data"].update(text=written, mark=None, sub=" ".join(str(headline or "").split()[:12]) or None)
     return board
