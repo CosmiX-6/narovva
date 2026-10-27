@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from poster_core.models import (
-    AssetPlan, AssetType, ContentBrief, DeckSlide, Entity, GeneratedAsset, Platform, SlideKind, StoryCategory,
+    AssetPlan,
+    AssetType,
+    ContentBrief,
+    DeckSlide,
+    Entity,
+    GeneratedAsset,
+    Platform,
+    SlideKind,
+    StoryCategory,
 )
 
+import narovva.orchestration.run_channel  # noqa: F401
 from narovva.config import load_channel
 from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting, MotionStyleConfig, NarrationConfig
 from narovva.motion.render import stage_project
@@ -16,10 +25,8 @@ from narovva.motion.sample import SAMPLE_SLIDES, sample_deck
 from narovva.motion.style import deck_ui, direct_scenes, story_subject
 from narovva.narration.script import Script
 
-import narovva.orchestration.run_channel  # noqa: F401
-
 rc = sys.modules["narovva.orchestration.run_channel"]
-WHEN = datetime(2026, 10, 24, 9, 30, tzinfo=timezone.utc)
+WHEN = datetime(2026, 10, 24, 9, 30, tzinfo=UTC)
 
 
 def _ui(**changes) -> dict:

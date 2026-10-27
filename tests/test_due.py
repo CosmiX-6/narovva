@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
 from narovva.orchestration import due
@@ -42,35 +42,35 @@ def test_rotation_picks_first_genre_when_never_posted(monkeypatch):
 
 
 def test_rotation_advances_to_next_genre_after_cadence_elapses(monkeypatch):
-    last_at = datetime.now(timezone.utc) - timedelta(minutes=130)
+    last_at = datetime.now(UTC) - timedelta(minutes=130)
     _patch_repo(monkeypatch, last=("tech", last_at))
     result = due.due_genres([_channel()])
     assert [d.genre for d in result] == ["ai", "tech"]
 
 
 def test_rotation_wraps_around_after_last_genre(monkeypatch):
-    last_at = datetime.now(timezone.utc) - timedelta(minutes=130)
+    last_at = datetime.now(UTC) - timedelta(minutes=130)
     _patch_repo(monkeypatch, last=("ai", last_at))
     result = due.due_genres([_channel()])
     assert [d.genre for d in result] == ["tech", "ai"]
 
 
 def test_rotation_not_due_before_cadence_elapses(monkeypatch):
-    last_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    last_at = datetime.now(UTC) - timedelta(minutes=30)
     _patch_repo(monkeypatch, last=("tech", last_at))
     result = due.due_genres([_channel()])
     assert result == []
 
 
 def test_rotation_recovers_if_last_posted_genre_was_removed_from_config(monkeypatch):
-    last_at = datetime.now(timezone.utc) - timedelta(minutes=130)
+    last_at = datetime.now(UTC) - timedelta(minutes=130)
     _patch_repo(monkeypatch, last=("gaming", last_at))
     result = due.due_genres([_channel()])
     assert [d.genre for d in result] == ["tech", "ai"]
 
 
 def test_independent_mode_unaffected_when_rotation_minutes_unset(monkeypatch):
-    tech_last = datetime.now(timezone.utc) - timedelta(minutes=200)
+    tech_last = datetime.now(UTC) - timedelta(minutes=200)
 
     class _LegacyRepo:
         def last_successful_post_at(self, channel_id, genre):

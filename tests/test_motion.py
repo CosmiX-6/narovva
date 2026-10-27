@@ -6,17 +6,25 @@ import sys
 
 import pytest
 from poster_core.models import (
-    AssetPlan, AssetType, ComparisonPair, ContentBrief, DeckSlide, GeneratedAsset, Platform,
-    Quote, SlideKind, StoryCategory, TimelineEvent,
+    AssetPlan,
+    AssetType,
+    ComparisonPair,
+    ContentBrief,
+    DeckSlide,
+    GeneratedAsset,
+    Platform,
+    Quote,
+    SlideKind,
+    StoryCategory,
+    TimelineEvent,
 )
 
+import narovva.orchestration.run_channel  # noqa: F401
 from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
 from narovva.motion import MotionRenderError, slide_specs_from_assets, total_duration
 from narovva.motion import render as render_module
 from narovva.motion.render import stage_project
 from narovva.motion.sample import SAMPLE_SLIDES
-
-import narovva.orchestration.run_channel  # noqa: F401
 
 run_channel_module = sys.modules["narovva.orchestration.run_channel"]
 
@@ -191,7 +199,18 @@ def test_render_fails_cleanly_when_hyperframes_missing(tmp_path, monkeypatch):
         )
 
 
-@pytest.mark.skipif(not (shutil.which("npx") and shutil.which("ffmpeg")), reason="needs Node toolchain + ffmpeg")
+def _hyperframes_installed() -> bool:
+    """The CLI the renderer would use: an override, one on PATH, or `npm ci` in this repo."""
+    import os
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[1]
+    return bool(os.environ.get("HYPERFRAMES_BIN") or shutil.which("hyperframes")
+                or (shutil.which("npx") and (repo / "node_modules" / "hyperframes").is_dir()))
+
+
+@pytest.mark.skipif(not (_hyperframes_installed() and shutil.which("ffmpeg")),
+                    reason="needs the HyperFrames CLI (npm ci) and ffmpeg")
 def test_real_hyperframes_render_of_two_slides(tmp_path):
     out = render_module.render_motion_reel(
         [dict(s) for s in SAMPLE_SLIDES[:2]], None, str(tmp_path / "o.mp4"),

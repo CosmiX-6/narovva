@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import UTC
 
 from . import logsafe
 from .config import load_all_channels, load_channel
@@ -32,6 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
         "refresh-token", help="Exchange a channel's Instagram token for a fresh ~60-day one (run weekly)",
     )
     refresh_p.add_argument("path", help="Path to a channel YAML config")
+
+    sub.add_parser(
+        "sweep-blobs", help="Delete hosted media left behind by crashed runs (older than 30 minutes)",
+    )
 
     audio_p = sub.add_parser(
         "audio-probe", help="Read-only check: can this channel's token search Instagram's audio library?",
@@ -101,6 +106,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}")
             return 1
         print(f"channel={channel.id} Instagram token refreshed")
+        return 0
+
+    if args.command == "sweep-blobs":
+        from .imagehost import ImageHostError, sweep_orphaned_blobs
+        from .settings import get_settings
+
+        try:
+            deleted = sweep_orphaned_blobs(get_settings().blob_orphan_ttl_minutes)
+        except ImageHostError as exc:
+            print(f"error: {logsafe.redact(str(exc))}")
+            return 1
+        print(f"deleted {deleted} orphaned blob(s)")
         return 0
 
     if args.command == "audio-probe":
@@ -182,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _metrics_command(args) -> int:
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from .db.engine import ensure_schema, get_connection
     from .db.repo import Repo
@@ -206,7 +223,7 @@ def _metrics_command(args) -> int:
         return 1 if result.failed and not result.fetched and not result.skipped else 0
     from .metrics.report import build_report
 
-    since = datetime.now(timezone.utc) - timedelta(days=args.days)
+    since = datetime.now(UTC) - timedelta(days=args.days)
     text = build_report(channel.id, repo.published_posts(channel.id, since), repo.metrics_snapshots(channel.id, since))
     print(text)
     if args.out:
@@ -216,7 +233,7 @@ def _metrics_command(args) -> int:
 
 
 def _viral_scan(channel, *, editor: bool) -> int:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from .orchestration.viral import scan, viral_due
     from .viral.editor import editor_pick
@@ -224,7 +241,7 @@ def _viral_scan(channel, *, editor: bool) -> int:
     if not channel.viral:
         print("channel has no 'viral' section")
         return 1
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     print("slot:", viral_due(channel, now)[1])
     stories = scan(channel, now=now)
     for i, s in enumerate(stories[:20], 1):

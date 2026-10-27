@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
 from narovva.metrics import collect as col
 from narovva.metrics.report import build_report, measure, recommendation
 from narovva.publishers.insights import InsightsError
 
-NOW = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 
 
 def _post(i, views, formula="the-question", genre="ai_practitioner", hours_old=None):

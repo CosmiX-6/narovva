@@ -5,6 +5,7 @@ import pytest
 import narovva.orchestration  # noqa: F401
 from narovva.llm import FallbackLLM, LLMUnavailable, build_llm_chain, classify_error
 from narovva.llm.fallback import _Entry, retry_delay_seconds
+
 rc = sys.modules["narovva.orchestration.run_channel"]
 
 
@@ -125,8 +126,9 @@ def test_openrouter_client_parses_json_and_surfaces_errors(monkeypatch):
 
 
 def test_run_stops_without_burning_attempts_when_no_text_model_is_left(monkeypatch):
-    from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
     from info_snipe.models import Article as FeedArticle
+
+    from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
 
     calls = []
     articles = [

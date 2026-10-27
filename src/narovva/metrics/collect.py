@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from ..config.schema import ChannelConfig
 from ..publishers.insights import InsightsError, media_insights
@@ -35,7 +35,7 @@ def collect(channel: ChannelConfig, repo, token: str, *, days: int = 14,
             now: datetime | None = None) -> CollectResult:
     """One snapshot per post per day (re-running the same day skips posts already done).
     Stops early if the token cannot read insights at all."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     today = now.date()
     result = CollectResult()
     for post in repo.published_posts(channel.id, now - timedelta(days=days)):

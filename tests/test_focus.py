@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from info_snipe.models import Article
 
@@ -15,7 +15,7 @@ from narovva.viral.sources import Headline
 rc = importlib.import_module("narovva.orchestration.run_channel")
 ov = importlib.import_module("narovva.orchestration.viral")
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 def _art(title, hours_ago=1, desc="", cid=None):

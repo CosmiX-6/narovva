@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 @dataclass
@@ -44,7 +44,7 @@ def _at_age(post: dict, snaps: list[dict], age: timedelta, now: datetime) -> Mea
 def measure(posts: list[dict], snapshots: list[dict], *, now: datetime | None = None,
             age_hours: int = 48, baseline_posts: int = 30, min_baseline: int = 5) -> list[Measured]:
     """Each judgeable post with its multiple over the median of the posts before it."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     by_post: dict[str, list[dict]] = {}
     for s in snapshots:
         by_post.setdefault(s["platform_post_id"], []).append(s)
@@ -88,7 +88,7 @@ def recommendation(by_formula: list[tuple[str, int, float]], measured: int, min_
 def build_report(channel_id: str, posts: list[dict], snapshots: list[dict], *, now: datetime | None = None,
                  min_group: int = 5) -> str:
     """Markdown report (fits a GitHub job summary)."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     rows = measure(posts, snapshots, now=now)
     judged = [m for m in rows if m.multiple is not None]
     lines = [f"# Performance report: {channel_id}", "",

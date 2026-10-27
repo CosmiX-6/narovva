@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from .config.schema import FocusConfig
 
@@ -42,7 +42,7 @@ def on_topic(title: str, summary: str, focus: FocusConfig) -> bool:
 
 def keep_on_topic(articles: list, focus: FocusConfig, *, now: datetime | None = None) -> list:
     """Fresh, on-topic articles (info-snipe Articles), in their original order."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     cutoff = now - timedelta(hours=focus.max_age_hours)
     out = []
     for a in articles:

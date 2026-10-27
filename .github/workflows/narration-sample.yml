@@ -17,6 +17,10 @@ on:
         required: false
         type: string
 
+# Read-only GITHUB_TOKEN: no workflow here writes to the repo.
+permissions:
+  contents: read
+
 jobs:
   audition:
     runs-on: ubuntu-latest

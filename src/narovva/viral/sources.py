@@ -8,7 +8,7 @@ import logging
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from time import mktime
 
@@ -87,7 +87,7 @@ def _entry_time(entry) -> datetime | None:
     if not t:
         return None
     try:
-        return datetime.fromtimestamp(mktime(t), tz=timezone.utc)
+        return datetime.fromtimestamp(mktime(t), tz=UTC)
     except (OverflowError, ValueError):
         return None
 
@@ -156,7 +156,7 @@ def parse_trends(raw: bytes, geo: str) -> list[Trend]:
         started = None
         if item.findtext("pubDate"):
             try:
-                started = parsedate_to_datetime(item.findtext("pubDate")).astimezone(timezone.utc)
+                started = parsedate_to_datetime(item.findtext("pubDate")).astimezone(UTC)
             except (TypeError, ValueError):
                 started = None
         news = []

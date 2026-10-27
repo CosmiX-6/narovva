@@ -166,8 +166,8 @@ class KokoroTTS:
 
     def __init__(self, _key: str = "", model: str | None = None, speed: float = 1.12):
         try:
-            from kokoro_onnx import Kokoro
             import soundfile  # noqa: F401
+            from kokoro_onnx import Kokoro
         except ImportError as exc:
             raise NarrationError("Kokoro needs: pip install 'narovva[narration-local]'") from exc
         onnx, voices = ensure_kokoro_models()

@@ -5,7 +5,7 @@ template stays dumb: every label, colour and choice arrives ready-made."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 _LABELS = {"case_file": "CASE FILE: {subject}", "breakdown": "{subject} BREAKDOWN", "brand": "{brand}", "none": ""}
 _META = {"case_file": "timecode", "breakdown": "date", "brand": "none", "none": "none"}
@@ -36,7 +36,7 @@ def story_subject(scripted: str | None, brief) -> str:
 def deck_ui(cfg, *, subject: str, category: str, brand: str, when: datetime | None = None) -> dict:
     """`cfg` is a config.schema.MotionStyleConfig."""
     hud = cfg.hud
-    day = (when or datetime.now(timezone.utc)).strftime("%d %b %Y").upper()
+    day = (when or datetime.now(UTC)).strftime("%d %b %Y").upper()
     values = _Fill(subject=subject, category=category, brand=brand, date=day)
     template = hud.label if hud.label is not None else _LABELS[hud.style]
     try:

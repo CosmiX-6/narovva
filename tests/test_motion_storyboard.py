@@ -9,12 +9,11 @@ import wave
 
 import pytest
 
+import narovva.orchestration.run_channel  # noqa: F401
 from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting, MotionStyleConfig, NarrationConfig
 from narovva.motion.sample import SAMPLE_STORYBOARD, sample_brief_and_article
 from narovva.motion.storyboard import BEAT_MIN, beat_specs, parse_storyboard, total_seconds, write_storyboard
 from narovva.motion.style import stamp_colors
-
-import narovva.orchestration.run_channel  # noqa: F401
 
 rc = sys.modules["narovva.orchestration.run_channel"]
 BRIEF, ARTICLE = sample_brief_and_article()

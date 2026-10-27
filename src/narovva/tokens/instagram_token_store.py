@@ -1,20 +1,21 @@
 """Instagram long-lived token resolution and refresh.
 
-Resolution order: Postgres (`instagram_tokens`, updated by the most recent
-refresh) first, falling back to the seeded env-var token from the channel's
-config. Mutating a running function's own env var isn't practical on
-Vercel, so a refreshed token's new home is Postgres, with the env var
-staying as the disaster-recovery seed.
+Two places can hold a channel's token: Postgres (`instagram_tokens`, written by
+the weekly refresh, encrypted with TOKEN_ENCRYPTION_KEY) and the env var named
+in the channel's config (the seed you paste in, e.g. a GitHub Actions secret).
+The stored one is preferred because it is the freshest. When the two differ and
+Instagram rejects the stored one -- e.g. after you revoked a leaked token and
+pasted a new one into the secret -- the env var is used instead, and the next
+refresh writes it back to Postgres. No manual database edit is needed.
 
-Tokens here come from Instagram API with Instagram Login (a per-app
-"narovva-IG"-style Instagram app, not the Facebook-Page-linked Business
-Login flow), so refresh uses Instagram's own ig_refresh_token grant --
-no app id/secret involved, just the current token itself.
+Tokens here come from Instagram API with Instagram Login (an Instagram app, not
+the Facebook-Page-linked Business Login flow), so refresh uses Instagram's own
+ig_refresh_token grant -- no app id/secret involved, just the current token.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
@@ -40,27 +41,48 @@ def _fernet() -> Fernet:
     return Fernet(settings.token_encryption_key.encode())
 
 
-def get_valid_token(channel: ChannelConfig) -> str:
-    settings = get_settings()
-    if settings.database_url:
-        row = None
+def _stored_token(channel: ChannelConfig) -> str | None:
+    if not get_settings().database_url:
+        return None
+    try:
+        row = Repo(get_connection()).get_instagram_token(channel.id)
+    except Exception:
+        return None  # DB unreachable -- fall through to the env var
+    if row and row.get("access_token_encrypted"):
         try:
-            row = Repo(get_connection()).get_instagram_token(channel.id)
-        except Exception:
-            row = None  # DB unreachable -- fall through to the env var
-        if row and row.get("access_token_encrypted"):
-            try:
-                return _fernet().decrypt(bytes(row["access_token_encrypted"])).decode()
-            except InvalidToken:
-                pass
+            return _fernet().decrypt(bytes(row["access_token_encrypted"])).decode()
+        except (InvalidToken, InstagramTokenError):
+            return None
+    return None
 
+
+def _accepted(token: str) -> bool:
+    try:
+        check_token(token)
+    except InstagramTokenError:
+        return False
+    return True
+
+
+# (stored, env) -> chosen token, so one process asks Instagram at most once.
+_chosen: dict[tuple[str | None, str | None], str] = {}
+
+
+def get_valid_token(channel: ChannelConfig) -> str:
+    stored = _stored_token(channel)
     env_token = resolve_env(channel.credentials.instagram_access_token_env)
-    if not env_token:
+    if not stored and not env_token:
         raise InstagramTokenError(
             f"no Instagram token available for channel {channel.id!r}: nothing stored in "
             f"instagram_tokens, and {channel.credentials.instagram_access_token_env!r} is unset"
         )
-    return env_token
+    if not stored or not env_token or stored == env_token:
+        return stored or env_token
+    key = (stored, env_token)
+    if key not in _chosen:
+        # The stored token wins unless Instagram rejects it and accepts the env one.
+        _chosen[key] = env_token if not _accepted(stored) and _accepted(env_token) else stored
+    return _chosen[key]
 
 
 def check_token(token: str) -> None:
@@ -83,7 +105,7 @@ def check_token(token: str) -> None:
 
 
 def store_refreshed_token(channel: ChannelConfig, *, access_token: str, expires_in_seconds: int) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     encrypted = _fernet().encrypt(access_token.encode())
     Repo(get_connection()).upsert_instagram_token(
         channel_id=channel.id,

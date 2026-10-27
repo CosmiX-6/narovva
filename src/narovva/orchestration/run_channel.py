@@ -21,28 +21,33 @@ from ..config.schema import ChannelConfig, GenreSetting
 from ..db.engine import ensure_schema, get_connection
 from ..db.repo import Repo
 from ..dedup import get_store_for_channel
+from ..focus import keep_on_topic, screen
+from ..hooks.score import formulas_by_id
+from ..hooks.voice import drop_banned_sentences
+from ..hooks.writer import HookPackage, write_package
 from ..imagehost import ImageHostError, VercelBlobImageHost
+from ..llm import LLMUnavailable, build_llm_chain
+from ..logsafe import redact
+from ..metrics.learn import choose_formulas, formula_stats
 from ..motion import render_motion_reel, slide_specs_from_assets, total_duration
 from ..motion.slides import SCENE_OVERLAP_SECONDS, _trim, time_parts
 from ..motion.storyboard import BEAT_MIN, BEAT_TAIL, beat_specs, hook_board, write_storyboard
 from ..motion.style import category_label, deck_ui, direct_scenes, stamp_colors, story_subject
-from ..narration import (
-    build_provider, choose_voice, default_voices, mix_voice_and_music, style_for_tone,
-    synthesize_lines, write_script,
-)
 from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
+from ..narration import (
+    build_provider,
+    choose_voice,
+    default_voices,
+    mix_voice_and_music,
+    style_for_tone,
+    synthesize_lines,
+    write_script,
+)
 from ..platforms import PublishPlatform, render_platform_for
 from ..publishers import PublishAsset, get_publisher
 from ..settings import Settings, get_settings, resolve_env
 from ..tokens import InstagramTokenError, check_token, get_valid_token
-from ..llm import LLMUnavailable, build_llm_chain
-from ..logsafe import redact
 from ..video import assemble_reel, make_cover, slide_duration
-from ..focus import keep_on_topic, screen
-from ..hooks.voice import drop_banned_sentences
-from ..hooks.score import formulas_by_id
-from ..hooks.writer import HookPackage, write_package
-from ..metrics.learn import choose_formulas, formula_stats
 from ..viral.editor import spoken
 
 logger = logging.getLogger(__name__)

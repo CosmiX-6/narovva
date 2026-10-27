@@ -14,10 +14,9 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 
-from ..narration.script import auto_mark, clean_stamp, clean_subject, numbers_in, phrase_in, caption_text, speakable
+from ..narration.script import auto_mark, caption_text, clean_stamp, clean_subject, numbers_in, phrase_in, speakable
 from .dataviz import comparison_viz, parse_metric, stats_viz
 from .icon_names import ICON_NAMES
 from .slides import SCENE_OVERLAP_SECONDS, time_parts

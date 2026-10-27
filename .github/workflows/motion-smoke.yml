@@ -11,7 +11,16 @@ on:
       - "src/narovva/motion/**"
       - "package*.json"
       - ".github/workflows/motion-smoke.yml"
+  pull_request:
+    paths:
+      - "src/narovva/motion/**"
+      - "package*.json"
+      - ".github/workflows/motion-smoke.yml"
   workflow_dispatch:
+
+# Read-only GITHUB_TOKEN: no workflow here writes to the repo.
+permissions:
+  contents: read
 
 jobs:
   smoke:

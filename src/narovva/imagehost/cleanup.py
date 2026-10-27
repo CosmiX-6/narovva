@@ -1,10 +1,10 @@
-"""Safety net for blobs orphaned by a crashed/timed-out invocation before it
-reached its own delete() call. Run on a low-frequency cron, independent of
-the main publish path."""
+"""Safety net for blobs orphaned by a crashed or timed-out run before it reached
+its own delete() call (`narovva sweep-blobs`, run after each hourly job).
+Independent of the publish path: a sweep failure never affects posting."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import vercel_blob
 
@@ -14,7 +14,7 @@ from .vercel_blob_host import PREFIX, ImageHostError
 def sweep_orphaned_blobs(max_age_minutes: int = 30) -> int:
     """Delete every blob under the narovva/ prefix older than max_age_minutes.
     Returns the number of blobs deleted."""
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+    cutoff = datetime.now(UTC) - timedelta(minutes=max_age_minutes)
     deleted = 0
     cursor = None
     while True:

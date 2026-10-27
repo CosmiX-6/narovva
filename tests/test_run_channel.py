@@ -13,9 +13,8 @@ from poster_core.models import (
     SlideKind,
 )
 
-from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
-
 import narovva.orchestration.run_channel  # noqa: F401 -- registers the submodule in sys.modules
+from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
 
 # The orchestration package re-exports a `run_channel` *function* under the
 # same name as this submodule, which shadows `narovva.orchestration.run_channel`

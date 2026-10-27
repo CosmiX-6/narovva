@@ -24,6 +24,10 @@ concurrency:
   group: publish
   cancel-in-progress: false
 
+# Read-only GITHUB_TOKEN: no workflow here writes to the repo.
+permissions:
+  contents: read
+
 jobs:
   run-due-channels:
     runs-on: ubuntu-latest
@@ -38,7 +42,8 @@ jobs:
           python-version: "3.12"
 
       - name: Install narovva
-        run: pip install ".[narration-local]"
+        # narration-local: the free Kokoro voice; trending: Google Trends hashtags
+        run: pip install ".[narration-local,trending]"
 
       # HyperFrames (motion_reel format): Node 22 + pinned CLI + Chrome Headless
       # Shell. FFmpeg is installed explicitly. If any of this fails the run still
@@ -77,8 +82,6 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           IG_ACCESS_TOKEN__example_tech_ig: ${{ secrets.IG_ACCESS_TOKEN__EXAMPLE_TECH_IG }}
-          IG_APP_ID__example_tech_ig: ${{ secrets.IG_APP_ID__EXAMPLE_TECH_IG }}
-          IG_APP_SECRET__example_tech_ig: ${{ secrets.IG_APP_SECRET__EXAMPLE_TECH_IG }}
           JAMENDO_CLIENT_ID__example_tech_ig: ${{ secrets.JAMENDO_CLIENT_ID__EXAMPLE_TECH_IG }}
           # Passed as data, never pasted into the script (no shell injection from the input).
           FORCE_GENRE: ${{ inputs.genre }}
@@ -91,6 +94,15 @@ jobs:
           else
             narovva run-due
           fi
+
+      # Deletes hosted media a crashed run left behind (older than 30 minutes).
+      # Housekeeping only: a failure here never fails the run.
+      - name: Sweep orphaned media
+        if: always()
+        continue-on-error: true
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: narovva sweep-blobs
 
       - name: Upload rendered reels
         if: always()

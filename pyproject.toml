@@ -14,11 +14,11 @@ dependencies = [
     "imageio-ffmpeg>=0.5",
     "pillow>=10.0",
     "poster-core[all] @ git+https://github.com/CosmiX-6/poster-core.git@909ad505506c4b99e5458332daa974ee1eb6d9ef",
-    "info-snipe[postgres] @ git+https://github.com/CosmiX-6/info-snipe.git@2eec16deed7dcd601747af494185cb8b2c11c9f1",
+    "info-snipe[postgres] @ git+https://github.com/CosmiX-6/info-snipe.git@6e6e07a8626fcf5b1b0a120897e732b4d9ec700d",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "ruff>=0.6"]
 # Free local voice-over (Kokoro): no API key, runs inside the job. ~350 MB model, cached.
 narration-local = ["kokoro-onnx>=0.4", "soundfile>=0.12"]
 # Trending hashtag lookup via Google Trends (requires pandas).
@@ -39,3 +39,16 @@ packages = ["src/narovva"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# Real errors (F, E9), import order (I) and modern syntax (UP).
+select = ["E9", "F", "I", "UP"]
+# StrEnum changes str(member); the (str, Enum) classes keep their old behaviour.
+ignore = ["UP042"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["narovva"]

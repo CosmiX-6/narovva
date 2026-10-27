@@ -4,7 +4,6 @@ channel_run_log, instagram_tokens). See db/migrations/0001_init.sql."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 import psycopg
 
@@ -42,7 +41,7 @@ class Repo:
             (status, genres_processed, articles_considered, articles_posted, error, run_id),
         )
 
-    def last_successful_post_at(self, channel_id: str, genre: str) -> Optional[datetime]:
+    def last_successful_post_at(self, channel_id: str, genre: str) -> datetime | None:
         row = self.conn.execute(
             """
             SELECT max(published_at) FROM post_history
@@ -54,7 +53,7 @@ class Repo:
 
     def last_successful_post(
         self, channel_id: str, *, exclude_genres: tuple[str, ...] = (),
-    ) -> Optional[tuple[str, datetime]]:
+    ) -> tuple[str, datetime] | None:
         """Most recent successful post for the channel, across all genres except
         `exclude_genres` -- used to drive rotation scheduling (narovva.orchestration.due)."""
         row = self.conn.execute(
@@ -77,7 +76,7 @@ class Repo:
         ).fetchone()
         return int(row[0]) if row else 0
 
-    def last_post_at(self, channel_id: str) -> Optional[datetime]:
+    def last_post_at(self, channel_id: str) -> datetime | None:
         """When the channel last posted anything."""
         row = self.conn.execute(
             "SELECT max(published_at) FROM post_history WHERE channel_id = %s AND status = 'success'",
@@ -279,7 +278,7 @@ class Repo:
                 "shares", "total_interactions", "avg_watch_ms", "total_watch_ms")
         return [dict(zip(keys, r)) for r in rows]
 
-    def get_instagram_token(self, channel_id: str) -> Optional[dict]:
+    def get_instagram_token(self, channel_id: str) -> dict | None:
         row = self.conn.execute(
             """
             SELECT ig_business_account_id, page_id, access_token_encrypted, expires_at, refresh_status

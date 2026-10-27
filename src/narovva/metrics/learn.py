@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import statistics
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from .report import measure
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def formula_stats(repo, channel_id: str, *, days: int = 90, now: datetime | None = None) -> dict[str, tuple[int, float]]:
     """{formula: (posts with a baseline, mean multiple)} from the stored metrics."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     since = now - timedelta(days=days)
     rows = measure(repo.published_posts(channel_id, since), repo.metrics_snapshots(channel_id, since), now=now)
     groups: dict[str, list[float]] = {}

@@ -7,6 +7,10 @@ name: Instagram insights probe
 on:
   workflow_dispatch:
 
+# Read-only GITHUB_TOKEN: no workflow here writes to the repo.
+permissions:
+  contents: read
+
 jobs:
   probe:
     runs-on: ubuntu-latest

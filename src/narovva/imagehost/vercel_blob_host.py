@@ -1,7 +1,8 @@
 """ImageHost backed by Vercel Blob (via the `vercel_blob` PyPI package).
 
-Auth comes from the BLOB_READ_WRITE_TOKEN env var, which Vercel injects
-automatically once a Blob store is attached to the project.
+Instagram's publishing API fetches media from a public URL, so each image or
+video is uploaded here just long enough to publish, then deleted. Auth comes
+from the BLOB_READ_WRITE_TOKEN env var (Vercel -> Storage -> Blob -> your store).
 """
 
 from __future__ import annotations

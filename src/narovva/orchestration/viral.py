@@ -4,7 +4,7 @@ genre), let the editor pick an informative one, and post it with a hook."""
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from info_snipe import get_genre
 from info_snipe.content_id import make_content_id
@@ -12,17 +12,23 @@ from info_snipe.models import Article as FeedArticle
 
 from ..config.schema import ChannelConfig, GenreSetting
 from ..dedup import get_store_for_channel
+from ..focus import on_topic
 from ..llm import LLMUnavailable
 from ..logsafe import redact
 from ..settings import get_settings
-from ..focus import on_topic
 from ..viral.detect import Story, find_stories
 from ..viral.editor import editor_pick
 from ..viral.schedule import local_day_start, slot_status
 from ..viral.sources import DEFAULT_FEEDS, fetch_headlines, fetch_trends
 from .due import VIRAL_GENRE
 from .run_channel import (
-    ChannelRunResult, _build_llm, _open_repo, _preflight_token, _process_one, hook_fields, load_hook_stats,
+    ChannelRunResult,
+    _build_llm,
+    _open_repo,
+    _preflight_token,
+    _process_one,
+    hook_fields,
+    load_hook_stats,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,7 +58,7 @@ def viral_due(channel: ChannelConfig, now: datetime | None = None, repo=None) ->
     cfg = channel.viral
     if not cfg or not cfg.enabled:
         return False, "viral posts are off"
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     posted = 0
     if repo is not None:
         posted = repo.count_successful_posts_since(channel.id, VIRAL_GENRE, local_day_start(cfg, now))
@@ -65,7 +71,7 @@ def viral_due(channel: ChannelConfig, now: datetime | None = None, repo=None) ->
 def scan(channel: ChannelConfig, *, now: datetime | None = None, repo=None, store=None) -> list[Story]:
     """Viral stories right now, best first, minus anything already posted."""
     cfg = channel.viral
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     headlines = fetch_headlines(viral_feeds(channel))
     trends = fetch_trends(cfg.trends_geos) if cfg.trends_geos else []
     recent = repo.recent_post_titles(channel.id, now - timedelta(hours=48)) if repo else []
@@ -115,7 +121,7 @@ def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = Fa
         result.failed += 1
         return result
     repo = _open_repo(settings)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not force:
         due, why = viral_due(channel, now, repo)
         logger.info("channel %s: viral %s: %s", channel.id, "due" if due else "not due", why)

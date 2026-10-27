@@ -10,16 +10,21 @@ import wave
 import pytest
 from poster_core.models import AssetPlan, AssetType, ContentBrief, DeckSlide, GeneratedAsset, Platform, SlideKind
 
+import narovva.orchestration.run_channel  # noqa: F401
 from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting, MotionStyleConfig, NarrationConfig
 from narovva.motion.render import _probe_duration
 from narovva.narration import (
-    NarrationError, build_provider, choose_voice, default_voices, mix_voice_and_music,
-    style_for_tone, synthesize_lines, write_script,
+    NarrationError,
+    build_provider,
+    choose_voice,
+    default_voices,
+    mix_voice_and_music,
+    style_for_tone,
+    synthesize_lines,
+    write_script,
 )
 from narovva.narration import tts as tts_module
 from narovva.narration.tts import to_clip
-
-import narovva.orchestration.run_channel  # noqa: F401
 
 rc = sys.modules["narovva.orchestration.run_channel"]
 

@@ -1,0 +1,42 @@
+name: CI
+
+# Lint and the offline test suite on every push to main and every pull request.
+# Uses no secrets, so it is safe for pull requests from forks. The real video
+# render is covered by "Motion reel smoke test".
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install ".[dev]"
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Tests
+        run: python -m pytest -q

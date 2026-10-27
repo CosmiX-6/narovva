@@ -5,7 +5,8 @@ from PIL import Image
 from narovva.logsafe import RedactFilter, redact
 from narovva.video import make_cover
 
-TOKEN = "IGAAO6DSRfh6RBZAGFJQ05hUDBMSlZAkRVAwZA1ZAoZA0k1S3dpZA2FJd0pKODdlUHpSZAzNEa3o2bjM1X01XZA2F2ZAGw4eWZALR1EzODlTeDJuajhZAZAExKZATNqajNyQkxDTzVWY3NHWko5Q1VhVDJxc0JyMTc5ZAUVB"
+# A made-up token in the shape of an Instagram access token (never a real one).
+TOKEN = "IGAA" + "FakeTokenForRedactionTests0" * 6
 
 
 def test_redact_removes_tokens_from_urls_headers_and_bare_strings():

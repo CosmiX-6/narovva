@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 from narovva.config.schema import BrandKitConfig, ChannelConfig, CredentialRefs, GenreSetting
 from narovva.publishers import instagram as instagram_module
 from narovva.publishers.base import PublishAsset

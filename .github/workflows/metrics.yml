@@ -12,6 +12,10 @@ concurrency:
   group: metrics
   cancel-in-progress: false
 
+# Read-only GITHUB_TOKEN: no workflow here writes to the repo.
+permissions:
+  contents: read
+
 jobs:
   metrics:
     runs-on: ubuntu-latest

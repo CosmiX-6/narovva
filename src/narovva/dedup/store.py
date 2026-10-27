@@ -2,9 +2,9 @@
 
 Prefers info_snipe.store_postgres.PostgresContentStore (namespaced per
 channel_id) whenever DATABASE_URL is set, since that's the only backend
-that survives Vercel's serverless filesystem -- each invocation can get a
-fresh disk, so a local SQLite file wouldn't persist dedup state across
-runs. Falls back to a local SQLite info_snipe.ContentStore per channel
+that survives between CI runs -- each GitHub Actions job starts on a fresh
+disk, so a local SQLite file wouldn't persist dedup state across runs.
+Falls back to a local SQLite info_snipe.ContentStore per channel
 when there's no database configured (e.g. a quick local smoke test with
 no Postgres set up yet). NewsFetcher only ever calls filter_unseen()/
 mark_seen_many() on whatever it's given, so nothing else in the
@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Union
 
 import psycopg
 from info_snipe import ContentStore
@@ -51,7 +50,7 @@ class ResilientPostgresStore:
         return call
 
 
-def get_store_for_channel(channel_id: str) -> Union[ContentStore, ResilientPostgresStore]:
+def get_store_for_channel(channel_id: str) -> ContentStore | ResilientPostgresStore:
     settings = get_settings()
     if settings.database_url:
         return ResilientPostgresStore(settings.database_url, namespace=channel_id)

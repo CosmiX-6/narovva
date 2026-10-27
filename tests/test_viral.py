@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+import importlib
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting, ViralConfig
 from narovva.narration.script import write_script
-import importlib
 
 rc = importlib.import_module("narovva.orchestration.run_channel")
 from narovva.orchestration import viral as ov
@@ -15,7 +15,7 @@ from narovva.viral.detect import find_stories, same_story, tokens
 from narovva.viral.schedule import slot_status
 from narovva.viral.sources import Headline, Trend, parse_traffic, parse_trends
 
-NOW = datetime(2026, 10, 17, 14, 0, tzinfo=timezone.utc)  # 19:30 IST
+NOW = datetime(2026, 10, 17, 14, 0, tzinfo=UTC)  # 19:30 IST
 
 
 def _h(title, source, minutes_ago=30, url=None):
@@ -48,7 +48,7 @@ def test_parse_trends_reads_traffic_time_and_news():
     </item></channel></rss>"""
     [t] = parse_trends(raw, "US")
     assert t.query == "chip ban" and t.traffic == 50000
-    assert t.started_at == datetime(2026, 10, 17, 13, 30, tzinfo=timezone.utc)
+    assert t.started_at == datetime(2026, 10, 17, 13, 30, tzinfo=UTC)
     assert t.news[0].title == "US widens chip export ban" and t.news[0].source == "X"
 
 
@@ -127,7 +127,7 @@ def test_one_word_trend_does_not_match_on_words():
 ])
 def test_slot_status(utc, posted, due):
     hh, mm = map(int, utc.split(":"))
-    now = datetime(2026, 10, 17, hh, mm, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 17, hh, mm, tzinfo=UTC)
     assert slot_status(_channel().viral, now, posted)[0] is due
 
 

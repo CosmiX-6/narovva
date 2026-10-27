@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 import httpx
-from pathlib import Path
 
 from .tts import build_provider
 from .voices import default_voices, style_for_tone

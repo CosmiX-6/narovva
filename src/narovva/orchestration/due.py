@@ -12,7 +12,7 @@ Two scheduling modes per channel:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from ..config.schema import ChannelConfig
 from ..db.engine import get_connection
@@ -33,7 +33,7 @@ def due_genres(channels: list[ChannelConfig]) -> list[DueGenre]:
     settings = get_settings()
     repo = Repo(get_connection()) if settings.database_url else None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     due: list[DueGenre] = []
     for channel in channels:
         if not channel.enabled or not channel.genres:

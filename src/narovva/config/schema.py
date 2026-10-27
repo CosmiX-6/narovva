@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class BrandKitConfig(BaseModel):
-    """Mirrors poster_core.BrandKit, plus the bold/regular font overrides
-    narovva needs since Vercel has no system fonts to fall back to."""
+    """Mirrors poster_core.BrandKit, plus bold/regular font overrides so renders
+    use the bundled fonts instead of whatever the machine has installed."""
 
     name: str = ""
     accent_color: str = "#E4572E"
@@ -59,6 +59,8 @@ class CredentialRefs(BaseModel):
     themselves. Resolved at runtime via narovva.settings.resolve_env."""
 
     instagram_access_token_env: str | None = None
+    # Unused: Instagram Login tokens refresh without the app id/secret. Kept so
+    # older channel files that still set them load without errors.
     instagram_app_id_env: str | None = None
     instagram_app_secret_env: str | None = None
     openai_api_key_env: str | None = None
@@ -373,7 +375,7 @@ class ChannelConfig(BaseModel):
         return list(self.voice.banned_words) if self.voice else []
 
     @model_validator(mode="after")
-    def _apply_focus(self) -> "ChannelConfig":
+    def _apply_focus(self) -> ChannelConfig:
         if self.focus_on:
             if self.focus.genres:
                 self.genres = list(self.focus.genres)
