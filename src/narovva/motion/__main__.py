@@ -22,7 +22,6 @@ from .sample import sample_story, write_sample_photo
 from .slides import total_duration
 from .style import deck_ui
 
-
 CHANNEL = Path("config/channels/example-tech-ig.yaml")
 
 
