@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=1080, height=1920" />
     <title>CU motion reel</title>
     <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/three.min.js"></script>
     <script src="ambient.js"></script>
     <script src="viz.js"></script>
     <script src="icons.js"></script>
+    <script src="world.js"></script>
     <script src="scenes.js"></script>
     <link rel="stylesheet" href="scenes.css" />
     <!-- Staged per render by narovva.motion.stage: defines window.CU_DECK. -->
@@ -377,7 +379,7 @@
           document.getElementById("glow").style.opacity = ".14";
           const LEVEL = { hook: 0.95, hero: 0.95, text: 0.75, conclusion: 0.85, quote: 0.75, evidence: 0.55, why: 0.75, impact: 0.55, bigger_picture: 0.85, scream: 0.45, cta: 0.8,
             headline: 0.9, question: 0.6, number: 0.4, dates: 0.5, chain: 0.4, grid: 0.4, cards: 0.5, split: 0.45, excerpt: 0.6, terminal: 0.35, checklist: 0.7, endcard: 0.8,
-            ask: 0.55, source: 0.6, recap: 0.4 };
+            ask: 0.55, source: 0.6, recap: 0.4, world: 0.3 };
           let prev = 0;
           slides.forEach((s, i) => {
             const v = LEVEL[s.kind] == null ? 0.42 : LEVEL[s.kind];

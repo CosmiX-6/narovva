@@ -10,7 +10,7 @@
  * changes to an element use immediateRender:false, nothing reads the clock.
  */
 window.CUScenes = function (K) {
-  const { tl, el, image, fit, figures, phraseAt, heading, kick, introHead, barIn, V, mh, OV, PHOTO, DECK, UI, opener } = K;
+  const { tl, el, image, fit, figures, phraseAt, heading, kick, introHead, barIn, V, mh, SH, OV, PHOTO, DECK, UI, opener } = K;
   const NS = "http://www.w3.org/2000/svg";
   const ICONS = window.CU_ICONS || {};
   const GREEN = "#22C55E", RED = "#F43F5E";
@@ -461,6 +461,18 @@ window.CUScenes = function (K) {
     // the last row stays lit; the earlier ones come back up once they're all in
     els.slice(0, -1).forEach((row) => tl.fromTo(row, { opacity: 0.6 }, { opacity: 1, duration: 0.3, immediateRender: false }, Math.min(latest(c), lastT + 0.9)));
     c.stampTarget = box; c.stampAt = lastT + 0.6;
+  };
+
+  // -- world: a 3D diorama where characters and objects act the story out (world.js) --
+  const WORLD = window.CUWorld ? window.CUWorld({ tl, el, DECK, parts, partAt, latest, SH }) : null;
+  S.world = (sc, s, c) => {
+    const d = s.data || {};
+    kick(sc, s);
+    if (d.title) heading(sc, d.title, 66, mh(150), d.mark);
+    c.a && introHead(sc, c.a, c.D);
+    if (!WORLD || !WORLD.build(sc, s, c)) { // no WebGL: the title alone still says it
+      if (!d.title) heading(sc, (s.screens && s.screens[0]) || "", 96, mh(500));
+    }
   };
 
   // -- end card: logo, name, handle, the follow button ------------------------

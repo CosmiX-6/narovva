@@ -173,3 +173,13 @@
   border: 2px solid color-mix(in srgb, var(--hl, #FACC15) calc(var(--lit) * 70%), rgba(255,255,255,.07)); }
 .rlab { font-family: "Archivo Black", sans-serif; font-size: 46px; line-height: 1.05; text-transform: uppercase; }
 .rnote { font-weight: 500; font-size: 36px; line-height: 1.25; color: #C9CFDD; }
+
+/* world: the 3D diorama (world.js), filling the scene window behind the title */
+.world { position: absolute; left: -72px; top: -70px; width: 1080px; z-index: 0; }
+.world canvas { display: block; width: 1080px; height: 100%;
+  -webkit-mask-image: linear-gradient(transparent 0%, #000 9%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(transparent 0%, #000 9%, #000 88%, transparent 100%); }
+.world::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 300px; pointer-events: none;
+  background: linear-gradient(rgba(10,14,26,.85), rgba(10,14,26,0)); }
+.scene.has-world .inner { position: relative; z-index: 1; }
+.scene.has-world { justify-content: flex-start; }

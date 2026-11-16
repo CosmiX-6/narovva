@@ -50,6 +50,12 @@ scene types, never the same type twice in a row. Data shapes:
   consecutive words of it to highlight} -- the receipt: the article's own words on screen, proving the key claim.
 - "recap": {"title": "max 6 words", "rows": [{"label": "max 4 words", "note": "max 7 words"}, ...]} -- 2-4 rows: the
   short version (one row per option, player or takeaway), one spoken line per row where you can.
+- "world": {"piece": "gate", "title": optional (max 6 words), "gate": "what the door is (max 3 words)", "crowd": "who queues
+  (max 3 words)", "keeper": optional "who decides (max 3 words)", "allowed": optional "max 2 words", "blocked": optional
+  "what the turned-away hear (max 3 words)", "count": optional 1-6} -- a 3D scene that ACTS OUT the story with characters:
+  people queue at a door, a keeper lets the first few in, then a barrier drops and the rest are turned away. For any
+  story about access, limits, bans, approvals, tariffs or gatekeepers. Line 1 = people get in, line 2 = the rest are
+  stopped. Use it at least once when the story has that shape: it is the most memorable scene in the reel.
 - "cta": {} -- the last beat only: the call to follow (or to save the video, when it is a how-to worth keeping).
 Scenes that build up (dates, chain, grid, cards, split, stats, recap) may also carry "title": a section heading of at most 6
 words that stays on screen while the scene builds ("Check the facts", "His track record"), and "mark": 1-2 of its words
@@ -351,6 +357,26 @@ def _recap(d, src):
     return {"rows": rows} if len(rows) >= 2 else None
 
 
+_PIECES = {"gate"}
+
+
+def _world(d, src):
+    piece = str(d.get("piece") or "").strip().lower()
+    if piece not in _PIECES:
+        return None
+    label = lambda k, n: _words(d.get(k), n)
+    out = {"piece": piece, "gate": label("gate", 3), "crowd": label("crowd", 3), "keeper": label("keeper", 3),
+           "allowed": label("allowed", 2), "blocked": label("blocked", 3)}
+    if not out["gate"] or not out["crowd"] or not src.grounded(*(v for v in out.values() if v)):
+        return None
+    count = d.get("count")
+    out["count"] = count if isinstance(count, int) and 1 <= count <= 6 else 3
+    title = _text(d.get("title"), 6, 50)
+    if title and src.grounded(title):
+        out["title"], out["mark"] = title, phrase_in(d.get("mark"), title, 2)
+    return out
+
+
 _TITLED = {"dates", "chain", "grid", "cards", "split", "stats", "recap"}
 
 
@@ -365,7 +391,7 @@ def _with_title(clean: dict, d: dict, src: _Source) -> dict:
 _SCENES = {
     "headline": _headline, "number": _number, "question": _question, "dates": _dates, "chain": _chain,
     "grid": _grid, "cards": _cards, "stats": _stats, "compare": _compare, "split": _split, "quote": _quote,
-    "terminal": _terminal, "checklist": _checklist, "ask": _ask, "source": _source, "recap": _recap,
+    "terminal": _terminal, "checklist": _checklist, "ask": _ask, "source": _source, "recap": _recap, "world": _world,
     "cta": lambda d, src: {},
 }
 
