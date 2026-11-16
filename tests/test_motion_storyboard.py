@@ -324,3 +324,45 @@ def test_the_viewer_question_is_read_in_a_second_voice(monkeypatch):
     question = [h for h in heard if h[2].startswith("Wait")]
     assert len(question) == 1 and question[0][0] != voice and "sceptical" in question[0][1]
     assert all(v == voice for v, _, t in heard if not t.startswith("Wait"))
+
+
+# -- the story world (3D set pieces) -----------------------------------------------
+
+def _world_beat(**data):
+    return _beat("world", data, ["It plays out like this.", "Then it turns."])
+
+
+def _world(**data):
+    board = _board(_raw(_world_beat(**data)))
+    return next((b["data"] for b in board.beats if b["scene"] == "world"), None)
+
+
+def test_the_world_gallery_validates_every_set_piece():
+    from narovva.motion.sample import SAMPLE_WORLDS, world_gallery
+    specs, _ = world_gallery()
+    assert {s["data"]["piece"] for s in specs if s["kind"] == "world"} == {
+        b["data"]["piece"] for b in SAMPLE_WORLDS["beats"] if b["scene"] == "world"} == {
+        "gate", "flow", "pile", "race", "split", "machine", "wall", "balance"}
+
+
+def test_a_set_piece_needs_its_labels_and_takes_no_invented_figures():
+    assert _world(piece="gate", gate="Flagship AI", crowd="Developers")["count"] == 3
+    assert _world(piece="gate", gate="Flagship AI") is None                       # no crowd
+    assert _world(piece="teleport", gate="x", crowd="y") is None                  # unknown piece
+    assert _world(piece="flow", **{"from": "Your app", "to": "The lab"}, amount="$9B") is None   # $9B is not in the source
+    flow = _world(piece="flow", **{"from": "Your app", "to": "The lab"}, amount="$1.2B", item="lasers", change="explodes")
+    assert flow["item"] == "money" and flow["change"] == "none" and flow["amount"] == "$1.2B"
+
+
+def test_a_pile_works_out_its_direction_from_the_figures():
+    pile = _world(piece="pile", label="Per million tokens", start="$15", end="$5", trend="up")
+    assert pile["trend"] == "down" and pile["ratio"] == pytest.approx(1 / 3, abs=0.01)
+    assert _world(piece="pile", label="Users", trend="up")["trend"] == "up"
+
+
+def test_race_split_and_balance_are_cleaned():
+    race = _world(piece="race", lanes=["OpenAI", "Anthropic", "Google", "Meta"], leader=7)
+    assert race["lanes"] == ["OpenAI", "Anthropic", "Google"] and race["leader"] == 0
+    assert _world(piece="race", lanes=["OpenAI"]) is None
+    assert _world(piece="split", win="Developers", lose="Smaller labs", share=0.95)["share"] == 0.5
+    assert _world(piece="balance", left="Price", right="Product", heavier="up")["heavier"] == "left"

@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--captions-style", choices=["karaoke", "pill", "brighten", "boxed"])
     parser.add_argument("--timeline", choices=["cards", "spine"])
     parser.add_argument("--no-stamps", action="store_true")
-    parser.add_argument("--story", choices=["storyboard", "slides"], default="storyboard",
+    parser.add_argument("--story", choices=["storyboard", "slides", "worlds"], default="storyboard",
                         help="the explainer storyboard sample, or the slide-based reel")
     args = parser.parse_args(argv)
     look = MotionStyleConfig()
@@ -137,7 +137,10 @@ def main(argv: list[str] | None = None) -> int:
     if project.exists():
         shutil.rmtree(project)
     out.mkdir(parents=True, exist_ok=True)
-    if args.story == "storyboard":
+    if args.story == "worlds":
+        from .sample import world_gallery
+        slides, subject = world_gallery(look=look)
+    elif args.story == "storyboard":
         slides, subject = sample_story(captions=not args.no_captions, look=look)
     else:
         slides, subject = sample_deck(captions=not args.no_captions, look=look), SAMPLE_SUBJECT

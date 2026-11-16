@@ -50,12 +50,23 @@ scene types, never the same type twice in a row. Data shapes:
   consecutive words of it to highlight} -- the receipt: the article's own words on screen, proving the key claim.
 - "recap": {"title": "max 6 words", "rows": [{"label": "max 4 words", "note": "max 7 words"}, ...]} -- 2-4 rows: the
   short version (one row per option, player or takeaway), one spoken line per row where you can.
-- "world": {"piece": "gate", "title": optional (max 6 words), "gate": "what the door is (max 3 words)", "crowd": "who queues
-  (max 3 words)", "keeper": optional "who decides (max 3 words)", "allowed": optional "max 2 words", "blocked": optional
-  "what the turned-away hear (max 3 words)", "count": optional 1-6} -- a 3D scene that ACTS OUT the story with characters:
-  people queue at a door, a keeper lets the first few in, then a barrier drops and the rest are turned away. For any
-  story about access, limits, bans, approvals, tariffs or gatekeepers. Line 1 = people get in, line 2 = the rest are
-  stopped. Use it at least once when the story has that shape: it is the most memorable scene in the reel.
+- "world": a 3D scene where characters and objects ACT OUT the story -- the most memorable scene in a reel, so use
+  one or two whenever the story has one of these shapes. All take optional "title" (max 6 words) and "mark". Labels are
+  max 3 words and may use the analogy's words; any figure in them must be in the source. Items: money, goods, data,
+  people, oil, chips, documents. Line 1 sets it up, line 2 is the turn.
+  {"piece": "gate", "gate": door sign, "crowd": who queues, "keeper": who decides, "allowed": label, "blocked": what the
+   turned-away hear, "count": 1-6} -- a keeper lets the first few in, then a barrier drops (access, bans, approvals, limits).
+  {"piece": "flow", "from": place, "to": place, "item": ..., "amount": optional figure, "change": "grows" | "stops" |
+   "reverses" | "none"} -- things travel from one place to another (money, exports, data, people moving).
+  {"piece": "pile", "item": ..., "label": what the pile is, "start": figure, "end": figure} -- a stock grows or drains.
+  {"piece": "race", "lanes": [2-3 rivals], "leader": index} -- rivals run; the leader pulls away (competition, a lead).
+  {"piece": "split", "crowd": who, "win": label, "lose": label, "share": 0.2-0.8 that win} -- one group splits into
+   winners and losers.
+  {"piece": "machine", "input": label, "machine": its sign, "output": label, "in_item": ..., "out_item": ...} -- inputs go
+   in, something else comes out (how a product, law or market works).
+  {"piece": "wall", "left": place, "right": place, "wall": its sign, "item": ...} -- traffic crosses, then a wall goes up
+   (tariffs, sanctions, a ban on trade).
+  {"piece": "balance", "left": label, "right": label, "heavier": "left" | "right"} -- two sides weighed; the scale tips.
 - "cta": {} -- the last beat only: the call to follow (or to save the video, when it is a how-to worth keeping).
 Scenes that build up (dates, chain, grid, cards, split, stats, recap) may also carry "title": a section heading of at most 6
 words that stays on screen while the scene builds ("Check the facts", "His track record"), and "mark": 1-2 of its words
@@ -357,20 +368,68 @@ def _recap(d, src):
     return {"rows": rows} if len(rows) >= 2 else None
 
 
-_PIECES = {"gate"}
+_ITEMS = {"money", "goods", "data", "people", "oil", "chips", "documents"}
+_PIECES = {"gate", "flow", "pile", "race", "split", "machine", "wall", "balance"}
 
 
 def _world(d, src):
+    """A 3D set piece (templates/reel/world.js). Its labels may be the analogy's own
+    words, but any figure in them must come from the source."""
     piece = str(d.get("piece") or "").strip().lower()
     if piece not in _PIECES:
         return None
-    label = lambda k, n: _words(d.get(k), n)
-    out = {"piece": piece, "gate": label("gate", 3), "crowd": label("crowd", 3), "keeper": label("keeper", 3),
-           "allowed": label("allowed", 2), "blocked": label("blocked", 3)}
-    if not out["gate"] or not out["crowd"] or not src.grounded(*(v for v in out.values() if v)):
+    label = lambda k, n=3: _words(d.get(k), n)
+    kind = lambda k, default: (str(d.get(k) or "").strip().lower() if str(d.get(k) or "").strip().lower() in _ITEMS else default)
+    out: dict = {"piece": piece}
+    if piece == "gate":
+        out.update(gate=label("gate"), crowd=label("crowd"), keeper=label("keeper"), allowed=label("allowed", 2),
+                   blocked=label("blocked"))
+        count = d.get("count")
+        out["count"] = count if isinstance(count, int) and 1 <= count <= 6 else 3
+        need = ("gate", "crowd")
+    elif piece == "flow":
+        change = str(d.get("change") or "none").lower()
+        out.update(**{"from": label("from"), "to": label("to")}, item=kind("item", "money"), amount=label("amount"),
+                   change=change if change in ("grows", "stops", "reverses", "none") else "none")
+        need = ("from", "to")
+    elif piece == "pile":
+        start, end = label("start"), label("end")
+        out.update(item=kind("item", "money"), label=label("label", 4), start=start, end=end)
+        a_, b_ = (parse_metric(start) if start else None), (parse_metric(end) if end else None)
+        trend = str(d.get("trend") or "").lower()
+        if a_ and b_ and a_["unit"] == b_["unit"] and a_["base"]:
+            out["ratio"] = round(max(0.05, min(5.0, b_["base"] / a_["base"])), 3)
+            trend = "up" if b_["base"] >= a_["base"] else "down"
+        out["trend"] = trend if trend in ("up", "down") else "up"
+        need = ("label",)
+    elif piece == "race":
+        lanes = [x for x in (_words(v, 3) for v in (d.get("lanes") or [])[:3]) if x]
+        leader = d.get("leader")
+        out.update(lanes=lanes, leader=leader if isinstance(leader, int) and 0 <= leader < len(lanes) else 0)
+        if len(lanes) < 2 or not src.grounded(*lanes):
+            return None
+        need = ()
+    elif piece == "split":
+        share = d.get("share")
+        out.update(crowd=label("crowd"), win=label("win"), lose=label("lose"),
+                   share=share if isinstance(share, (int, float)) and 0.2 <= share <= 0.8 else 0.5)
+        need = ("win", "lose")
+    elif piece == "machine":
+        out.update(input=label("input"), machine=label("machine"), output=label("output"),
+                   in_item=kind("in_item", "goods"), out_item=kind("out_item", "money"))
+        need = ("machine", "output")
+    elif piece == "wall":
+        out.update(left=label("left"), right=label("right"), wall=label("wall"), item=kind("item", "goods"))
+        need = ("wall",)
+    else:  # balance
+        heavier = str(d.get("heavier") or "").lower()
+        out.update(left=label("left"), right=label("right"), heavier=heavier if heavier in ("left", "right") else "left")
+        need = ("left", "right")
+    if any(not out.get(k) for k in need):
         return None
-    count = d.get("count")
-    out["count"] = count if isinstance(count, int) and 1 <= count <= 6 else 3
+    texts = [v for v in out.values() if isinstance(v, str)]
+    if not src.grounded(*texts):
+        return None
     title = _text(d.get("title"), 6, 50)
     if title and src.grounded(title):
         out["title"], out["mark"] = title, phrase_in(d.get("mark"), title, 2)

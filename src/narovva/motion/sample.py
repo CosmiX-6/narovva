@@ -256,3 +256,57 @@ def sample_story(captions: bool = True, look=None) -> tuple[list[dict], str]:
             for part in spec["parts"]:
                 part.pop("caption", None)
     return specs, board.subject or SAMPLE_SUBJECT
+
+
+# -- the story world gallery -------------------------------------------------------
+# One beat per 3D set piece (templates/reel/world.js), checked against the same sample
+# article, for previewing them all:  python -m narovva.motion.preview out/ --story worlds
+
+def _w(piece, kicker, lines, **data):
+    return {"scene": "world", "kicker": kicker, "lines": lines, "screen": lines, "data": {"piece": piece, **data}}
+
+
+SAMPLE_WORLDS: dict = {
+    "subject": "AI pricing",
+    "beats": [
+        {"scene": "headline", "kicker": "AI", "lines": ["The smartest AI just got a lot cheaper."],
+         "screen": ["The smartest AI just got a lot cheaper."], "data": {"text": "The smartest AI just got 67% cheaper"}},
+        _w("gate", "GATE", ["Think of the flagship model as a club with a pricey door.",
+                            "Most developers got turned away."],
+           gate="Flagship AI", crowd="Developers", keeper="The price", allowed="In", blocked="Too pricey", count=3),
+        _w("flow", "FLOW", ["Every app pays the lab, token by token.", "Cheaper tokens mean far more of it flows."],
+           **{"from": "Your app", "to": "The lab"}, item="money", amount="$1.2B", change="grows"),
+        _w("pile", "PILE", ["A million tokens used to cost fifteen dollars.", "Now it is five."],
+           item="money", label="Per million tokens", start="$15", end="$5"),
+        _w("race", "RACE", ["Every lab is racing to cut prices.", "This time, one pulled ahead."],
+           lanes=["OpenAI", "Anthropic", "Google"], leader=0),
+        _w("split", "SPLIT", ["The whole industry feels it.", "Developers win. Smaller labs pay."],
+           crowd="AI labs", win="Developers", lose="Smaller labs", share=0.6),
+        _w("machine", "MACHINE", ["Chips go in one side.", "Answers come out the other."],
+           input="Compute", machine="The model", output="Answers", in_item="chips", out_item="documents"),
+        _w("wall", "WALL", ["Customers used to move freely between labs.", "The price war just put up a wall."],
+           left="Rivals", right="Customers", wall="Price war", item="people"),
+        _w("balance", "BALANCE", ["Price used to decide everything.", "Now the product outweighs it."],
+           left="Price", right="Product", heavier="right"),
+        {"scene": "cta", "lines": ["Follow Context Unfiltered for the story behind the news."],
+         "screen": ["Follow Context Unfiltered for the story behind the news."], "data": {}},
+    ],
+}
+
+
+def world_gallery(look=None) -> tuple[list[dict], str]:
+    """Every 3D set piece, prepared like sample_story. Returns (specs, subject)."""
+    from ..config.schema import MotionStyleConfig
+    from .storyboard import beat_specs, parse_storyboard
+    from .style import stamp_colors
+
+    look = look or MotionStyleConfig()
+    brief, article = sample_brief_and_article()
+    board = parse_storyboard(SAMPLE_WORLDS, brief, article, brand="Context Unfiltered", max_beats=14, max_stamps=0)
+    if board is None:
+        raise RuntimeError("the world gallery no longer validates")
+    missing = {b["data"]["piece"] for b in SAMPLE_WORLDS["beats"] if b["scene"] == "world"} - {
+        b["data"]["piece"] for b in board.beats if b["scene"] == "world"}
+    if missing:
+        raise RuntimeError(f"world gallery pieces failed validation: {sorted(missing)}")
+    return beat_specs(board, stamp_colors=stamp_colors(look), heading_marks=look.heading_marks), board.subject or "AI"

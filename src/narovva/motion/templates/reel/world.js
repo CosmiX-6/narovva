@@ -87,8 +87,56 @@ window.CUWorld = function (K) {
       [-0.1, 0.1].forEach((x) => { const e = mesh(eyeG, C.ink, 0.4); e.position.set(x, 1.31, 0.245); body.add(e); });
       if (o.shades) { const s = mesh(new T3.BoxGeometry(0.42, 0.09, 0.06), 0x0b0e16, 0.3); s.position.set(0, 1.32, 0.25); body.add(s); }
       if (o.hat) { const h = mesh(new T3.CylinderGeometry(0.2, 0.24, 0.16, 18), o.hat); h.position.y = 1.55; body.add(h); }
-      g.add(blob(0.36)); g.add(body); g.userData.body = body;
+      // arms hang from shoulder pivots, so poses are rotations of the pivots
+      const armG = new T3.CapsuleGeometry(0.075, 0.34, 4, 8);
+      const arms = [-1, 1].map((sx) => {
+        const pivot = new T3.Group(); pivot.position.set(sx * 0.37, 0.98, 0);
+        const a = mesh(armG, bodyCol); a.position.y = -0.24; pivot.add(a); body.add(pivot); return pivot;
+      });
+      g.add(blob(0.36)); g.add(body); g.userData.body = body; g.userData.arms = arms;
       return g;
+    },
+    orb() { // a packet of data: a small glowing sphere
+      const g = new T3.Group();
+      const o = new T3.Mesh(new T3.SphereGeometry(0.2, 16, 12), new T3.MeshBasicMaterial({ color: C.accent }));
+      o.position.y = 0.35; g.add(o); g.add(blob(0.16)); return g;
+    },
+    barrel() {
+      const g = new T3.Group();
+      const b = mesh(new T3.CylinderGeometry(0.24, 0.24, 0.62, 18), 0x334155, 0.6); b.position.y = 0.31; g.add(b);
+      [0.14, 0.48].forEach((y) => { const r = mesh(new T3.TorusGeometry(0.245, 0.025, 6, 18), C.gold, 0.5); r.rotation.x = Math.PI / 2; r.position.y = y; g.add(r); });
+      g.add(blob(0.3)); return g;
+    },
+    chip() {
+      const g = new T3.Group();
+      const b = mesh(new T3.BoxGeometry(0.52, 0.08, 0.52), 0x1f2937, 0.4); b.position.y = 0.06; g.add(b);
+      const die = mesh(new T3.BoxGeometry(0.26, 0.04, 0.26), C.accent, 0.3); die.position.y = 0.12; g.add(die);
+      const pinG = new T3.BoxGeometry(0.05, 0.03, 0.1);
+      for (let k = 0; k < 4; k++) [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([sx, sz]) => {
+        const p = mesh(pinG, C.grey, 0.4);
+        if (sx) { p.position.set(sx * 0.3, 0.04, -0.18 + k * 0.12); p.rotation.y = Math.PI / 2; } else p.position.set(-0.18 + k * 0.12, 0.04, sz * 0.3);
+        g.add(p);
+      });
+      g.add(blob(0.36)); return g;
+    },
+    doc() {
+      const g = new T3.Group();
+      const p = mesh(new T3.BoxGeometry(0.42, 0.04, 0.56), C.white, 0.9); p.position.y = 0.05; g.add(p);
+      for (let k = 0; k < 4; k++) { const l = mesh(new T3.BoxGeometry(0.28, 0.01, 0.03), C.grey); l.position.set(0, 0.075, -0.18 + k * 0.1); g.add(l); }
+      g.add(blob(0.3)); return g;
+    },
+    platform(o) { // a low glowing pad that a group gathers on
+      const g = new T3.Group(), r = (o && o.r) || 1.6;
+      const p = mesh(new T3.CylinderGeometry(r, r * 1.04, 0.16, 40), (o && o.color) || C.edge, 0.6); p.position.y = 0.08; g.add(p);
+      const ring = new T3.Mesh(new T3.TorusGeometry(r * 0.98, 0.04, 6, 48), new T3.MeshBasicMaterial({ color: (o && o.color) || C.edge }));
+      ring.rotation.x = Math.PI / 2; ring.position.y = 0.17; g.add(ring);
+      return g;
+    },
+    flag(o) {
+      const g = new T3.Group();
+      const pole = mesh(new T3.CylinderGeometry(0.04, 0.04, 1.9, 8), C.grey); pole.position.y = 0.95; g.add(pole);
+      const f = mesh(new T3.BoxGeometry(0.62, 0.4, 0.03), (o && o.color) || C.accent); f.position.set(0.33, 1.68, 0); g.add(f);
+      g.add(blob(0.2)); return g;
     },
     building(o) {
       o = o || {};
@@ -186,17 +234,56 @@ window.CUWorld = function (K) {
     ctx.restore();
   }
 
-  // A walker: who moves along `path` from time a for d seconds (bobbing while moving).
+  // Repaint a character's clothes (torso and arms).
+  function tint(p, hex) {
+    const m = mat(hex), b = p.userData.body;
+    b.children[0].material = m;
+    (p.userData.arms || []).forEach((a) => { a.children[0].material = m; });
+  }
+
+  // The camera sits at +x +z, so this yaw turns a character to face the viewer.
+  const FACE = Math.PI / 4;
+
+  // A pose, blended in by k (0..1): "idle", "walk" (arms swing with phase ph), "cheer" (arms up,
+  // a hop), "slump" (head and shoulders drop), "point" (one arm out).
+  function pose(p, kind, k, ph) {
+    const [L, R] = p.userData.arms || [], b = p.userData.body;
+    if (!L) return;
+    k = clamp(k == null ? 1 : k, 0, 1);
+    L.rotation.set(0, 0, 0); R.rotation.set(0, 0, 0); b.rotation.x = 0;
+    if (kind === "walk") { const s = Math.sin(ph || 0) * 0.7 * k; L.rotation.x = s; R.rotation.x = -s; }
+    else if (kind === "cheer") {
+      L.rotation.z = -2.6 * k; R.rotation.z = 2.6 * k;
+      const wave = Math.sin((ph || 0) * 1.5) * 0.25 * k; L.rotation.z -= wave; R.rotation.z += wave;
+      b.position.y = Math.abs(Math.sin((ph || 0) * 1.2)) * 0.18 * k;
+    } else if (kind === "slump") { b.rotation.x = 0.28 * k; L.rotation.z = 0.15 * k; R.rotation.z = -0.15 * k; }
+    else if (kind === "point") { R.rotation.x = -1.4 * k; }
+  }
+
+  // A walker: who moves along `path` from time a for d seconds (bobbing and swinging its
+  // arms while moving), then turns to face `face` (or the viewer) once it arrives.
   function walk(p, path, t, a, d, face) {
     const k = ease(prog(t, a, d)), pt = along(path, k);
     p.position.set(pt.x, 0, pt.z);
-    p.rotation.y = face != null ? face : pt.dir;
     const moving = k > 0 && k < 1;
+    const settle = out(prog(t, a + d, 0.4));
+    const goal = face != null ? face : FACE;
+    p.rotation.y = k >= 1 ? lerp(pt.dir, goal, settle) : pt.dir;
     const ph = (t - a) * 9;
     p.userData.body.position.y = moving ? Math.abs(Math.sin(ph)) * 0.08 : 0;
     p.userData.body.rotation.z = moving ? Math.sin(ph) * 0.06 : 0;
+    pose(p, moving ? "walk" : "idle", 1, ph);
     return k;
   }
+
+  // Items that travel along a path: spawn times `spawns`, each taking `d` seconds; returns per
+  // item {f, alive} at time t (f = 0..1 along the path).
+  const travel = (spawns, t, d) => spawns.map((s) => { const f = (t - s) / d; return { f: clamp(f, 0, 1), alive: f >= 0 && f <= 1 }; });
+  const spawnTimes = (a, b, gap, max) => { const out = []; for (let s = a; s < b && out.length < max; s += gap) out.push(s); return out; };
+
+  // A text label for an item kind; the object to build for it.
+  const ITEM = { money: "coin", goods: "box", data: "orb", people: "person", oil: "barrel", chips: "chip", documents: "doc" };
+  const item = (kind, o) => (kind === "people" ? KIT.person(Object.assign({ color: C.white }, o)) : KIT[ITEM[kind] || "box"](o));
 
   // -- set pieces ------------------------------------------------------------
   // Each returns { draw(t, ctx) } with t = seconds into the scene; `cue(j)` is when
@@ -257,6 +344,263 @@ window.CUWorld = function (K) {
         const inside = people.filter((p, i) => i < allowed && t >= enterAt(i) + 1.0).length;
         if (t > t1) tag(ctx, cam, { x: -1.6, y: 2.9, z: -2.4 }, `${d.allowed ? d.allowed + " " : "IN "}${inside}/${allowed}`, { alpha: fadeIn(t1 + 0.4), color: "#16A34A" });
         if (d.blocked && t > t2) tag(ctx, cam, { x: -2.2, y: 1.9, z: 2.2 }, d.blocked, { alpha: fadeIn(t2 + 0.5), fill: "#F43F5E", stroke: "#F43F5E", color: "#FFFFFF", scale: lerp(0.6, 1, back(prog(t, t2 + 0.5, 0.35))) });
+      },
+    };
+  };
+
+  // Shared timing: line 1 starts the action, line 2 (or halfway through) is the turn.
+  const beats = (cue, end) => {
+    const t1 = cue(0) || 0.15;
+    const t2 = cue(1) != null ? cue(1) : t1 + Math.max(1.4, (end - t1) * 0.5);
+    return { t1, t2 };
+  };
+  const pop = (t, a) => back(prog(t, a, 0.35)); // a label's scale as it lands
+  const GREEN = { fill: "#16A34A", stroke: "#16A34A", color: "#FFFFFF" }, RED = { fill: "#F43F5E", stroke: "#F43F5E", color: "#FFFFFF" };
+  const DARK = { fill: "#0B0F1C", stroke: "#3A4566", color: "#FFFFFF" };
+
+  // flow: things travel from one place to another -- money to a company, chips to a
+  // country, data to a server. At the turn the flow grows, stops at a barrier, or reverses.
+  // data: {from, to, item, amount, change: "grows" | "stops" | "reverses" | "none"}
+  PIECES.flow = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const A = { x: -3.6, z: 1.6 }, B = { x: 3.4, z: -1.8 };
+    const ba = KIT.building({ w: 2.0, h: 2.0 }); ba.position.set(A.x - 1.3, 0, A.z); scene.add(ba);
+    const bb = KIT.building({ w: 2.2, h: 3.2, color: 0xc9d4ea }); bb.position.set(B.x + 1.3, 0, B.z); scene.add(bb);
+    const road = mesh(new T3.BoxGeometry(9.2, 0.04, 1.1), 0x1f2740, 0.9);
+    road.position.set((A.x + B.x) / 2, 0.02, (A.z + B.z) / 2); road.rotation.y = -Math.atan2(B.z - A.z, B.x - A.x); scene.add(road);
+    const { t1, t2 } = beats(cue, end);
+    const change = d.change || "none", D = 2.2;
+    const gap1 = 0.42, gap2 = change === "grows" ? 0.18 : gap1;
+    let spawns = spawnTimes(t1 - 0.2, Math.min(t2, end), gap1, 40);
+    if (change === "grows" || change === "none") spawns = spawns.concat(spawnTimes(t2, end, gap2, 40));
+    const back2 = change === "reverses" ? spawnTimes(t2 + 0.2, end, gap1, 20) : [];
+    const items = spawns.concat(back2).map(() => { const it = item(d.item); scene.add(it); return it; });
+    const fb = 0.55; // where a stopping barrier stands along the road
+    let wall = null;
+    if (change === "stops") {
+      wall = mesh(new T3.BoxGeometry(0.25, 1.1, 1.5), C.red, 0.6);
+      wall.position.set(lerp(A.x, B.x, fb), 0.55, lerp(A.z, B.z, fb)); wall.rotation.y = road.rotation.y; scene.add(wall);
+    }
+    return {
+      draw(t, ctx) {
+        aim(cam, { x: 0.2, y: 2.4, z: 0 }, lerp(0.92, 1.0, out(prog(t, 0, 1.2))) * lerp(1, 1.08, ease(prog(t, t2, 1.2))));
+        let blocked = 0;
+        items.forEach((it, i) => {
+          const rev = i >= spawns.length, s = rev ? back2[i - spawns.length] : spawns[i];
+          let f = (t - s) / D;
+          if (change === "stops" && !rev && s + D * fb > t2) { // reaches the barrier after it is up: queue at it
+            const rank = blocked++;
+            f = Math.min(f, fb - 0.04 - rank * 0.045);
+          }
+          it.visible = f >= 0 && f <= 1;
+          if (!it.visible) return;
+          const k = rev ? 1 - f : f, hop = Math.sin(clamp(f, 0, 1) * Math.PI * 6) * 0.04;
+          it.position.set(lerp(A.x, B.x, k), Math.abs(hop), lerp(A.z, B.z, k));
+          if (d.item === "people") { it.rotation.y = rev ? Math.PI * 0.75 : -Math.PI * 0.25; pose(it, "walk", 1, t * 9 + i); }
+          else it.rotation.y = t * 1.5 + i;
+        });
+        if (wall) { const k = back(prog(t, t2, 0.4)); wall.scale.set(1, Math.max(0.001, k), 1); wall.position.y = 0.55 * k; }
+        paint(ctx, scene, cam);
+        if (d.from) tag(ctx, cam, { x: A.x - 1.3, y: 2.9, z: A.z }, d.from, { alpha: out(prog(t, 0.2, 0.3)) });
+        if (d.to) tag(ctx, cam, { x: B.x + 1.3, y: 4.0, z: B.z }, d.to, { alpha: out(prog(t, 0.35, 0.3)) });
+        if (d.amount) {
+          const at = change === "none" ? t1 + 0.6 : t2 + 0.3;
+          const o = change === "stops" ? RED : change === "grows" ? GREEN : DARK;
+          tag(ctx, cam, { x: (A.x + B.x) / 2, y: 2.1, z: (A.z + B.z) / 2 }, d.amount, Object.assign({ alpha: out(prog(t, at, 0.2)), scale: lerp(0.6, 1, pop(t, at)), size: 40 }, o));
+        }
+      },
+    };
+  };
+
+  // pile: a stock of something grows or drains -- reserves, inventory, prices as coins.
+  // data: {item, label, start, end, ratio (end / start), trend: "up" | "down"}
+  PIECES.pile = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const up = d.trend !== "down";
+    const n0 = up ? 8 : 24;
+    const n1 = clamp(Math.round(n0 * (d.ratio || (up ? 2.2 : 0.35))), 1, 36);
+    const N = Math.max(n0, n1);
+    const kind = d.item || "money", h = kind === "money" ? 0.1 : kind === "goods" ? 0.5 : kind === "oil" ? 0.64 : 0.12;
+    const cols = 3, stacks = 9;
+    const slot = (i) => { const s = i % stacks, lvl = Math.floor(i / stacks); return { x: (s % cols - 1) * 0.72, z: (Math.floor(s / cols) - 1) * 0.72, y: lvl * h }; };
+    const items = Array.from({ length: N }, () => { const it = item(kind); scene.add(it); return it; });
+    const watcher = KIT.person({ color: C.ink }); watcher.position.set(2.2, 0, 1.4); watcher.rotation.y = -Math.PI * 0.6; scene.add(watcher);
+    const inAt = (i) => t1 + 0.1 + (i / n0) * Math.min(1.6, (t2 - t1) * 0.8);
+    const changeAt = (i) => t2 + 0.1 + ((i - (up ? n0 : n1)) / Math.max(1, Math.abs(n1 - n0))) * Math.min(1.8, (end - t2) * 0.7);
+    return {
+      draw(t, ctx) {
+        aim(cam, { x: 0.3, y: 2.6, z: 0.4 }, lerp(1.25, 1.4, ease(prog(t, 0, end))));
+        items.forEach((it, i) => {
+          const p = slot(i);
+          let k = 0, gone = 0;
+          if (i < n0) k = prog(t, inAt(i), 0.35);
+          if (up && i >= n0) k = prog(t, changeAt(i), 0.35);
+          if (!up && i >= n1 && i < n0) gone = prog(t, t2 + 0.1 + ((n0 - 1 - i) / Math.max(1, n0 - n1)) * Math.min(1.8, (end - t2) * 0.7), 0.4);
+          it.visible = k > 0 && gone < 1;
+          const drop = (1 - out(k)) * 2.2 + out(gone) * 2.5;
+          it.position.set(p.x, p.y + drop, p.z);
+          it.rotation.y = (i * 0.7) % 1;
+          it.scale.setScalar(1 - gone * 0.6);
+        });
+        pose(watcher, up ? "cheer" : "slump", prog(t, t2 + 0.5, 0.5), t * 6);
+        paint(ctx, scene, cam);
+        if (d.label) tag(ctx, cam, { x: 0, y: 1.9 + (up ? 0.6 : 0), z: 0 }, d.label, { alpha: out(prog(t, t1, 0.3)) });
+        const before = d.start, after = d.end;
+        if (before && t < t2 + 0.3) tag(ctx, cam, { x: -1.5, y: 1.2, z: 1.5 }, before, Object.assign({ alpha: out(prog(t, t1 + 0.5, 0.25)), size: 42 }, DARK));
+        if (after && t >= t2 + 0.3) tag(ctx, cam, { x: -1.5, y: 1.2, z: 1.5 }, after, Object.assign({ scale: lerp(0.5, 1, pop(t, t2 + 0.3)), size: 46 }, up ? GREEN : RED));
+      },
+    };
+  };
+
+  // race: two or three rivals run; the leader pulls away and crosses the line first.
+  // data: {lanes: [label, ...], leader: index}
+  PIECES.race = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const lanes = (d.lanes || []).slice(0, 3), n = lanes.length, lead = clamp(d.leader || 0, 0, n - 1);
+    const x0 = -4.4, x1 = 3.8, laneZ = (i) => (i - (n - 1) / 2) * 1.5;
+    for (let i = 0; i <= n; i++) { const l = mesh(new T3.BoxGeometry(9.6, 0.03, 0.06), C.edge); l.position.set(-0.3, 0.02, laneZ(i) - 0.75); scene.add(l); }
+    const fin = mesh(new T3.BoxGeometry(0.18, 0.04, n * 1.5), C.white); fin.position.set(x1, 0.03, 0); scene.add(fin);
+    const fl = KIT.flag({ color: C.accent }); fl.position.set(x1 + 0.3, 0, laneZ(n - 1) + 0.9); scene.add(fl);
+    const runners = lanes.map((_, i) => { const p = KIT.person({ color: i === lead ? C.accent : C.white }); scene.add(p); return p; });
+    const speed = (i) => (i === lead ? 1 : 0.55 + 0.25 * hash(i, 11));
+    return {
+      draw(t, ctx) {
+        aim(cam, { x: lerp(-1.2, 1.4, ease(prog(t, t1, end - t1))), y: 2.4, z: 0 }, 1.1);
+        runners.forEach((p, i) => {
+          const k = prog(t, t1, Math.max(1, t2 + 0.4 - t1)), dist = ease(k) * speed(i);
+          p.position.set(lerp(x0, x1 + 0.6, dist), 0, laneZ(i));
+          const running = k > 0 && k < 1;
+          p.rotation.y = running ? Math.PI / 2 : FACE;
+          const ph = t * 11 + i;
+          p.userData.body.position.y = running ? Math.abs(Math.sin(ph)) * 0.12 : 0;
+          if (running) pose(p, "walk", 1, ph);
+          else pose(p, i === lead ? "cheer" : k >= 1 ? "slump" : "idle", prog(t, t2 + 0.4, 0.4), ph);
+        });
+        paint(ctx, scene, cam);
+        runners.forEach((p, i) => tag(ctx, cam, { x: p.position.x, y: 2.1, z: p.position.z }, lanes[i],
+          Object.assign({ alpha: out(prog(t, 0.2 + i * 0.1, 0.3)), size: 30 }, i === lead && t > t2 + 0.4 ? GREEN : {})));
+      },
+    };
+  };
+
+  // split: one crowd divides into the side that wins and the side that pays.
+  // data: {crowd, win, lose, share (of the crowd that wins, 0.2-0.8)}
+  PIECES.split = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const L = KIT.platform({ color: 0x15803d, r: 1.7 }); L.position.set(-3.0, 0, 1.4); scene.add(L);
+    const R = KIT.platform({ color: 0xbe123c, r: 1.7 }); R.position.set(3.0, 0, -1.4); scene.add(R);
+    const N = 12, wins = clamp(Math.round(N * (d.share || 0.5)), 2, N - 2);
+    const people = Array.from({ length: N }, () => { const p = KIT.person({ color: C.white }); scene.add(p); return p; });
+    const home = (i) => [(hash(i, 1) - 0.5) * 2.2, (hash(i, 2) - 0.5) * 2.2];
+    const dest = (i) => { const w = i < wins, j = w ? i : i - wins, c = w ? [-3.0, 1.4] : [3.0, -1.4], a = j * 2.4; return [c[0] + Math.cos(a) * 0.4 * Math.sqrt(j), c[1] + Math.sin(a) * 0.4 * Math.sqrt(j)]; };
+    return {
+      draw(t, ctx) {
+        aim(cam, { x: 0, y: 2.4, z: 0 }, lerp(1.25, 1.05, ease(prog(t, t2, 1.2))));
+        people.forEach((p, i) => {
+          const h = home(i);
+          const k = walk(p, [h, dest(i)], t, t2 + 0.05 + hash(i, 5) * 0.4, 1.1, FACE);
+          if (k <= 0) { p.position.set(h[0], 0, h[1]); p.rotation.y = FACE + (hash(i, 9) - 0.5) * 0.8; pose(p, "idle"); }
+          if (k >= 1) pose(p, i < wins ? "cheer" : "slump", prog(t, t2 + 1.4, 0.4), t * 6 + i);
+          tint(p, k >= 1 ? (i < wins ? C.green : C.red) : C.white); // set every frame: seek-safe
+        });
+        paint(ctx, scene, cam);
+        if (d.crowd) tag(ctx, cam, { x: 0, y: 2.2, z: 0 }, d.crowd, { alpha: out(prog(t, t1, 0.3)) * (1 - prog(t, t2, 0.3)) });
+        if (d.win) tag(ctx, cam, { x: -3.0, y: 2.4, z: 1.4 }, d.win, Object.assign({ alpha: out(prog(t, t2 + 0.9, 0.2)), scale: lerp(0.6, 1, pop(t, t2 + 0.9)) }, GREEN));
+        if (d.lose) tag(ctx, cam, { x: 3.0, y: 2.4, z: -1.4 }, d.lose, Object.assign({ alpha: out(prog(t, t2 + 1.1, 0.2)), scale: lerp(0.6, 1, pop(t, t2 + 1.1)) }, RED));
+      },
+    };
+  };
+
+  // machine: inputs go in one side, outputs come out the other -- how a product, a law or a
+  // market turns one thing into another. data: {input, machine, output, in_item, out_item}
+  PIECES.machine = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const belt = mesh(new T3.BoxGeometry(10, 0.3, 1.1), 0x1f2740, 0.7); belt.position.set(0, 0.15, 0); scene.add(belt);
+    const box = mesh(new T3.BoxGeometry(2.4, 2.2, 1.9), C.white, 0.6); box.position.set(0, 1.1, 0); scene.add(box);
+    const s = sign(String(d.machine || "").toUpperCase().slice(0, 18), 2.4, 0.6, 2.6); s.position.z = 0.96; scene.add(s);
+    const lights = [-0.6, 0, 0.6].map((x) => { const l = new T3.Mesh(new T3.SphereGeometry(0.11, 12, 8), new T3.MeshBasicMaterial({ color: C.accent })); l.position.set(x, 1.6, 0.97); scene.add(l); return l; });
+    const gear = mesh(new T3.TorusGeometry(0.34, 0.09, 6, 10), C.edge, 0.5); gear.position.set(0, 0.85, 0.98); scene.add(gear);
+    const D = 2.0, ins = spawnTimes(t1 - 0.4, end, 0.55, 30), outs = ins.map((s2) => s2 + D + 0.25);
+    const inItems = ins.map(() => { const it = item(d.in_item || "goods"); scene.add(it); return it; });
+    const outItems = outs.map(() => { const it = item(d.out_item || "money"); scene.add(it); return it; });
+    return {
+      draw(t, ctx) {
+        aim(cam, { x: lerp(-1.2, 1.2, ease(prog(t, t1, end - t1))), y: 2.6, z: 0 }, 1.12);
+        inItems.forEach((it, i) => { const f = (t - ins[i]) / D; it.visible = f >= 0 && f < 1; it.position.set(lerp(-5, -0.4, f), 0.3, 0); });
+        outItems.forEach((it, i) => { const f = (t - outs[i]) / D; it.visible = f >= 0 && f < 1 && outs[i] >= t2 - D * 0.5; it.position.set(lerp(0.4, 5, f), 0.3, 0); });
+        lights.forEach((l, i) => { l.visible = Math.floor(t * 4 + i) % 3 !== 0; });
+        gear.rotation.z = -t * 3;
+        box.scale.set(1, 1 + Math.max(0, Math.sin(t * 9)) * 0.02 * prog(t, t1, 0.3), 1);
+        paint(ctx, scene, cam);
+        if (d.input) tag(ctx, cam, { x: -3.6, y: 1.5, z: 0 }, d.input, { alpha: out(prog(t, t1, 0.3)) });
+        if (d.output) tag(ctx, cam, { x: 3.6, y: 1.5, z: 0 }, d.output, Object.assign({ alpha: out(prog(t, t2, 0.25)), scale: lerp(0.6, 1, pop(t, t2)) }, GREEN));
+      },
+    };
+  };
+
+  // wall: traffic crosses freely, then a wall goes up and stops it -- a ban, a tariff, sanctions.
+  // data: {left, right, wall, item}
+  PIECES.wall = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const A = KIT.platform({ color: C.edge, r: 1.6 }); A.position.set(-3.4, 0, 1.4); scene.add(A);
+    const B = KIT.platform({ color: C.edge, r: 1.6 }); B.position.set(3.4, 0, -1.4); scene.add(B);
+    const w = mesh(new T3.BoxGeometry(0.35, 2.0, 4.6), 0x64748b, 0.7); w.rotation.y = Math.atan2(2.8, 6.8); scene.add(w);
+    const ws = sign(String(d.wall || "").toUpperCase().slice(0, 16), 3.2, 0.62, 2.45); ws.rotation.y = w.rotation.y + Math.PI / 2; ws.position.x = 0.24; scene.add(ws);
+    const D = 2.4, spawns = spawnTimes(t1 - 0.3, end, 0.5, 28);
+    const items = spawns.map(() => { const it = item(d.item || "goods"); scene.add(it); return it; });
+    return {
+      draw(t, ctx) {
+        aim(cam, { x: 0, y: 2.4, z: 0 }, lerp(1.0, 1.15, ease(prog(t, t2, 1.2))));
+        const k = back(prog(t, t2, 0.5));
+        w.scale.set(1, Math.max(0.001, k), 1); w.position.y = k; ws.visible = k > 0.6; ws.position.y = 2.45 * k / 1.0;
+        let q = 0;
+        items.forEach((it, i) => {
+          let f = (t - spawns[i]) / D;
+          if (spawns[i] + D * 0.5 > t2 + 0.2) f = Math.min(f, 0.42 - (q++) * 0.05); // stuck behind the wall
+          it.visible = f >= 0 && f <= 1 && f > -0.3;
+          it.position.set(lerp(-3.4, 3.4, f), 0.17, lerp(1.4, -1.4, f));
+          if (d.item === "people") { it.rotation.y = -Math.PI * 0.35; pose(it, f < 0.42 || f >= 1 ? "walk" : "idle", 1, t * 9 + i); }
+          else it.rotation.y = i;
+        });
+        paint(ctx, scene, cam);
+        if (d.left) tag(ctx, cam, { x: -3.4, y: 1.6, z: 1.4 }, d.left, { alpha: out(prog(t, 0.2, 0.3)) });
+        if (d.right) tag(ctx, cam, { x: 3.4, y: 1.6, z: -1.4 }, d.right, { alpha: out(prog(t, 0.35, 0.3)) });
+      },
+    };
+  };
+
+  // balance: two sides weighed against each other; the scale tips to the heavier one.
+  // data: {left, right, heavier: "left" | "right"}
+  PIECES.balance = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const base = mesh(new T3.ConeGeometry(0.6, 1.4, 4), C.edge, 0.6); base.position.y = 0.7; scene.add(base);
+    // the beam runs across the screen (perpendicular to the view), so level reads as level
+    const holder = new T3.Group(); holder.rotation.y = Math.PI / 4; scene.add(holder);
+    const beam = new T3.Group(); beam.position.y = 1.45; holder.add(beam);
+    const bar = mesh(new T3.BoxGeometry(6.4, 0.16, 0.3), C.white, 0.5); beam.add(bar);
+    const pans = [-1, 1].map((sx) => { const p = new T3.Group(); p.position.x = sx * 3.0; const pl = mesh(new T3.CylinderGeometry(0.95, 0.8, 0.12, 28), C.white, 0.5); pl.position.y = 0.12; p.add(pl); beam.add(p); return p; });
+    const heavyR = d.heavier === "right", side = heavyR ? 1 : 0;
+    const weights = [0, 1].map((s) => Array.from({ length: s === side ? 5 : 2 }, (_, i) => { const b = KIT.box({ s: 0.42, color: s === 0 ? C.accent : 0xc9d4ea }); pans[s].add(b); b.position.set((i % 2 - 0.5) * 0.48, 0.18 + Math.floor(i / 2) * 0.42, 0); return b; }));
+    return {
+      draw(t, ctx) {
+        aim(cam, { x: 0, y: 2.6, z: 0 }, 1.18);
+        weights.forEach((ws2, s) => ws2.forEach((b, i) => {
+          const at = i < 2 ? t1 + 0.15 + (s * 2 + i) * 0.18 : t2 + (i - 2) * 0.22;
+          const k = prog(t, at, 0.35);
+          b.visible = k > 0; b.position.y = 0.18 + Math.floor(i / 2) * 0.42 + (1 - out(k)) * 2.5;
+        }));
+        const tilt = 0.32 * back(prog(t, t2 + 0.5, 0.8)) * (heavyR ? -1 : 1);
+        beam.rotation.z = tilt; pans.forEach((p) => { p.rotation.z = -tilt; });
+        paint(ctx, scene, cam);
+        const pt = (s) => { const v = new T3.Vector3(); pans[s].getWorldPosition(v); return { x: v.x, y: v.y + 1.9, z: v.z }; };
+        if (d.left) tag(ctx, cam, pt(0), d.left, Object.assign({ alpha: out(prog(t, t1, 0.3)) }, !heavyR && t > t2 + 0.9 ? GREEN : {}));
+        if (d.right) tag(ctx, cam, pt(1), d.right, Object.assign({ alpha: out(prog(t, t1 + 0.15, 0.3)) }, heavyR && t > t2 + 0.9 ? GREEN : {}));
       },
     };
   };

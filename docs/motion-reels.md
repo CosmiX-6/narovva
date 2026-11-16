@@ -56,6 +56,31 @@ The scenes:
 | `ask` | the viewer's question in a message bubble, typed in as the second voice says it |
 | `source` | the receipt: the article's own sentence on a paper card over a dimmed background, the key phrase highlighted |
 | `recap` | the short version as a table, the row being said lit |
+| `world` | a 3D scene where characters and objects act the story out (below) |
+
+### The story world
+
+`world` scenes (`templates/reel/world.js`, three.js) are small 3D dioramas on the
+reel's navy ground, seen from an isometric camera. Characters (with arms that swing,
+cheer and slump) and objects are built from primitives in code, so there is nothing
+to license, and every frame is a pure function of time. Line 1 of the beat sets the
+scene up and line 2 is the turn. The writer picks a set piece and writes its labels
+(which may use the analogy's words; any figure in them must be in the source):
+
+| piece | what happens |
+|---|---|
+| `gate` | people queue at a door; a keeper lets the first few in, then a barrier drops and the rest are turned away |
+| `flow` | money, goods, data, people, oil, chips or documents travel between two places; at the turn the flow grows, stops at a barrier or reverses |
+| `pile` | a stock of items grows or drains, the figure before and after on it; a bystander cheers or slumps |
+| `race` | two or three rivals run; the leader pulls away and crosses the line |
+| `split` | one crowd divides onto a winners' and a losers' platform |
+| `machine` | inputs ride a belt into a machine and come out as something else |
+| `wall` | traffic crosses between two places, then a wall goes up and stops it |
+| `balance` | two sides on a scale; it tips to the heavier one |
+
+One WebGL context serves every world scene. Without WebGL a world scene shows its
+title alone. Preview them all with
+`python -m narovva.motion.preview out/ --story worlds`.
 | `cta` | the end card: logo, handle, follow button |
 
 The reply is checked before use: unknown scenes and malformed data are dropped,
