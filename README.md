@@ -61,8 +61,8 @@ published post.
 - Optional but recommended: a Postgres database ([Neon](https://neon.tech)'s free tier works).
   Without one narovva runs, but cannot remember what it already posted.
 - A text-model key: `GOOGLE_API_KEY` ([free](https://aistudio.google.com/apikey)) or `OPENAI_API_KEY`
-- To publish: an Instagram professional (business or creator) account, an app using
-  *Instagram API with Instagram Login*, its long-lived access token, and a Vercel Blob
+- To publish: an Instagram professional (business or creator) account, a Meta app with
+  the Instagram API use case ([setup](docs/operations.md#creating-the-meta-app)), its access token, and a Vercel Blob
   store (`BLOB_READ_WRITE_TOKEN`) to host the video while Instagram fetches it
 
 ### 2. Install
@@ -176,7 +176,7 @@ problem, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-See [LICENSE](LICENSE). Vendored fonts, icons and libraries keep their own
+MIT, see [LICENSE](LICENSE). Vendored fonts, icons and libraries keep their own
 licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The Context
 Unfiltered name and logo (`assets/logo/CU.png`) identify the live channel; use your
 own brand for your channels.

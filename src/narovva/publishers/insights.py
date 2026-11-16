@@ -88,9 +88,15 @@ def probe(user_id: str, token: str) -> list[str]:
     """Human-readable lines: can this token list posts and read a reel's insights?"""
     lines = []
     try:
+        me = _get("me", token, fields="user_id,username")
+        lines.append(f"token belongs to: @{me.get('username')} (id {me.get('id')}, user_id {me.get('user_id')});"
+                     f" config ig_business_account_id is {user_id}")
+    except InsightsError as exc:
+        lines.append(f"token owner: unknown -- {exc}")
+    try:
         media = recent_media(user_id, token, limit=10)
     except InsightsError as exc:
-        return [f"list posts: FAILED -- {exc}"]
+        return lines + [f"list posts: FAILED -- {exc}"]
     reels = [m for m in media if m.get("media_product_type") == "REELS"]
     lines.append(f"list posts: OK ({len(media)} recent, {len(reels)} reels)")
     if not reels:
@@ -103,7 +109,7 @@ def probe(user_id: str, token: str) -> list[str]:
             lines.append(f"  {metric}: OK {got.get(metric)}")
         except InsightsError as exc:
             lines.append(f"  {metric}: FAILED -- {exc}")
-    ok = sum(": OK" in ln for ln in lines[2:])
+    ok = sum(ln.startswith("  ") and ": OK" in ln for ln in lines)
     lines.append("verdict: insights work" if ok else
                  "verdict: no insights -- the token probably lacks instagram_business_manage_insights")
     return lines

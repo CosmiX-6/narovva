@@ -96,10 +96,30 @@ the secret, it uses the secret instead, and the next refresh stores it.
 
 1. Revoke it: in Instagram, **Settings → Website permissions → Apps and websites**,
    remove your app. This invalidates the tokens issued to it.
-2. Create a new one: Meta App Dashboard → your app → **Instagram → API setup with
-   Instagram login → Generate access tokens**.
+2. Create a new one: Meta App Dashboard → your app → **Use cases → Instagram API →
+   API setup with Unified login** (older apps: **API setup with Instagram login**) →
+   **Generate access tokens** → **Generate token** next to your account.
+   If you deleted the app, see [Creating the Meta app](#creating-the-meta-app).
 3. Paste it into the `IG_ACCESS_TOKEN__…` secret. Nothing else: the next run uses it
    and the next weekly refresh stores it.
+
+### Creating the Meta app
+
+Apps created since late 2026 no longer offer "API setup with Instagram login"; they
+use **Unified login**, which needs the app to belong to a business portfolio.
+
+1. [developers.facebook.com/apps](https://developers.facebook.com/apps) → **Create App**.
+   Use case: **Manage messaging & content on Instagram**. Business portfolio: none for now.
+2. **Use cases → Instagram API → API setup with Unified login** → **+ Business portfolio**
+   → create a (free) portfolio, or pick an existing one.
+3. **App roles → Roles → Add People → Instagram Tester**, enter your Instagram username.
+   Accept the invite in Instagram: **Settings → Website permissions → Apps and websites →
+   Tester invites**.
+4. Back on **API setup with Unified login → Generate access tokens**, click
+   **Generate token** next to your account, approve, copy it into the secret.
+5. Run the **Instagram insights probe** workflow. Its first line names the account the
+   token belongs to; if `user_id` differs from `ig_business_account_id` in the channel
+   config and listing posts fails, put that `user_id` in the config.
 
 ## Troubleshooting
 

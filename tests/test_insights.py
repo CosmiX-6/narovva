@@ -36,4 +36,19 @@ def test_probe_reports_missing_permission(monkeypatch):
 
     monkeypatch.setattr(insights, "_get", fake_get)
     lines = insights.probe("u", "tok")
-    assert lines[0].startswith("list posts: OK") and "no insights" in lines[-1]
+    assert lines[0].startswith("token owner: unknown")
+    assert lines[1].startswith("list posts: OK") and "no insights" in lines[-1]
+
+
+def test_probe_names_the_token_owner(monkeypatch):
+    def fake_get(path, token, **params):
+        if path == "me":
+            return {"id": "app-scoped", "user_id": "1784", "username": "someone"}
+        if path.endswith("/media"):
+            return {"data": []}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(insights, "_get", fake_get)
+    lines = insights.probe("u", "tok")
+    assert "@someone" in lines[0] and "user_id 1784" in lines[0] and "is u" in lines[0]
+    assert lines[1].startswith("list posts: OK (0 recent")

@@ -3,6 +3,7 @@ name = "narovva"
 version = "0.1.0"
 description = "Multi-channel, multi-genre pipeline: find news, render social assets, write captions, publish."
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.5",
