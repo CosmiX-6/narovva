@@ -35,6 +35,7 @@ from ..motion.storyboard import BEAT_MIN, BEAT_TAIL, beat_specs, hook_board, wri
 from ..motion.style import category_label, deck_ui, direct_scenes, stamp_colors, story_subject
 from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
 from ..narration import (
+    VIEWER_STYLE,
     build_provider,
     choose_voice,
     default_voices,
@@ -493,7 +494,7 @@ def _narrate(channel, brief, specs, track, *, recent_voices, seed, **timing):
             pool = (cfg.voices if attempt == 0 and cfg.voices else None) or default_voices(name)
             pool = [v for v in pool if v not in cfg.exclude_voices]  # all excluded: skip to the next provider
             voice = choose_voice(pool, recent_voices, seed)
-            clips = synthesize_lines(provider, passages, voice=voice, style=style)
+            clips = _speak(provider, passages, specs, pool, voice, style, seed)
         except Exception as exc:
             failures.append(f"{name}: {exc}")
             logger.warning("channel %s: narration via %s failed (%s)", channel.id, name, exc)
@@ -512,6 +513,22 @@ def _narrate(channel, brief, specs, track, *, recent_voices, seed, **timing):
         logger.info("channel %s: narrated with %s voice %r (%.0fs reel)", channel.id, name, voice, total)
         return audio, voice
     raise RuntimeError("; ".join(failures) or "no narration provider configured")
+
+
+def _speak(provider, passages: list[str], specs: list[dict], pool: list[str], voice: str, style, seed: str) -> list:
+    """One clip per scene: the narrator's voice, except the viewer's questions
+    (storyboard "ask" beats), which a second voice from the pool reads, curious."""
+    asks = {i for i, spec in enumerate(specs) if spec.get("speaker") == "viewer"}
+    clips: list = [None] * len(passages)
+    jobs = [([i for i in range(len(passages)) if i not in asks], voice, style)]
+    if asks:
+        other = choose_voice([v for v in pool if v != voice] or pool, frozenset(), seed + ":viewer")
+        jobs.append((sorted(asks), other, VIEWER_STYLE))
+    for idx, v, st in jobs:
+        if idx:
+            for i, clip in zip(idx, synthesize_lines(provider, [passages[i] for i in idx], voice=v, style=st)):
+                clips[i] = clip
+    return clips
 
 
 def _try_motion_reel(
@@ -540,6 +557,7 @@ def _try_motion_reel(
                 llm, brief, article, brand=brand, max_beats=look.story.max_beats,
                 target_seconds=look.story.target_seconds, max_stamps=stamps,
                 when=(when or datetime.now()).strftime("%d %b %Y"), hook=hook, audience=channel.audience,
+                max_asks=look.story.viewer_questions,
             )
         if board is not None:
             hook_board(board, hook, said, brief.headline, trending=trending)

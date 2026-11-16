@@ -27,6 +27,10 @@ _STYLE_BY_TONE = {
 }
 
 
+# The viewer's questions ("Wait, who pays for that?") in a motion reel's storyboard.
+VIEWER_STYLE = ("Curious and a little sceptical, like a friend cutting in with a quick question. Natural, brisk.", "[curious]")
+
+
 def default_voices(provider: str) -> list[str]:
     return list(_DEFAULT_VOICES.get(provider, []))
 

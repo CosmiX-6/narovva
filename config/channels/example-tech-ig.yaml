@@ -93,20 +93,24 @@ motion:
     max_beats: 10        # 5-14
     target_seconds: 45   # what the writer aims for
     flood: true          # full-frame accent wash behind headline numbers
+    # Beats where the viewer cuts in with the question they'd ask ("Wait, who pays for
+    # this?"), answered by the next beat and read in a second voice. 0 = none.
+    viewer_questions: 2
   hud:
     # case_file: "(rec dot) REC  CASE FILE: <SUBJECT> ..... 00:00:04:29"
     # breakdown: "(rec dot) <SUBJECT> BREAKDOWN ..... 24 OCT 2026" with the progress line under it
     # brand: the CU logo + name header. none: no header.
-    style: case_file
+    # chapter: the current chapter ("WHAT HAPPENED") in a chip at the top, one dash per chapter.
+    style: chapter
     # Optional custom header text: {subject} {category} {brand} {date}. Unset = the style's own.
     # label: "{subject} FILE"
     # meta: timecode     # timecode | date | none (unset = the style's own)
     rec_dot: true
   progress: auto         # auto | top | hud | bottom | none
   captions:
-    style: karaoke       # karaoke | pill | brighten  (on/off is narration.captions)
+    style: boxed         # boxed | karaoke | pill | brighten  (on/off is narration.captions)
     highlight: "#FACC15"
-    chunk_words: 3       # karaoke: most words on screen at once
+    chunk_words: 4       # boxed / karaoke: most words on screen at once
   stamps:
     enabled: true        # verdict stamps like BLOCKED / FALSE / -20%, only where a slide's data backs one
     max_per_reel: 3

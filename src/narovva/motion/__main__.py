@@ -4,7 +4,8 @@
 
 Without a photo argument a synthetic one is drawn, so every path the real
 pipeline takes (photo card, charts, captions) is exercised with no assets
-beyond the repo's own."""
+beyond the repo's own. The look is the one config/channels/example-tech-ig.yaml
+sets (the live channel's), or the default without it."""
 
 from __future__ import annotations
 
@@ -22,11 +23,22 @@ from .slides import total_duration
 from .style import deck_ui
 
 
+CHANNEL = Path("config/channels/example-tech-ig.yaml")
+
+
+def _look() -> MotionStyleConfig:
+    """The live channel's look (so the sample shows what posts), else the default."""
+    if CHANNEL.exists():
+        from ..config import load_channel
+        return load_channel(str(CHANNEL)).motion
+    return MotionStyleConfig()
+
+
 def main() -> None:
     out = sys.argv[1] if len(sys.argv) > 1 else "motion-sample.mp4"
     # Relative to the working directory (repo root), like channel.brand.logo_path.
     logo = Path(sys.argv[2] if len(sys.argv) > 2 else "assets/logo/CU.png")
-    look = MotionStyleConfig()  # the default look, as a channel without a `motion:` block gets it
+    look = _look()
     slides, subject = sample_story(captions=True, look=look)
     total = total_duration([s["duration"] for s in slides])
     audio = subprocess.run(

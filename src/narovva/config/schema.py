@@ -238,7 +238,9 @@ class HudConfig(BaseModel):
     # case_file: "● REC  CASE FILE: STARLINK ........ 00:00:04:29", progress bar on the top edge.
     # breakdown: "● STARLINK BREAKDOWN ........ 24 OCT 2026", progress line under it.
     # brand: the channel logo and name (the original header). none: no header.
-    style: Literal["case_file", "breakdown", "brand", "none"] = "case_file"
+    # chapter: a chip at the top centre naming the current chapter (the beat's kicker:
+    # "THE BACKSTORY", "WHAT HAPPENED") over one dash per chapter, the current one lit.
+    style: Literal["case_file", "breakdown", "brand", "chapter", "none"] = "case_file"
     # Header text; unset = the style's own. Placeholders: {subject} (what the story is
     # about in 1-3 words, chosen by the script writer, else the brief's main entity,
     # else the category), {category}, {brand}, {date}. Always shown in capitals.
@@ -255,9 +257,10 @@ class MotionCaptionStyle(BaseModel):
     # karaoke: a few words at a time in bold capitals, the word being spoken lit in `highlight`.
     # pill: the whole line, words appearing as they are said, the key phrase on a `highlight` pill.
     # brighten: the whole line, each word brightening as it is said.
-    style: Literal["karaoke", "pill", "brighten"] = "karaoke"
+    # boxed: a few words at a time on a white box, the word being spoken inverted.
+    style: Literal["karaoke", "pill", "brighten", "boxed"] = "karaoke"
     highlight: str = "#FACC15"
-    # karaoke only: most words on screen at once (a chunk also ends at punctuation).
+    # karaoke and boxed: most words on screen at once (a chunk also ends at punctuation).
     chunk_words: int = Field(3, ge=1, le=6)
 
 
@@ -287,6 +290,9 @@ class StoryConfig(BaseModel):
     target_seconds: int = Field(45, ge=20, le=90)
     # A full-frame accent wash behind headline numbers, for rhythm between dark scenes.
     flood: bool = True
+    # Beats where the viewer interrupts with the question they would ask ("Wait, why would
+    # they do that?"), answered by the next beat; spoken in a second voice. 0 = none.
+    viewer_questions: int = Field(2, ge=0, le=3)
 
 
 class MotionStyleConfig(BaseModel):

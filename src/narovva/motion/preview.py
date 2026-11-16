@@ -116,8 +116,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--via", type=float, help="seek here first, then to each timestamp")
     parser.add_argument("--logo", default="assets/logo/CU.png")
     parser.add_argument("--accent", default="#3B82F6")
-    parser.add_argument("--hud", choices=["case_file", "breakdown", "brand", "none"])
-    parser.add_argument("--captions-style", choices=["karaoke", "pill", "brighten"])
+    parser.add_argument("--hud", choices=["case_file", "breakdown", "brand", "chapter", "none"])
+    parser.add_argument("--captions-style", choices=["karaoke", "pill", "brighten", "boxed"])
     parser.add_argument("--timeline", choices=["cards", "spine"])
     parser.add_argument("--no-stamps", action="store_true")
     parser.add_argument("--story", choices=["storyboard", "slides"], default="storyboard",

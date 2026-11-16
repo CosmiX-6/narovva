@@ -120,7 +120,15 @@ def test_sample_deck_carries_stamps_and_emphasis_with_the_look():
 
 def test_example_channel_spells_out_the_look():
     look = load_channel("config/channels/example-tech-ig.yaml").motion
-    assert look.hud.style == "case_file" and look.captions.style == "karaoke" and look.stamps.enabled
+    assert look.hud.style == "chapter" and look.captions.style == "boxed" and look.stamps.enabled
+    assert look.story.viewer_questions == 2
+
+
+def test_chapter_header_has_no_progress_bar_of_its_own():
+    from narovva.config.schema import MotionStyleConfig
+    look = MotionStyleConfig.model_validate({"hud": {"style": "chapter"}, "captions": {"style": "boxed"}})
+    ui = deck_ui(look, subject="STARLINK", category="POLITICS", brand="CU", when=WHEN)
+    assert ui["hud"]["style"] == "chapter" and ui["progress"] == "none" and ui["captions"]["style"] == "boxed"
 
 
 # -- orchestration ---------------------------------------------------------

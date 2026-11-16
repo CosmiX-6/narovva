@@ -19,8 +19,25 @@ the plain `reel` format (a slideshow of the still images), so nothing is skipped
 By default (`motion.story.mode: storyboard`) one LLM call
 (`narovva.motion.storyboard`) writes an explainer for video from the brief and the
 article text, as 5–14 beats: hook, context, what happened, fallout, verdict, call to
-follow. Each beat is one to three spoken lines plus the scene that shows them,
-picked from the library in `templates/reel/scenes.js`:
+follow. Each beat is one or two spoken lines plus the scene that shows them,
+picked from the library in `templates/reel/scenes.js`.
+
+The writing rules come from studying high-performing explainer Reels frame by frame:
+
+- **A hook that opens a loop** in at most 9 words: a contradiction with the named
+  players, the stakes for the viewer, or a startling number.
+- **One everyday analogy** for the mechanism ("your API is a nightclub; every request
+  is a guest"), introduced once and reused in later lines.
+- **The viewer cuts in.** Up to `motion.story.viewer_questions` beats (default 2) are
+  the question the viewer would ask at that moment ("Wait, so who pays for this?"),
+  read by a second voice and answered by the next beat. It makes the reel feel like a
+  conversation rather than a lecture.
+- **Receipts.** The key claim is shown once in the article's own words, on a paper
+  card, with a marker sweeping over the key phrase.
+- **Pace.** A new beat every 2–4 seconds, and the camera punches in a step on each
+  new spoken line.
+
+The scenes:
 
 | scene | what moves |
 |---|---|
@@ -36,11 +53,16 @@ picked from the library in `templates/reel/scenes.js`:
 | `quote` | the real quote on a card, its key words marked as they are said |
 | `terminal` | facts typed out like a log |
 | `checklist` | the verdict, then what to watch |
+| `ask` | the viewer's question in a message bubble, typed in as the second voice says it |
+| `source` | the receipt: the article's own sentence on a paper card over a dimmed background, the key phrase highlighted |
+| `recap` | the short version as a table, the row being said lit |
 | `cta` | the end card: logo, handle, follow button |
 
 The reply is checked before use: unknown scenes and malformed data are dropped,
-every figure on screen must appear in the brief or the article, quotes must be word
-for word, and the Reel always ends on the call to follow. If fewer than five beats
+every figure on screen must appear in the brief or the article, quotes and source
+cards must be word for word (a source card from the article text itself), viewer
+questions must be questions and never open or close the reel, and the Reel always
+ends on the call to follow. If fewer than five beats
 survive, the Reel falls back to `slides` mode (the carousel slides, re-animated).
 
 ## What is on screen
@@ -85,11 +107,14 @@ survive, the Reel falls back to `slides` mode (the carousel slides, re-animated)
 `motion:` in the channel YAML (schema `MotionStyleConfig`; every option is commented
 in `config/channels/example-tech-ig.yaml`) sets:
 
-- `story`: mode (`storyboard` | `slides`), `max_beats`, `target_seconds`, `flood`
-- `hud`: header style (`case_file`, `breakdown`, `brand`, `none`), a custom `label`
+- `story`: mode (`storyboard` | `slides`), `max_beats`, `target_seconds`, `flood`,
+  `viewer_questions`
+- `hud`: header style (`chapter`: the current chapter in a chip at the top over one
+  dash per chapter; `case_file`, `breakdown`, `brand`, `none`), a custom `label`
   (`{subject}`, `{category}`, `{brand}`, `{date}`), timecode or date, the rec dot
 - `progress`: where the progress line runs
-- `captions`: style, highlight colour, words per chunk
+- `captions`: style (`boxed`: a few words on a white box, the spoken word inverted;
+  `karaoke`, `pill`, `brighten`), highlight colour, words per chunk
 - `stamps`: on/off, how many per Reel, colours per tone
 - `timeline` (`cards` | `spine`), `heading_marks`, `grid`, `show_handle`
 
