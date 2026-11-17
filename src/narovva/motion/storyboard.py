@@ -860,6 +860,19 @@ def _key_from_metaphor(board: Storyboard) -> bool:
     return True
 
 
+def _cut_lectures(board: Storyboard, topic: str) -> None:
+    """Beats still lecturing after the retry are cut, as long as the lesson keeps its opening,
+    its metaphor, its steps, its takeaway and its close (a lesson a little shorter beats a
+    lesson that loses the viewer)."""
+    for beat in list(board.beats):
+        if beat is board.beats[0] or beat["scene"] == "cta" or len(board.beats) <= 6:
+            continue
+        if heavy_lines(Storyboard(None, [beat]), topic):
+            rest = Storyboard(board.subject, [b for b in board.beats if b is not beat], board.metaphor)
+            if not any(p in lesson_gaps(rest) for p in ("metaphor", "how", "takeaway")):
+                board.beats.remove(beat)
+
+
 def lesson_gaps(board: Storyboard | None) -> list[str]:
     """The parts of the lesson arc the validated board does not cover (empty when complete)."""
     if board is None:
@@ -957,6 +970,9 @@ def write_storyboard(llm, brief, article, *, brand: str, max_beats: int = 10, ta
         user = (user.split("\n\nYOUR LAST STORYBOARD")[0]
                 + "\n\nYOUR LAST STORYBOARD NEEDS WORK: " + "; ".join(notes)
                 + ". Write the whole storyboard again, covering every part of the arc.")
+    if lesson is not None and best is not None and "plain words" in (best_gaps or []):
+        _cut_lectures(best, f"{lesson.title} {lesson.reference}")
+        best_gaps = lesson_gaps(best) + (["plain words"] if len(heavy_lines(best, lesson.title)) >= 2 else [])
     if lesson is not None and best is not None and best_gaps:
         if any(p in best_gaps for p in ("metaphor", "how", "takeaway")):  # the core of the explanation
             logger.warning("lesson storyboard still lacks %s; using the slide-based reel", ", ".join(best_gaps))

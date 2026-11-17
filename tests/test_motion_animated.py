@@ -300,3 +300,15 @@ def test_a_lecture_is_sent_back_for_plain_words():
     assert heavy_lines(board) == []
     # the lesson's own subject is never jargon to itself
     assert heavy_lines(_lesson_board(lecture), "What a matrix is: O of n squared vector") == []
+
+
+def test_a_lecture_beat_left_after_the_retry_is_cut_when_the_lesson_stays_whole():
+    brief, article, lesson = sample_lesson_inputs()
+    lecture = copy.deepcopy(SAMPLE_LESSON)
+    for i in (6, 7):  # the worked example and the catch (not the core: they can go)
+        lecture["beats"][i]["lines"] = ["Each token becomes a vector in a matrix.", "It costs quadratic computational time."]
+        lecture["beats"][i]["screen"] = lecture["beats"][i]["lines"]
+    board = write_storyboard(_Animator(lecture), brief, article, brand="Context Unfiltered", max_beats=16, lesson=lesson)
+    lines = [x for b in board.beats for x in b["lines"]]
+    assert not any("matrix" in x for x in lines)
+    assert {"metaphor", "how", "takeaway"} <= {b["part"] for b in board.beats}

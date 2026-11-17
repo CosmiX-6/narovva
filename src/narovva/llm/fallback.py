@@ -160,7 +160,9 @@ class FallbackLLM:
                         logger.warning("llm %s: credentials rejected; skipping it", entry.name)
                     elif kind == "gone":
                         entry.dead_reason = f"model unavailable ({detail})"
-                        logger.warning("llm %s: model not available (retired or misspelled id?); skipping it", entry.name)
+                        # the provider's answer often names the replacement model: keep it in the log
+                        logger.warning("llm %s: model not available (retired or misspelled id?); skipping it (%s)",
+                                       entry.name, str(detail)[:300])
                     else:  # bad JSON or something unexpected: another model may do better
                         logger.warning("llm %s failed (%s): %s", entry.name, kind, detail)
                     failures.append(f"{entry.name}: {kind}")
