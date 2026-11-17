@@ -210,8 +210,8 @@ def _token_report(channel) -> list[str]:
     def shape(token: str | None) -> str:
         if not token:
             return "not set"
-        kind = {"IGAA": "Instagram Login token", "EAA": "Facebook token (wrong kind)"}.get(
-            token[:4], {"EAA": "Facebook token (wrong kind)"}.get(token[:3], "unrecognised kind"))
+        kind = {"IGAA": "Instagram Login token (graph.instagram.com)", "EAA": "Facebook Login token (graph.facebook.com)"}.get(
+            token[:4], {"EAA": "Facebook Login token (graph.facebook.com)"}.get(token[:3], "unrecognised kind"))
         note = " (has spaces or line breaks: re-paste it)" if token != token.strip() or " " in token else ""
         try:
             check_token(token.strip())
