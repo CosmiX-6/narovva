@@ -32,7 +32,7 @@ permissions:
 jobs:
   trial:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60  # two ~80 s lessons and a news reel, each written and rendered
     steps:
       - uses: actions/checkout@v4
 
@@ -60,7 +60,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           LESSON: ${{ inputs.lesson || 'tokens,attention' }}
           GENRE: ${{ inputs.genre || 'health' }}
-        run: python -m narovva.motion.trial trial-out ${LESSON:+--lesson "$LESSON"} --genre "$GENRE"
+        run: python -u -m narovva.motion.trial trial-out ${LESSON:+--lesson "$LESSON"} --genre "$GENRE"
 
       - uses: actions/upload-artifact@v4
         if: always()
