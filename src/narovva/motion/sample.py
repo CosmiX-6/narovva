@@ -336,9 +336,13 @@ def world_gallery(look=None) -> tuple[list[dict], str]:
 # The same news story told as one continuous 3D animation (motion.story.mode "animated"),
 # and a lesson from a series (narovva.lessons): python -m narovva.motion [--lesson]
 
-def _beat(scene, kicker, lines, screen=None, cmark=None, **data):
-    """A model-reply beat: `cmark` are the captions' highlights, the keywords its scene data."""
-    return {"scene": scene, "kicker": kicker, "lines": lines, "screen": screen or lines, "mark": cmark or [], "data": data}
+def _beat(scene, kicker, lines, screen=None, cmark=None, part=None, **data):
+    """A model-reply beat: `cmark` are the captions' highlights, `part` its place in a lesson's
+    arc, the keywords its scene data."""
+    beat = {"scene": scene, "kicker": kicker, "lines": lines, "screen": screen or lines, "mark": cmark or [], "data": data}
+    if part:
+        beat["part"] = part
+    return beat
 
 
 SAMPLE_ANIMATED: dict = {
@@ -388,30 +392,43 @@ SAMPLE_LESSON_TEXT = (
 
 SAMPLE_LESSON: dict = {
     "subject": "Tokens",
+    "metaphor": {"picture": "The model reads in Lego bricks, never in letters.",
+                 "map": [{"everyday": "brick", "real": "token"}, {"everyday": "brick cutter", "real": "tokenizer"},
+                         {"everyday": "box of bricks", "real": "vocabulary"}, {"everyday": "the desk", "real": "context window"}]},
     "beats": [
         _beat("world", "THE PUZZLE", ["Why can't a chatbot count the r's in strawberry?",
-                                      "Because it never sees the letters."],
-              piece="slice", title="Why can't a chatbot count the r's in strawberry?", whole="strawberry",
+                                      "The answer is simpler than you think."],
+              part="hook", piece="slice", title="Why can't a chatbot count the r's in strawberry?", whole="strawberry",
               parts=["str", "aw", "berry"]),
-        _beat("world", "THE IDEA", ["Think of text as Lego bricks.", "The model only ever sees the bricks, called tokens."],
-              cmark=["Lego bricks", "tokens"], piece="steps", title="Text becomes tokens", mark="tokens",
-              steps=["Your text", "Tokens", "Numbers"], item="tokens", result="The model"),
-        _beat("world", None, ["Common words are one brick.", "Rare words get split into several."],
-              piece="machine", title="One brick, or several", input="Words", machine="Tokenizer", output="Tokens",
-              in_item="documents", out_item="tokens"),
-        _beat("ask", None, ["Wait, so it never sees single letters?"]),
-        _beat("world", "THE CATCH", ["To count the r's, it has to guess.", "It can't look inside the bricks."],
-              piece="focus", title="It guesses from the bricks", mark="guesses",
-              words=["how", "many", "r", "in", "strawberry"], focus=2, strongest=4, strong="Can't look inside"),
-        _beat("world", None, ["And it only holds so many bricks at once.", "Past that limit, the oldest fall away."],
-              piece="window", title="The context window", mark="window", window="Context window", size=4,
-              item="tokens", dropped="Not seen"),
-        _beat("recap", "THE SHORT VERSION", ["Text goes in as tokens.", "Tokens become numbers.",
-                                             "Letters stay hidden."],
-              title="Tokens in short", rows=[{"label": "Text", "note": "split into tokens"},
-                                             {"label": "Tokens", "note": "mapped to numbers"},
-                                             {"label": "Letters", "note": "never seen directly"}]),
-        _beat("cta", None, ["Save this, and follow Context Unfiltered to see how AI works."], cmark=["Save this"]),
+        _beat("world", None, ["It never sees letters.", "It sees chunks of words, and each chunk is a number."],
+              part="answer", piece="machine", title="It never sees letters", mark="letters", input="Words",
+              machine="Brick cutter", output="Numbers", in_item="documents", out_item="tokens"),
+        _beat("world", "THE PICTURE", ["Think of text as Lego bricks.", "Each brick is called a token."],
+              cmark=["Lego bricks", "token"], part="metaphor", piece="slice", title="Text is Lego bricks",
+              mark="bricks", whole="Your sentence", parts=["Think", "of", "text", "as", "Lego"]),
+        _beat("world", "HOW IT WORKS", ["First, a brick cutter chops your text.", "It's called a tokenizer.",
+                                        "Then every brick becomes a number."],
+              cmark=["brick cutter", "tokenizer", "number"], part="how", piece="steps", title="Text, bricks, numbers",
+              mark="numbers", steps=["Your text", "Brick cutter", "Numbers"], item="tokens", result="The model"),
+        _beat("world", None, ["Common words are one whole brick.", "Rare words get cut into several."],
+              part="how", piece="sort", title="One brick, or several", sorter="Brick cutter",
+              bins=["One brick", "Several bricks"], item="tokens"),
+        _beat("ask", None, ["Wait, so it never sees single letters?"], part="ask"),
+        _beat("world", "AN EXAMPLE", ["Ask it how many r's are in strawberry.",
+                                      "It sees three bricks: str, aw, berry.", "The letters are hidden inside them."],
+              part="example", piece="focus", title="It guesses from the bricks", mark="guesses",
+              words=["how", "many", "r", "in", "strawberry"], focus=2, strongest=4, strong="Letters hidden"),
+        _beat("world", "THE CATCH", ["Here the picture breaks: the desk is small.",
+                                     "Past its limit, the oldest bricks fall off."],
+              part="catch", piece="window", title="The desk only holds so much", mark="desk",
+              window="Context window", size=4, item="tokens", dropped="Not seen"),
+        _beat("recap", "THE KEY", ["A brick is a token.", "The brick cutter is the tokenizer.",
+                                   "The desk is the context window."],
+              part="takeaway", title="The Lego key", mark="key",
+              rows=[{"label": "Brick", "note": "a token"}, {"label": "Brick cutter", "note": "the tokenizer"},
+                    {"label": "The desk", "note": "the context window"}]),
+        _beat("cta", None, ["Save this, and follow Context Unfiltered to see how AI works."], cmark=["Save this"],
+              part="cta"),
     ],
 }
 
@@ -440,7 +457,7 @@ def _prepared(raw, brief, article, look, captions=True, animated=True):
     from .style import stamp_colors
 
     look = look or MotionStyleConfig()
-    board = parse_storyboard(raw, brief, article, brand="Context Unfiltered", max_beats=14,
+    board = parse_storyboard(raw, brief, article, brand="Context Unfiltered", max_beats=16,
                              max_stamps=0 if animated else (look.stamps.max_per_reel if look.stamps.enabled else 0),
                              animated=animated)
     if board is None:

@@ -570,9 +570,9 @@ def _try_motion_reel(
         said = spoken(hook) if hook else None  # the hook as the voice reads it
         board = None
         if llm is not None and (look.story.mode in ("storyboard", "animated") or lesson is not None):
-            board = write_storyboard(
-                llm, brief, article, brand=brand, max_beats=look.story.max_beats,
-                target_seconds=look.story.target_seconds, max_stamps=stamps,
+            board = write_storyboard(  # a lesson runs as long as its explanation needs (its own budget)
+                llm, brief, article, brand=brand, max_beats=lesson.max_beats if lesson else look.story.max_beats,
+                target_seconds=lesson.target_seconds if lesson else look.story.target_seconds, max_stamps=stamps,
                 when=(when or datetime.now()).strftime("%d %b %Y"), hook=hook, audience=channel.audience,
                 max_asks=look.story.viewer_questions, mode=look.story.mode, lesson=lesson,
             )

@@ -1,16 +1,17 @@
 name: Story writer trial
 
-# Runs the real story writer on live material -- one lesson of the channel's series and the
-# freshest story of one news genre -- and renders both as animated reels, so a change to the
-# writer can be judged on what the model actually writes. Nothing is posted, uploaded or
-# marked as seen. Costs about four text-model calls (free-tier Gemini first, per llm_chain).
+# Runs the real story writer on live material -- lessons of the channel's series (on a push:
+# tokens and attention) and the freshest story of one news genre -- and renders them as
+# animated reels, so a change to the writer can be judged on what the model actually writes.
+# Nothing is posted, uploaded or marked as seen. Costs 2-3 text-model calls per item (one more
+# when a lesson comes back incomplete), free-tier Gemini first per llm_chain.
 on:
   workflow_dispatch:
     inputs:
       lesson:
-        description: "Lesson id from config/lessons/<series>.yaml (blank = the first)"
+        description: "Lesson id(s) from config/lessons/<series>.yaml, comma-separated"
         required: false
-        default: ""
+        default: "tokens,attention"
       genre:
         description: "News genre to try (or 'none')"
         required: false
@@ -56,7 +57,7 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          LESSON: ${{ inputs.lesson }}
+          LESSON: ${{ inputs.lesson || 'tokens,attention' }}
           GENRE: ${{ inputs.genre || 'health' }}
         run: python -m narovva.motion.trial trial-out ${LESSON:+--lesson "$LESSON"} --genre "$GENRE"
 

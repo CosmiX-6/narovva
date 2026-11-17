@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 LESSONS_DIR = Path("config/lessons")
 REFERENCE_CHARS = 9000
+# A lesson takes as long as the explanation needs: a news reel aims at ~45 s and 10 beats,
+# a lesson at ~80 s and up to 16 (a series may set its own under `length:`). Instagram takes
+# Reels up to 15 minutes through the API; past ~90 s viewers start to drop.
+LESSON_SECONDS = 80
+LESSON_MAX_BEATS = 16
 # Wikipedia asks API clients to name themselves with a way to reach the project.
 _UA = "narovva/1.0 (+https://github.com/CosmiX-6/narovva)"
 _SKIP_SECTIONS = ("see also", "references", "external links", "notes", "further reading", "bibliography",
@@ -46,6 +51,8 @@ class Lesson:
     series_key: str      # its file name ("how-ai-works")
     metaphor: str | None = None
     cover: str | None = None  # 2-5 words for the cover image (default: the title)
+    target_seconds: int = LESSON_SECONDS
+    max_beats: int = LESSON_MAX_BEATS
 
     @property
     def content_id(self) -> str:
@@ -69,6 +76,11 @@ def load_series(key: str, directory: Path | str = LESSONS_DIR) -> Series:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     name = str(raw.get("name") or key)
     series = Series(key=key, name=name, kicker=str(raw.get("kicker") or name).upper())
+    length = raw.get("length") or {}
+    seconds = int(length.get("target_seconds", LESSON_SECONDS))
+    beats = int(length.get("max_beats", LESSON_MAX_BEATS))
+    if not (30 <= seconds <= 180 and 8 <= beats <= 24):
+        raise ValueError(f"{path}: length.target_seconds must be 30-180 and length.max_beats 8-24")
     seen: set[str] = set()
     for i, item in enumerate(raw.get("lessons") or []):
         if not isinstance(item, dict):
@@ -85,6 +97,7 @@ def load_series(key: str, directory: Path | str = LESSONS_DIR) -> Series:
             id=lid, title=title, hook=hook, reference=ref, series=name, series_key=key,
             metaphor=(str(item["metaphor"]).strip() if item.get("metaphor") else None),
             cover=(str(item["cover"]).strip() if item.get("cover") else None),
+            target_seconds=seconds, max_beats=beats,
         ))
     return series
 

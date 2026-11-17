@@ -46,9 +46,27 @@ title, the hook it opens on (the everyday puzzle it answers), an optional metaph
 writer may use, and a reference page. A Wikipedia reference is read as plain text
 through Wikipedia's API (a `#Section` anchor puts that section first), and every claim
 and figure is checked against it the way a news post is checked against its article.
-The caption credits the page (CC BY-SA). The lesson arc: hook, the metaphor, how it
-works step by step, a worked example, the catch, the takeaway, then "save this and
-follow".
+The caption credits the page (CC BY-SA).
+
+A lesson is taught the ELI5 way, to a curious twelve-year-old: everyday words, one new
+idea per line, the picture first and its technical name after. Its arc, each beat tagged
+with its part:
+
+1. **hook**: the everyday puzzle (the lesson's own hook)
+2. **answer**: the whole idea in one plain sentence
+3. **metaphor**: one everyday picture and its map, part by part ("each brick is a token")
+4. **how**: 2-4 steps, acted out in the world in the metaphor's words
+5. **example**: one familiar case followed all the way through
+6. **catch**: where the metaphor breaks, or the real limit
+7. **takeaway**: a recap table that is the metaphor's key (brick = token)
+8. **cta**: save this, and follow
+
+A lesson has its own length (`length:` in the series file; default about 80 seconds and
+up to 16 beats), and the writer is told to run longer rather than skip a part. After the
+checks, a lesson missing a part is sent back to the writer once, with what is missing. One
+still missing its metaphor, its steps or its takeaway is posted as the slide reel rather
+than as a half-explained animation. Any storyboard that is too long loses its viewer
+questions, receipts and repeated parts first, and never its ending.
 
 `config/lessons/how-ai-works.yaml` has 60 lessons, from tokens and attention to RAG,
 fine-tuning and diffusion. Check new references with

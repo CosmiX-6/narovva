@@ -17,6 +17,13 @@
 
 name: How AI works
 kicker: HOW AI WORKS
+# A lesson runs as long as its explanation needs, around this target: hook, the plain-words
+# answer, the metaphor and its map, the steps, a worked example, the catch, the recap. The
+# writer is told to cover every part rather than stop short, and is asked once more if it
+# leaves one out.
+length:
+  target_seconds: 80
+  max_beats: 16
 
 lessons:
   - id: tokens

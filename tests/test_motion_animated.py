@@ -130,7 +130,7 @@ def test_a_lesson_closes_on_save_and_follow_when_the_model_forgets():
 
 def test_the_lesson_sample_prepares():
     specs, subject = sample_lesson()
-    assert subject == "TOKENS" and [s["kind"] for s in specs].count("world") == 5
+    assert subject == "TOKENS" and [s["kind"] for s in specs].count("world") == 7
 
 
 # -- the teaching set pieces ------------------------------------------------------
@@ -195,3 +195,65 @@ def test_harm_to_people_is_never_acted_out():
         board = _animated(raw)
         assert board is None or all(line not in b["lines"] for b in board.beats)
     assert _world(piece="pile", item="people", label="Victims", start="$15", end="$5") is None
+
+
+# -- complete lessons ------------------------------------------------------------------
+
+def _lesson_board(raw, max_beats=16):
+    brief, article, _ = sample_lesson_inputs()
+    return parse_storyboard(copy.deepcopy(raw), brief, article, brand="Context Unfiltered", max_beats=max_beats,
+                            max_stamps=0, animated=True)
+
+
+def test_the_sample_lesson_covers_the_whole_arc_with_its_metaphor_key():
+    from narovva.motion.storyboard import lesson_gaps
+    board = _lesson_board(SAMPLE_LESSON)
+    assert lesson_gaps(board) == []
+    assert [b["part"] for b in board.beats][:3] == ["hook", "answer", "metaphor"]
+    assert board.metaphor["map"][0] == {"everyday": "brick", "real": "token"}
+
+
+def test_an_incomplete_lesson_is_asked_for_again_with_what_is_missing():
+    brief, article, lesson = sample_lesson_inputs()
+    partial = copy.deepcopy(SAMPLE_LESSON)
+    partial["beats"] = [b for b in partial["beats"] if b.get("part") not in ("example", "catch")]
+
+    class LLM:
+        def __init__(self):
+            self.users = []
+
+        def complete_json(self, system, user):
+            self.users.append(user)
+            return copy.deepcopy(partial if len(self.users) == 1 else SAMPLE_LESSON)
+
+    llm = LLM()
+    board = write_storyboard(llm, brief, article, brand="Context Unfiltered", max_beats=16, lesson=lesson)
+    assert len(llm.users) == 2 and "INCOMPLETE" in llm.users[1] and "example, catch" in llm.users[1]
+    assert {"example", "catch"} <= {b["part"] for b in board.beats}
+
+
+def test_a_lesson_missing_its_core_twice_is_not_posted_as_an_animation():
+    brief, article, lesson = sample_lesson_inputs()
+    core_less = copy.deepcopy(SAMPLE_LESSON)
+    core_less["beats"] = [b for b in core_less["beats"] if b.get("part") != "takeaway"]
+    llm = _Animator(core_less)
+    assert write_storyboard(llm, brief, article, brand="Context Unfiltered", max_beats=16, lesson=lesson) is None
+    assert len(llm.prompts) == 2
+    # a lesson only missing a minor part (here the worked example) still posts
+    minor = copy.deepcopy(SAMPLE_LESSON)
+    minor["beats"] = [b for b in minor["beats"] if b.get("part") != "example"]
+    assert write_storyboard(_Animator(minor), brief, article, brand="Context Unfiltered", max_beats=16, lesson=lesson)
+
+
+def test_an_over_long_lesson_keeps_its_ending():
+    board = _lesson_board(SAMPLE_LESSON, max_beats=8)
+    parts = [b["part"] for b in board.beats]
+    assert len(parts) == 8 and parts[-2:] == ["takeaway", "cta"] and parts[0] == "hook"
+    assert "ask" not in parts            # the viewer question goes first
+    assert "catch" in parts and "example" in parts and parts.count("how") >= 1
+
+
+def test_lessons_have_their_own_length():
+    from narovva.lessons import load_series
+    lesson = load_series("how-ai-works").lessons[0]
+    assert lesson.target_seconds >= 75 and lesson.max_beats >= 14

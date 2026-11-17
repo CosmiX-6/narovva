@@ -76,8 +76,11 @@ def _render(channel, board, brief, out: Path) -> None:
     )
 
 
-def _report(name: str, rec: _Recorder, board, out_dir: Path) -> bool:
-    reply = rec.replies[-1] if rec.replies else None
+def _report(name: str, replies: list, board, out_dir: Path) -> bool:
+    """`replies`: the model's storyboard replies for this item (a lesson may be asked twice)."""
+    reply = replies[-1] if replies else None
+    if len(replies) > 1:
+        (out_dir / f"{name}-reply-1.json").write_text(json.dumps(replies[0], indent=2, ensure_ascii=False), encoding="utf-8")
     (out_dir / f"{name}-reply.json").write_text(json.dumps(reply, indent=2, ensure_ascii=False), encoding="utf-8")
     asked = [(b.get("scene"), (b.get("data") or {}).get("piece")) for b in (reply or {}).get("beats", []) if isinstance(b, dict)]
     print(f"\n== {name}: the model wrote {len(asked)} beats: {asked}")
@@ -96,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("out_dir")
     parser.add_argument("--channel", default="config/channels/example-tech-ig.yaml")
-    parser.add_argument("--lesson", help="lesson id (default: the series' first lesson)")
+    parser.add_argument("--lesson", help="lesson id(s), comma-separated (default: the series' first lesson)")
     parser.add_argument("--genre", default="health", help="news genre to try ('none' to skip)")
     parser.add_argument("--no-render", action="store_true")
     args = parser.parse_args(argv)
@@ -115,18 +118,26 @@ def main(argv: list[str] | None = None) -> int:
 
     series_key = next((g.series for g in channel.genres if g.series), None)
     if series_key:
+        from .storyboard import lesson_gaps
+
         series = load_series(series_key)
-        lesson = next((x for x in series.lessons if x.id == args.lesson), None) if args.lesson else series.lessons[0]
-        if lesson is None:
-            sys.exit(f"no lesson {args.lesson!r} in {series_key}")
-        article, brief = pipeline.analyze(reference_source(lesson))
-        board = write_storyboard(rec, brief, article, brand=brand, max_beats=story.max_beats,
-                                 target_seconds=story.target_seconds, hook=lesson.hook, audience=channel.audience,
-                                 max_asks=story.viewer_questions, lesson=lesson)
-        ok &= _report(f"lesson-{lesson.id}", rec, board, out_dir)
-        if board and not args.no_render:
-            hook_board(board, lesson.hook, spoken(lesson.hook), brief.headline, trending=False)
-            _render(channel, board, brief, out_dir / f"lesson-{lesson.id}.mp4")
+        ids = [x.strip() for x in (args.lesson or series.lessons[0].id).split(",") if x.strip()]
+        for lesson_id in ids:
+            lesson = next((x for x in series.lessons if x.id == lesson_id), None)
+            if lesson is None:
+                sys.exit(f"no lesson {lesson_id!r} in {series_key}")
+            article, brief = pipeline.analyze(reference_source(lesson))
+            first = len(rec.replies)
+            board = write_storyboard(rec, brief, article, brand=brand, max_beats=lesson.max_beats,
+                                     target_seconds=lesson.target_seconds, hook=lesson.hook, audience=channel.audience,
+                                     max_asks=story.viewer_questions, lesson=lesson)
+            ok &= _report(f"lesson-{lesson.id}", rec.replies[first:], board, out_dir)
+            if board is not None:
+                print(f"   parts: {[b.get('part') for b in board.beats]}; missing: {lesson_gaps(board) or 'none'}")
+                print(f"   metaphor: {board.metaphor}")
+            if board and not args.no_render:
+                hook_board(board, lesson.hook, spoken(lesson.hook), brief.headline, trending=False)
+                _render(channel, board, brief, out_dir / f"lesson-{lesson.id}.mp4")
 
     if args.genre != "none":
         from info_snipe import ContentStore, NewsFetcher, RSSSource
@@ -140,11 +151,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"skipping {item.url}: {exc}")
                 continue
             print(f"\nnews ({args.genre}): {item.title} -- {item.url}")
+            first = len(rec.replies)
             board = write_storyboard(rec, brief, article, brand=brand, max_beats=story.max_beats,
                                      target_seconds=story.target_seconds, max_stamps=0, audience=channel.audience,
                                      max_asks=story.viewer_questions, mode="animated",
                                      when=(item.published_at.strftime("%d %b %Y") if item.published_at else ""))
-            ok &= _report(f"news-{args.genre}", rec, board, out_dir)
+            ok &= _report(f"news-{args.genre}", rec.replies[first:], board, out_dir)
             if board and not args.no_render:
                 _render(channel, board, brief, out_dir / f"news-{args.genre}.mp4")
             break

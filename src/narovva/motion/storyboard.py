@@ -189,15 +189,30 @@ def _system_animated(brand: str, max_beats: int, target_seconds: int, max_asks: 
     if lesson:
         what = "teaches how AI works, one small idea at a time,"
         arc = (
-            f"LESSON ARC ({min(8, max_beats)}-{max_beats} beats, about {target_seconds} seconds):\n"
-            "1. Hook: the everyday puzzle this idea explains (already written: the first line, word for word).\n"
-            "2. The metaphor: ONE everyday picture of the idea (\"Think of the model as a reader who only sees "
-            "Lego bricks\"), introduced in one line and kept for the whole video -- the world IS this metaphor.\n"
-            "3. How it works: 2-4 beats, one step each, acted out in the world, in the metaphor's words.\n"
-            "4. A worked example: the idea on one concrete case the viewer knows.\n"
-            "5. The catch: a limit, a trade-off or the common misunderstanding.\n"
-            "6. The takeaway: one line the viewer could repeat to a friend (a \"recap\" when there are parts to list).\n"
-            f"7. The last beat, scene \"cta\": one line of at most 10 words asking them to save it and follow {brand}.\n"
+            f"LESSON ARC (about {max(10, max_beats - 4)}-{max_beats} beats, about {target_seconds} seconds -- it may "
+            "run longer rather than skip a part; NEVER stop before the takeaway). Tag every beat with its \"part\":\n"
+            "1. \"hook\": the everyday puzzle this idea explains (already written: the first line, word for word); "
+            "the second line promises the answer is simple.\n"
+            "2. \"answer\": the whole idea in ONE plain sentence a ten-year-old would get -- no jargon at all.\n"
+            "3. \"metaphor\" (1-2 beats): ONE everyday picture of the idea (\"Think of the model as a reader who "
+            "only sees Lego bricks\"), then its MAP, one pair per line: each everyday part and the real thing it "
+            "stands for (\"Each brick is a token. The box of every brick is the vocabulary.\"). The world IS this "
+            "metaphor for the rest of the video.\n"
+            "4. \"how\" (2-4 beats): how it works, one step per beat, in order, acted out in the world, in the "
+            "metaphor's words with the real term alongside (\"the tokenizer -- the brick cutter\").\n"
+            "5. \"example\": follow ONE concrete case the viewer knows all the way through (a real sentence, a "
+            "real photo, a real question).\n"
+            "6. \"catch\": where the metaphor breaks, or the real limit -- so nobody leaves with a wrong picture.\n"
+            "7. \"takeaway\": scene \"recap\" as the metaphor's key: one row per pair, the everyday word as the "
+            "label and what it really is as the note -- or one line they could repeat to a friend.\n"
+            f"8. \"cta\": the last beat, scene \"cta\": one line of at most 10 words asking them to save it and "
+            f"follow {brand}.\n"
+            "An \"ask\" beat (part \"ask\") voices the confusion a learner would have right then, and the next "
+            "beat clears it up.\n"
+            "TEACHING (ELI5): talk to a curious twelve-year-old. Everyday words, short sentences, one new idea per "
+            "line. Show it first, then name it: a technical word only after its everyday picture (\"this is called "
+            "a token\"), and an abbreviation only after its full name. Keep the metaphor's words the same in every "
+            "line, label and recap row. Every step follows from the one before.\n"
         )
         truth = (
             "TRUTH: the metaphor and the examples are yours; the FACTS are not. Every claim about how the technology "
@@ -249,7 +264,10 @@ def _system_animated(brand: str, max_beats: int, target_seconds: int, max_asks: 
         "FIELDS: every scene's fields go INSIDE \"data\". Write figures as strings, exactly as the source writes "
         "them (\"2.6 million\", \"$5\", \"67%\"), never as bare numbers. An item is one of the listed items.\n\n"
         'Respond as JSON: {"subject": "what the video is about in 1-3 words", '
-        '"beats": [{"scene": "...", "lines": ["spoken line", ...], "screen": ["each line as the caption reads '
+        + ('"metaphor": {"picture": "the everyday picture in one line", "map": [{"everyday": "brick", '
+           '"real": "token"}, ...]}, ' if lesson else "")
+        + '"beats": [{"scene": "...", ' + ('"part": "...", ' if lesson else "")
+        + '"lines": ["spoken line", ...], "screen": ["each line as the caption reads '
         'it: digits for numbers, AI not A I", ...], "mark": ["1-3 words of each caption to highlight", ...], '
         '"kicker": "...", "data": {...}}, ...]}\n'
         'For example: {"scene": "world", "kicker": "THE IDEA", "lines": ["Think of the model as a reader of '
@@ -276,7 +294,8 @@ def _user_lesson(brief, article, lesson, audience: str = "") -> str:
 @dataclass
 class Storyboard:
     subject: str | None
-    beats: list[dict] = field(default_factory=list)   # validated: scene, kicker, data, stamp, lines, screens, cmarks
+    beats: list[dict] = field(default_factory=list)   # validated: scene, kicker, data, stamp, lines, screens, cmarks, part
+    metaphor: dict | None = None                       # lessons: {"picture": ..., "map": [{"everyday", "real"}, ...]}
 
 
 # -- field cleaning ------------------------------------------------------------
@@ -682,7 +701,10 @@ def _cta_beat(brand: str, line: str | None = None) -> dict:
 
 
 # The fields every beat has; anything else at the top level of a beat belongs to its scene.
-_BEAT_KEYS = {"scene", "lines", "screen", "mark", "kicker", "data", "stamp", "voice"}
+_BEAT_KEYS = {"scene", "lines", "screen", "mark", "kicker", "data", "stamp", "voice", "part"}
+LESSON_PARTS = ("hook", "answer", "metaphor", "how", "example", "catch", "takeaway", "ask", "cta")
+# What a lesson must still show after validation, or it is incomplete (part: how many beats).
+_LESSON_NEEDS = {"answer": 1, "metaphor": 1, "how": 2, "example": 1, "catch": 1, "takeaway": 1}
 
 
 def _beat_data(beat: dict) -> dict:
@@ -739,22 +761,63 @@ def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_sta
             clean = _with_title(clean, data, src)
         kicker = _words(b.get("kicker"), 3)
         kicker = kicker if kicker and src.grounded(kicker) else None
+        part = str(b.get("part") or "").strip().lower()
         beats.append({
             "scene": scene, "kicker": kicker.upper() if kicker else None, "data": clean,
             "stamp": _stamp(b.get("stamp"), src), "lines": lines, "screens": screens, "cmarks": cmarks,
+            "part": part if part in LESSON_PARTS else None,
         })
     beats = [b for i, b in enumerate(beats) if b["scene"] != "cta" or i == len(beats) - 1]
     if not beats or beats[-1]["scene"] != "cta":
         beats.append(_cta_beat(brand, cta))
-    if len(beats) > max_beats:
-        beats = beats[: max_beats - 1] + [beats[-1]]
+    beats = _fit(beats, max_beats)
     beats = _place_asks(beats, max_asks)
     if beats[0]["scene"] == "cta" or len(beats) < 5:
         return None
     if animated and sum(b["scene"] == "world" for b in beats) < MIN_WORLD_BEATS:
         return None
     _cap_stamps(beats, max_stamps)
-    return Storyboard(subject=clean_subject(raw.get("subject")), beats=beats)
+    return Storyboard(subject=clean_subject(raw.get("subject")), beats=beats, metaphor=_metaphor(raw.get("metaphor")))
+
+
+def _fit(beats: list[dict], max_beats: int) -> list[dict]:
+    """Bring an over-long storyboard down to `max_beats` without losing its ending (the
+    verdict, the takeaway, the call to follow) or its opening: first the viewer questions
+    go, then the receipts, then beats of a part the board has more of than it needs, then
+    beats from the middle."""
+    beats = list(beats)
+    for scene in ("ask", "source"):
+        while len(beats) > max_beats and any(b["scene"] == scene for b in beats[1:-1]):
+            beats.pop(max(i for i, b in enumerate(beats[:-1]) if i and b["scene"] == scene))
+    while len(beats) > max_beats:
+        counts: dict = {}
+        for b in beats:
+            counts[b.get("part")] = counts.get(b.get("part"), 0) + 1
+        spare = [i for i, b in enumerate(beats[1:-2], 1)
+                 if b.get("part") and counts[b["part"]] > _LESSON_NEEDS.get(b["part"], 1)]
+        beats.pop(spare[len(spare) // 2] if spare else len(beats) // 2)
+    return beats
+
+
+def _metaphor(raw) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    pairs = [{"everyday": e, "real": r} for e, r in (
+        (_words(m.get("everyday"), 4), _words(m.get("real"), 4)) for m in (raw.get("map") or []) if isinstance(m, dict))
+        if e and r]
+    picture = _text(raw.get("picture"), 25, 200)
+    return {"picture": picture, "map": pairs[:6]} if picture or pairs else None
+
+
+def lesson_gaps(board: Storyboard | None) -> list[str]:
+    """The parts of the lesson arc the validated board does not cover (empty when complete)."""
+    if board is None:
+        return list(_LESSON_NEEDS)
+    have: dict = {}
+    for b in board.beats:
+        part = b.get("part") or ("takeaway" if b["scene"] == "recap" else None)
+        have[part] = have.get(part, 0) + 1
+    return [p for p, n in _LESSON_NEEDS.items() if have.get(p, 0) < n]
 
 
 def _place_asks(beats: list[dict], max_asks: int) -> list[dict]:
@@ -807,16 +870,38 @@ def write_storyboard(llm, brief, article, *, brand: str, max_beats: int = 10, ta
     else:
         system = _system(brand, max_beats, target_seconds, max_stamps, max_asks)
     user = _user_lesson(brief, article, lesson, audience) if lesson is not None else _user(brief, article, when, hook, audience)
-    try:
-        raw = llm.complete_json(system, user)
-    except Exception as exc:
-        logger.warning("storyboard LLM call failed (%s)", exc)
-        return None
-    board = parse_storyboard(raw, brief, article, brand=brand, max_beats=max_beats, max_stamps=max_stamps,
-                             max_asks=max_asks, animated=animated, cta=cta)
-    if board is None:
+    best, best_gaps = None, None
+    for attempt in range(2 if lesson is not None else 1):
+        try:
+            raw = llm.complete_json(system, user)
+        except Exception as exc:
+            logger.warning("storyboard LLM call failed (%s)", exc)
+            break
+        board = parse_storyboard(raw, brief, article, brand=brand, max_beats=max_beats, max_stamps=max_stamps,
+                                 max_asks=max_asks, animated=animated, cta=cta)
+        if lesson is None:
+            best = board
+            break
+        gaps = lesson_gaps(board)
+        if board is not None and (best is None or len(gaps) < len(best_gaps)):
+            best, best_gaps = board, gaps
+        if not gaps:
+            break
+        # An incomplete lesson teaches a wrong picture: ask once more, saying what is missing.
+        logger.warning("lesson storyboard is missing %s (attempt %d)", ", ".join(gaps), attempt + 1)
+        user = (user.split("\n\nYOUR LAST STORYBOARD")[0]
+                + f"\n\nYOUR LAST STORYBOARD WAS INCOMPLETE: after the checks it had no {', '.join(gaps)} part. "
+                "Beats are dropped when a figure is not in the reference text, a label is longer than 3 words, a "
+                "line is longer than 16 words, or a scene's fields are not inside \"data\". Write the whole "
+                "storyboard again, covering every part of the arc.")
+    if lesson is not None and best is not None and best_gaps:
+        if any(p in best_gaps for p in ("metaphor", "how", "takeaway")):
+            logger.warning("lesson storyboard still lacks %s; using the slide-based reel", ", ".join(best_gaps))
+            return None
+        logger.warning("lesson storyboard lacks %s; posting it anyway", ", ".join(best_gaps))
+    if best is None:
         logger.warning("storyboard reply did not validate; using the slide-based reel")
-    return board
+    return best
 
 
 def hook_board(board: Storyboard, written: str | None, said: str | None, headline: str,
