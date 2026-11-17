@@ -25,6 +25,9 @@ _TOPIC_TAG_BY_GENRE: dict[str, str] = {
     "world": "cinematic",
     "business": "corporate",
     "science": "ambient",
+    "health": "ambient",
+    "finance": "corporate",
+    "ai_practitioner": "technology",
 }
 
 # Mood tags per poster_core.models.ContentBrief.tone -- a launch/win reads

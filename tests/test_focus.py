@@ -56,12 +56,14 @@ def test_focus_replaces_genres_and_caption_while_enabled():
     assert [g.genre for g in off.genres] == ["tech", "world"] and off.audience == ""
 
 
-def test_live_channel_config_is_in_ai_focus():
+def test_the_live_channel_genres_have_feeds():
     ch = load_channel("config/channels/example-tech-ig.yaml")
-    assert ch.focus_on and [g.genre for g in ch.genres] == ["ai_practitioner"]
+    assert ch.focus is not None and not ch.focus_on  # the focus is kept, switched off
     from info_snipe import get_genre
 
     assert len(get_genre("ai_practitioner").rss_feeds) >= 15
+    for g in ch.genres:
+        assert g.series or get_genre(g.genre).rss_feeds  # news genres need feeds; a lesson genre has a series
 
 
 def test_mentions_matches_whole_words():

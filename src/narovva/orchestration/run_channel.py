@@ -16,6 +16,7 @@ from poster_core import AssetType, Pipeline, PipelineConfig
 from poster_core import Platform as RenderPlatform
 from poster_core.analysis.llm import GeminiChat, LLMClient, OpenAIChat
 
+from .. import lessons as lesson_series
 from ..captions import generate_caption
 from ..config.schema import ChannelConfig, GenreSetting
 from ..db.engine import ensure_schema, get_connection
@@ -128,18 +129,26 @@ def run_channel(
     llm_down = False
     recent_music_ids: set[str] = set(repo.recent_music_track_ids(channel.id)) if repo and channel.is_video else set()
     recent_voices: set[str] = set(repo.recent_narration_voices(channel.id)) if repo and channel.narration else set()
+    series_cache: dict[str, lesson_series.Series] = {}
 
     try:
         for genre_setting in genres:
             genres_processed.append(genre_setting.genre)
-            articles = fetcher.fetch(
-                genre_setting.genre,
-                country=genre_setting.country,
-                limit=genre_setting.limit,
-                mark_seen=False,
-            )
-            if channel.focus_on:
-                articles = _focus_articles(channel, articles, llm_cache)
+            series = None
+            if genre_setting.series:  # a lesson series: its next unposted lesson, not the news
+                if genre_setting.series not in series_cache:
+                    series_cache[genre_setting.series] = lesson_series.load_series(genre_setting.series)
+                series = series_cache[genre_setting.series]
+                articles = lesson_series.pending(series, store, genre_setting.genre, limit=1)
+            else:
+                articles = fetcher.fetch(
+                    genre_setting.genre,
+                    country=genre_setting.country,
+                    limit=genre_setting.limit,
+                    mark_seen=False,
+                )
+                if channel.focus_on:
+                    articles = _focus_articles(channel, articles, llm_cache)
             genre_posted = 0
             for article in articles:
                 if max_posts_per_genre is not None and genre_posted >= max_posts_per_genre:
@@ -164,6 +173,7 @@ def run_channel(
                 outcome = _process_one(
                     article, genre_setting, channel, dry_run=dry_run, recent_music_ids=recent_music_ids,
                     recent_voices=recent_voices, llm_cache=llm_cache, hook_stats=hook_stats,
+                    lesson=series.by_content_id(article.content_id) if series else None,
                 )
                 if outcome.fatal:
                     # Not the article's fault: leave it unrecorded (no burnt attempt) and stop.
@@ -251,15 +261,17 @@ def _process_one(
     llm_cache: dict | None = None,
     hook_style: str | None = None,
     hook_stats: dict | None = None,
+    lesson: lesson_series.Lesson | None = None,
 ) -> _Outcome:
     """`hook_style` (viral posts, or every post when channel.hooks.enabled): write a
     formula hook with its cover text and caption opener (narovva.hooks), open the
     reel with the hook, title the cover with the cover text, lead the caption with
-    the opener."""
+    the opener. A `lesson` is written from its reference page instead of the
+    article, and opens on its own hook."""
     is_reel = channel.is_video
     hook: str | None = None
     package: HookPackage | None = None
-    if hook_style is None and channel.hooks.enabled:
+    if hook_style is None and channel.hooks.enabled and lesson is None:
         hook_style = "auto"
     try:
         # One chain per run, so a model whose quota is spent stays skipped for later articles.
@@ -278,7 +290,7 @@ def _process_one(
             ),
             llm=llm,
         )
-        article_full, brief = pipeline.analyze(article.url)
+        article_full, brief = pipeline.analyze(lesson_series.reference_source(lesson) if lesson else article.url)
         asset_types = [AssetType(t) for t in genre_setting.asset_types] if genre_setting.asset_types else None
         # Reels are full-screen 9:16 video, so source frames are rendered at
         # Instagram's story size rather than the 4:5 feed-post size.
@@ -293,7 +305,11 @@ def _process_one(
         banned = channel.banned_words
         if banned:
             caption.text = drop_banned_sentences(caption.text, banned)
-        if hook_style:
+        if lesson is not None:  # its own hook leads; the reference page gets its credit
+            hook = lesson.hook or None
+            caption.text = f"{hook}\n\n{caption.text}" if hook else caption.text
+            caption.text = f"{caption.text}\n\n{lesson_series.caption_reference(lesson)}"
+        elif hook_style:
             formulas = channel.hooks.formulas
             if hook_stats:
                 formulas = choose_formulas(formulas or list(formulas_by_id()), hook_stats,
@@ -342,7 +358,7 @@ def _process_one(
                     channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
                     llm=llm, recent_voices=recent_voices, seed=article.content_id, hook=hook,
                     when=article.published_at, article=article_full,
-                    trending=genre_setting.genre == "viral",
+                    trending=genre_setting.genre == "viral", lesson=lesson,
                 )
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
                 video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
@@ -354,7 +370,8 @@ def _process_one(
             hosted.append(h)
             cover_url = _host_cover(
                 host, hosted, channel, article, brief, assets, hook=hook,
-                cover_text=package.cover if package else None, trending=genre_setting.genre == "viral",
+                cover_text=(lesson.cover or lesson.title) if lesson else package.cover if package else None,
+                trending=genre_setting.genre == "viral", kicker=lesson.series if lesson else None,
             )
             publish_assets.append(
                 PublishAsset(asset_type="reel", local_path=video_path, hosted_url=h.url, cover_url=cover_url)
@@ -534,7 +551,7 @@ def _speak(provider, passages: list[str], specs: list[dict], pool: list[str], vo
 def _try_motion_reel(
     channel, assets, brief, track: MusicTrack, output_path: str, *,
     llm=None, recent_voices=frozenset(), seed: str = "", hook: str | None = None,
-    when: datetime | None = None, article=None, trending: bool = False,
+    when: datetime | None = None, article=None, trending: bool = False, lesson=None,
 ) -> tuple[str | None, str | None]:
     """Render the HyperFrames motion reel (optionally narrated). Returns
     (mp4 path, narration voice); path is None (after logging why) so the
@@ -552,12 +569,12 @@ def _try_motion_reel(
         brand = channel.brand.name.title() if channel.brand.name.isupper() else channel.brand.name
         said = spoken(hook) if hook else None  # the hook as the voice reads it
         board = None
-        if llm is not None and look.story.mode == "storyboard":
+        if llm is not None and (look.story.mode in ("storyboard", "animated") or lesson is not None):
             board = write_storyboard(
                 llm, brief, article, brand=brand, max_beats=look.story.max_beats,
                 target_seconds=look.story.target_seconds, max_stamps=stamps,
                 when=(when or datetime.now()).strftime("%d %b %Y"), hook=hook, audience=channel.audience,
-                max_asks=look.story.viewer_questions,
+                max_asks=look.story.viewer_questions, mode=look.story.mode, lesson=lesson,
             )
         if board is not None:
             hook_board(board, hook, said, brief.headline, trending=trending)
@@ -617,7 +634,7 @@ def apply_hook(specs: list[dict], hook: str | None, headline: str, trending: boo
 
 def _host_cover(
     host, hosted: list, channel, article, brief, assets, hook: str | None = None,
-    cover_text: str | None = None, trending: bool = False,
+    cover_text: str | None = None, trending: bool = False, kicker: str | None = None,
 ) -> str | None:
     """Designed thumbnail (photo + title + logo) for the reel. The title is the
     package's short cover text when there is one (so cover and hook say different
@@ -629,7 +646,7 @@ def _host_cover(
         out = f"/tmp/narovva/{channel.id}/{article.content_id}_cover.jpg"
         make_cover(
             out, headline=cover_text or hook or brief.headline,
-            kicker="trending now" if trending else category.replace("_", " "),
+            kicker=kicker or ("trending now" if trending else category.replace("_", " ")),
             accent=channel.brand.category_accents.get(category) or channel.brand.accent_color,
             handle=channel.brand.social_handle or "", logo_path=channel.brand.logo_path,
             photo_path=photo.source_image_path if photo else None,

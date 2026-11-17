@@ -174,3 +174,40 @@ def test_slide_char_counts_reads_quote_slide_text():
     counts = run_channel_module._slide_char_counts([asset])
 
     assert counts == [len(quote.text) + len(quote.attribution)]
+
+
+def test_a_lesson_genre_posts_the_series_next_lesson_instead_of_news(monkeypatch):
+    class _NoFetch:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def fetch(self, *args, **kwargs):
+            raise AssertionError("a lesson genre must not fetch news")
+
+    marked = []
+
+    class _Store:
+        def filter_unseen(self, ids):
+            return set(ids) - {"lesson:how-ai-works:tokens"}
+
+        def mark_seen(self, article):
+            marked.append(article.content_id)
+
+    got = {}
+
+    def process(article, genre_setting, channel, dry_run, **kw):
+        got.update(article=article, lesson=kw.get("lesson"))
+        return run_channel_module._Outcome(status="success", caption_text="c", hashtags=[], asset_types=["cover"])
+
+    monkeypatch.setattr(run_channel_module, "NewsFetcher", _NoFetch)
+    monkeypatch.setattr(run_channel_module, "_preflight_token", lambda channel: None)
+    monkeypatch.setattr(run_channel_module, "get_store_for_channel", lambda channel_id: _Store())
+    monkeypatch.setattr(run_channel_module, "get_settings",
+                        lambda: run_channel_module.Settings(database_url=None, newsapi_key=None))
+    monkeypatch.setattr(run_channel_module, "_process_one", process)
+
+    result = run_channel_module.run_channel(_channel(genres=[GenreSetting(genre="lessons", series="how-ai-works")]))
+
+    assert result.posted == 1
+    assert got["lesson"].id == "next-token" and got["article"].content_id == "lesson:how-ai-works:next-token"
+    assert marked == ["lesson:how-ai-works:next-token"]
