@@ -134,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
         from .tokens import get_valid_token
 
         channel = load_channel(args.path)
+        for line in _token_report(channel):
+            print(logsafe.redact(line))
         for line in probe(channel.ig_business_account_id, get_valid_token(channel)):
             print(logsafe.redact(line))
         return 0
@@ -196,6 +198,31 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if failed_any else 0
 
     return 2
+
+
+def _token_report(channel) -> list[str]:
+    """Each Instagram token the channel could use (the secret and the copy stored in the
+    database), by its shape and Instagram's verdict -- never the token itself."""
+    from .settings import resolve_env
+    from .tokens import InstagramTokenError, check_token
+    from .tokens.instagram_token_store import _stored_token
+
+    def shape(token: str | None) -> str:
+        if not token:
+            return "not set"
+        kind = {"IGAA": "Instagram Login token", "EAA": "Facebook token (wrong kind)"}.get(
+            token[:4], {"EAA": "Facebook token (wrong kind)"}.get(token[:3], "unrecognised kind"))
+        note = " (has spaces or line breaks: re-paste it)" if token != token.strip() or " " in token else ""
+        try:
+            check_token(token.strip())
+            verdict = "Instagram ACCEPTS it"
+        except InstagramTokenError as exc:
+            verdict = f"rejected: {exc}"
+        return f"{kind}, {len(token)} characters{note}; {verdict}"
+
+    env_name = channel.credentials.instagram_access_token_env
+    return [f"secret {env_name}: {shape(resolve_env(env_name))}",
+            f"stored copy in the database: {shape(_stored_token(channel))}"]
 
 
 def _metrics_command(args) -> int:
