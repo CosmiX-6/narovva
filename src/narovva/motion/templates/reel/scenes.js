@@ -10,7 +10,7 @@
  * changes to an element use immediateRender:false, nothing reads the clock.
  */
 window.CUScenes = function (K) {
-  const { tl, el, image, fit, figures, phraseAt, heading, kick, introHead, barIn, V, mh, OV, PHOTO, DECK, opener } = K;
+  const { tl, el, image, fit, figures, phraseAt, heading, kick, introHead, barIn, V, mh, SH, OV, PHOTO, DECK, UI, opener } = K;
   const NS = "http://www.w3.org/2000/svg";
   const ICONS = window.CU_ICONS || {};
   const GREEN = "#22C55E", RED = "#F43F5E";
@@ -369,6 +369,113 @@ window.CUScenes = function (K) {
       drawOn(svg, T + 0.05, 0.45);
     });
   };
+
+  // When each word of line j is said (spread over the line in proportion to its length,
+  // as the captions do).
+  const wordTimes = (s, c, j, toks) => {
+    const p = parts(s)[Math.min(j, parts(s).length - 1)], chars = toks.reduce((n, w) => n + w.length + 1, 0);
+    let done = 0;
+    return toks.map((w) => { const t = c.t0 + p.at + p.voice * (done / chars); done += w.length + 1; return t; });
+  };
+
+  // -- ask: the viewer cuts in with the question they would ask right now ------
+  // A message bubble from "you": three typing dots, then the words land as the second
+  // voice says them. The bubble is the caption for this beat.
+  S.ask = (sc, s, c) => {
+    const d = s.data, { a } = c;
+    sc.classList.add("askwrap");
+    const ghost = el("div", "askghost", "?", sc);
+    const who = el("div", "askwho", null, sc);
+    icon("user", 40, el("div", "askav", null, who));
+    el("span", null, "YOU", who);
+    const bubble = el("div", "askbub", null, sc);
+    const dots = el("div", "askdots", null, bubble);
+    const dd = [el("i", null, null, dots), el("i", null, null, dots), el("i", null, null, dots)];
+    const txt = el("div", "asktxt", null, bubble);
+    const toks = String(d.text).split(/\s+/);
+    const spans = toks.map((w, j) => { const sp = el("span", null, w, txt); if (j < toks.length - 1) txt.appendChild(document.createTextNode(" ")); return sp; });
+    fit(txt, mh(520), 76, 44);
+    const at = wordTimes(s, c, 0, toks);
+    const T = a(0);
+    tl.fromTo(ghost, { opacity: 0, scale: 0.6, rotation: -20 }, { opacity: 0.55, scale: 1, rotation: 10, duration: 0.5, ease: "expo.out" }, T);
+    tl.fromTo(who, { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.25, ease: "power3.out" }, T);
+    tl.fromTo(bubble, { opacity: 0, scale: 0.6, y: 40 }, { opacity: 1, scale: 1, y: 0, duration: 0.32, ease: "back.out(1.8)" }, T + 0.06);
+    // typing dots until the first word, then the words
+    const typingEnd = Math.max(T + 0.3, at[0] - 0.02);
+    dd.forEach((dot, k) => tl.fromTo(dot, { y: 0 }, { y: -12, duration: 0.18, ease: "sine.inOut", yoyo: true, repeat: Math.max(1, Math.round((typingEnd - T) / 0.36) * 2 - 1) }, T + 0.1 + k * 0.08));
+    tl.set(dots, { display: "none" }, typingEnd);
+    tl.set(txt, { opacity: 0 }, 0);
+    tl.set(txt, { opacity: 1 }, typingEnd);
+    spans.forEach((sp, j) => tl.fromTo(sp, { opacity: 0, filter: "blur(6px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.14, ease: "power2.out" }, Math.max(typingEnd, at[j])));
+  };
+
+  // -- source: the receipt -- the article's own words on a paper card ---------
+  // The world behind dims (index.html), the card lands, and a marker sweeps over the
+  // key phrase as the voice reaches it.
+  S.source = (sc, s, c) => {
+    const d = s.data, { a } = c;
+    kick(sc, s);
+    const card = el("div", "srccard", null, sc);
+    const head = el("div", "srchead", null, card);
+    const pub = d.publisher || "The report";
+    el("div", "srclogo", pub.replace(/^the\s+/i, "").charAt(0).toUpperCase(), head);
+    el("div", "srcpub", pub, head);
+    const q = el("div", "srctext", null, card);
+    const toks = String(d.text).split(/\s+/), hit = phraseAt(toks, d.mark);
+    let mark = null;
+    toks.forEach((w, j) => {
+      if (j) (hit.has(j) && hit.has(j - 1) ? mark : q).appendChild(document.createTextNode(" "));
+      if (hit.has(j)) { if (!mark) mark = el("span", "srcmark", null, q); mark.appendChild(document.createTextNode(w)); }
+      else q.appendChild(document.createTextNode(w));
+    });
+    fit(q, mh(560), 50, 32);
+    const foot = el("div", "srcfoot", (pub + " · " + ((UI.hud && UI.hud.date) || "")).replace(/ · $/, ""), card);
+    const T = a(0);
+    tl.fromTo(card, { opacity: 0, y: 90, rotation: 2.5, scale: 0.94 }, { opacity: 1, y: 0, rotation: 0, scale: 1, duration: 0.5, ease: "expo.out" }, T);
+    tl.fromTo(foot, { opacity: 0 }, { opacity: 1, duration: 0.3 }, T + 0.3);
+    // the marker: when the line that says it starts (or partway through a single line)
+    const Tm = Math.min(latest(c), parts(s).length > 1 ? partAt(s, c, 1) : a(0.25) + Math.min(1.1, parts(s)[0].voice * 0.45));
+    if (mark) tl.fromTo(mark, { backgroundSize: "0% 100%" }, { backgroundSize: "100% 100%", duration: 0.55, ease: "power2.inOut" }, Tm);
+    c.stampTarget = card; c.stampAt = Tm + 0.6;
+  };
+
+  // -- recap: the short version, one row per option / player / takeaway -------
+  S.recap = (sc, s, c) => {
+    const d = s.data, rows = d.rows, n = rows.length;
+    kick(sc, s); title(sc, d, 70, mh(170));
+    const box = el("div", "recap", null, sc);
+    const els = rows.map((r) => {
+      const row = el("div", "rrow", null, box);
+      el("div", "rlab", r.label, row);
+      if (r.note) figures(el("div", "rnote", null, row), r.note);
+      return row;
+    });
+    let prev = null, lastT = c.a(0.1);
+    els.forEach((row, i) => {
+      const T = Math.max(c.a(0.1) + i * 0.12, itemAt(s, c, i, n));
+      tl.fromTo(row, { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.32, ease: "expo.out" }, T);
+      tl.fromTo(row, { "--lit": 0 }, { "--lit": 1, duration: 0.25, ease: "power2.out" }, T + 0.05);
+      if (prev) tl.fromTo(prev, { "--lit": 1, opacity: 1 }, { "--lit": 0, opacity: 0.6, duration: 0.25, ease: "power2.out", immediateRender: false }, T);
+      prev = row; lastT = T;
+    });
+    // the last row stays lit; the earlier ones come back up once they're all in
+    els.slice(0, -1).forEach((row) => tl.fromTo(row, { opacity: 0.6 }, { opacity: 1, duration: 0.3, immediateRender: false }, Math.min(latest(c), lastT + 0.9)));
+    c.stampTarget = box; c.stampAt = lastT + 0.6;
+  };
+
+  // -- world: a station of the 3D world where characters and objects act the story out
+  // (world.js). The scene itself only carries the title; the world sits behind the window.
+  const WORLD = window.CUWorld ? window.CUWorld({ tl, el, DECK, parts, partAt, latest, SH }) : null;
+  S.world = (sc, s, c) => {
+    const d = s.data || {};
+    kick(sc, s);
+    if (d.title) heading(sc, d.title, c.i === 0 ? 84 : 66, mh(c.i === 0 ? 260 : 150), d.mark); // the first beat's title is the hook
+    c.a && introHead(sc, c.a, c.D, c.i === 0);
+    if (!WORLD || !WORLD.station(sc, s, c)) { // no WebGL: the title alone still says it
+      if (!d.title) heading(sc, (s.screens && s.screens[0]) || "", 96, mh(500));
+    }
+  };
+  S._world = WORLD;
 
   // -- end card: logo, name, handle, the follow button ------------------------
   S.endcard = (sc, s, c) => {

@@ -198,7 +198,7 @@ def _channel(**kw):
     base = dict(id="c", ig_business_account_id="1", genres=[GenreSetting(genre="ai")],
                 brand=BrandKitConfig(name="CONTEXT UNFILTERED", social_handle="cu", logo_path="assets/logo/CU.png"),
                 publish_format="motion_reel", narration=None,
-                motion=MotionStyleConfig.model_validate({"story": {"max_beats": 14}}))
+                motion=MotionStyleConfig.model_validate({"story": {"max_beats": 14, "mode": "storyboard"}}))
     base.update(kw)
     return ChannelConfig(**base)
 
@@ -253,3 +253,117 @@ def test_a_storyboard_that_fails_validation_falls_back_to_the_slides(monkeypatch
     from tests.test_motion_style import _asset
     path, voice = rc._try_motion_reel(_channel(), [_asset()], BRIEF, _Track(), "/tmp/o.mp4", llm=Lazy(), article=ARTICLE)
     assert path == "/tmp/o.mp4" and [s["kind"] for s in seen["specs"]] == ["hook", "text", "text"]
+
+
+# -- explainer v3: the viewer's questions, receipts and the recap ---------------
+
+def test_a_viewer_question_is_one_line_answered_later_and_never_at_the_ends():
+    ask = lambda q: _beat("ask", {}, [q])
+    raw = _raw(ask("Wait, so who pays for this?"))          # second beat: too early
+    assert all(b["scene"] != "ask" for b in _board(raw).beats)
+    raw = _raw()
+    raw["beats"][3:3] = [ask("Wait, so who pays for this?"), ask("And then what happens next?")]
+    board = _board(raw)
+    asks = [i for i, b in enumerate(board.beats) if b["scene"] == "ask"]
+    assert asks == [3]                                      # never two in a row
+    beat = board.beats[3]
+    assert beat["voice"] == "viewer" and beat["data"]["text"] == "Wait, so who pays for this?" and len(beat["lines"]) == 1
+    del raw["beats"][4]
+    raw["beats"][3] = ask("Wait, is that really 90% cheaper?")  # an invented figure
+    assert all(b["scene"] != "ask" for b in _board(raw).beats)
+    raw["beats"][3] = ask("Not a question at all.")
+    assert all(b["scene"] != "ask" for b in _board(raw).beats)
+
+
+def test_viewer_questions_can_be_switched_off():
+    raw = _raw()
+    raw["beats"][3:3] = [_beat("ask", {}, ["Wait, so who pays for this?"])]
+    board = parse_storyboard(copy.deepcopy(raw), BRIEF, ARTICLE, brand="CU", max_beats=14, max_stamps=3, max_asks=0)
+    assert all(b["scene"] != "ask" for b in board.beats)
+
+
+def test_a_source_card_shows_only_the_articles_own_words():
+    good = "OpenAI cut prices across its model lineup on Thursday, with the flagship now costing $5 per million tokens"
+    board = _board(_raw(_beat("source", {"text": good, "mark": "costing $5"})))
+    src = next(b for b in board.beats if b["scene"] == "source")
+    assert src["data"]["text"] == good and src["data"]["mark"] == "costing $5" and src["data"]["publisher"] == "Sample Wire"
+    for bad in ("OpenAI cut prices across its whole model lineup on Thursday, with the flagship now cheaper",  # reworded
+                "Intelligence should be too cheap to meter."):                                              # too short
+        assert all(b["scene"] != "source" for b in _board(_raw(_beat("source", {"text": bad}))).beats)
+
+
+def test_a_recap_needs_two_grounded_rows():
+    rows = [{"label": "Developers", "note": "pay $5, not $15"}, {"label": "Rivals", "note": "match the price"},
+            {"label": "Ghost row", "note": "saves 99%"}]
+    recap = next(b for b in _board(_raw(_beat("recap", {"title": "Who gets what", "rows": rows}))).beats if b["scene"] == "recap")
+    assert [r["label"] for r in recap["data"]["rows"]] == ["Developers", "Rivals"] and recap["data"]["title"] == "Who gets what"
+    assert all(b["scene"] != "recap" for b in _board(_raw(_beat("recap", {"rows": rows[:1]}))).beats)
+
+
+def test_the_viewer_beat_is_marked_for_the_template():
+    specs = beat_specs(_board(), stamp_colors=COLORS)
+    ask = next(s for s in specs if s["kind"] == "ask")
+    assert ask["speaker"] == "viewer" and all("speaker" not in s for s in specs if s["kind"] != "ask")
+    assert {"source", "recap"} <= {s["kind"] for s in specs}
+
+
+def test_the_viewer_question_is_read_in_a_second_voice(monkeypatch):
+    heard = []
+
+    class Voice:
+        def synthesize(self, text, *, voice, style):
+            heard.append((voice, style[0], text))
+            return _wav(1.0)
+
+    monkeypatch.setattr(rc, "build_provider", lambda *a, **k: Voice())
+    monkeypatch.setattr(rc, "resolve_env", lambda name: "key")
+    monkeypatch.setattr(rc, "mix_voice_and_music", lambda clips, starts, music, total: b"mp3")
+    _capture(monkeypatch)
+    channel = _channel(narration=NarrationConfig(provider="openai", voices=["v1", "v2"]))
+    path, voice = rc._try_motion_reel(channel, [], BRIEF, _Track(), "/tmp/o.mp4", llm=_Director(), article=ARTICLE, seed="s")
+    question = [h for h in heard if h[2].startswith("Wait")]
+    assert len(question) == 1 and question[0][0] != voice and "sceptical" in question[0][1]
+    assert all(v == voice for v, _, t in heard if not t.startswith("Wait"))
+
+
+# -- the story world (3D set pieces) -----------------------------------------------
+
+def _world_beat(**data):
+    return _beat("world", data, ["It plays out like this.", "Then it turns."])
+
+
+def _world(**data):
+    board = _board(_raw(_world_beat(**data)))
+    return next((b["data"] for b in board.beats if b["scene"] == "world"), None)
+
+
+def test_the_world_gallery_validates_every_set_piece():
+    from narovva.motion.sample import SAMPLE_WORLDS, world_gallery
+    specs, _ = world_gallery()
+    assert {s["data"]["piece"] for s in specs if s["kind"] == "world"} == {
+        b["data"]["piece"] for b in SAMPLE_WORLDS["beats"] if b["scene"] == "world"} == {
+        "gate", "flow", "pile", "race", "split", "machine", "wall", "balance",
+        "steps", "sort", "cluster", "hill", "fetch", "focus", "slice", "window", "target"}
+
+
+def test_a_set_piece_needs_its_labels_and_takes_no_invented_figures():
+    assert _world(piece="gate", gate="Flagship AI", crowd="Developers")["count"] == 3
+    assert _world(piece="gate", gate="Flagship AI") is None                       # no crowd
+    assert _world(piece="teleport", gate="x", crowd="y") is None                  # unknown piece
+    assert _world(piece="flow", **{"from": "Your app", "to": "The lab"}, amount="$9B") is None   # $9B is not in the source
+    flow = _world(piece="flow", **{"from": "Your app", "to": "The lab"}, amount="$1.2B", item="lasers", change="explodes")
+    assert flow["item"] == "money" and flow["change"] == "none" and flow["amount"] == "$1.2B"
+
+
+def test_a_pile_works_out_its_direction_from_the_figures():
+    pile = _world(piece="pile", label="Per million tokens", start="$15", end="$5", trend="up")
+    assert pile["trend"] == "down" and pile["ratio"] == pytest.approx(1 / 3, abs=0.01)
+    assert _world(piece="pile", label="Users", trend="up")["trend"] == "up"
+
+
+def test_race_split_and_balance_are_cleaned():
+    race = _world(piece="race", lanes=["OpenAI", "Anthropic", "Google", "Meta"], leader=7)
+    assert race["lanes"] == ["OpenAI", "Anthropic", "Google"] and race["leader"] == 0
+    assert _world(piece="race", lanes=["OpenAI"]) is None
+    assert _world(piece="split", win="Developers", lose="Smaller labs", share=0.95)["share"] == 0.5
+    assert _world(piece="balance", left="Price", right="Product", heavier="up")["heavier"] == "left"

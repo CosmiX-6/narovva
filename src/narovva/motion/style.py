@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-_LABELS = {"case_file": "CASE FILE: {subject}", "breakdown": "{subject} BREAKDOWN", "brand": "{brand}", "none": ""}
-_META = {"case_file": "timecode", "breakdown": "date", "brand": "none", "none": "none"}
-_PROGRESS = {"case_file": "top", "breakdown": "hud"}
+_LABELS = {"case_file": "CASE FILE: {subject}", "breakdown": "{subject} BREAKDOWN", "brand": "{brand}",
+           "chapter": "{subject}", "none": ""}
+_META = {"case_file": "timecode", "breakdown": "date", "brand": "none", "chapter": "none", "none": "none"}
+# The chapter chip's dashes already show how far the story has got.
+_PROGRESS = {"case_file": "top", "breakdown": "hud", "chapter": "none"}
 
 
 class _Fill(dict):

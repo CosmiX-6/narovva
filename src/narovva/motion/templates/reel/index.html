@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=1080, height=1920" />
     <title>CU motion reel</title>
     <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/three.min.js"></script>
     <script src="ambient.js"></script>
     <script src="viz.js"></script>
     <script src="icons.js"></script>
+    <script src="world.js"></script>
     <script src="scenes.js"></script>
     <link rel="stylesheet" href="scenes.css" />
     <!-- Staged per render by narovva.motion.stage: defines window.CU_DECK. -->
@@ -190,6 +192,24 @@
       .pcap .pw { display: inline-block; opacity: 0; }
       .pcap .pill { display: inline-block; padding: 0 .28em .04em; border-radius: .24em; background: var(--hl, #FACC15); opacity: 0; }
       .pcap .pill .pw { color: #0A0E1A; text-shadow: none; }
+      /* boxed: a few words at a time on a white box, the word being said inverted. */
+      .bchunk { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; opacity: 0; white-space: nowrap; }
+      .bchunk .bbox { display: inline-block; padding: 12px 20px 14px; border-radius: 14px; background: #F7F8FA; color: #0A0E1A;
+        font-weight: 700; line-height: 1.15; box-shadow: 0 16px 40px -14px rgba(0,0,0,.75); }
+      .bchunk .bw { display: inline-block; padding: 0 .16em; border-radius: .18em; }
+
+      /* A dimmer over the background while a receipt (source card) is on screen. */
+      .dim { inset: 0; opacity: 0; background: rgba(6,8,15,.72); }
+
+      /* Chapter chip (DECK.ui.hud.style "chapter"): the current chapter's name over one dash per chapter. */
+      .chap { position: absolute; left: 0; right: 0; top: 196px; display: none; flex-direction: column; align-items: center; gap: 14px; }
+      .chap .chip { position: relative; height: 64px; border-radius: 999px; background: rgba(10,14,26,.72); border: 2px solid rgba(255,255,255,.12);
+        box-shadow: 0 10px 30px -10px rgba(0,0,0,.6); }
+      .chap .chip span { position: absolute; left: 0; right: 0; top: 0; line-height: 60px; text-align: center; white-space: nowrap; opacity: 0;
+        font-weight: 700; font-size: 30px; letter-spacing: .16em; color: var(--ink); }
+      .chap .chip span b { color: var(--hl, #FACC15); font-weight: 700; }
+      .chap .dashes { display: flex; gap: 10px; }
+      .chap .dashes i { display: block; width: 38px; height: 7px; border-radius: 4px; background: rgba(255,255,255,.18); }
     </style>
   </head>
   <body>
@@ -202,8 +222,10 @@
         <div class="grid" id="grid"></div>
         <div class="vignette"></div>
         <div class="flood" id="flood" data-layout-allow-overlap></div>
+        <div class="dim" id="dim" data-layout-allow-overlap></div>
         <div class="hudshade" id="hudshade" data-layout-allow-overlap></div>
       </div>
+      <div class="chap" id="chap" data-layout-allow-overflow><div class="chip" id="chapchip"></div><div class="dashes" id="chapdash"></div></div>
       <div class="brand" id="brand"><img id="logo" src="assets/logo.png" alt="" /><span id="brandname"></span></div>
       <div class="hud" id="hud" data-layout-allow-overflow><span class="rec" id="rec"></span><span class="rectxt" id="rectxt">REC</span><span class="label" id="hudlabel"></span><span class="meta" id="hudmeta"></span></div>
       <div class="hudline" id="hudline"><i id="hudprog"></i></div>
@@ -245,6 +267,8 @@
         if (CAP.highlight) document.documentElement.style.setProperty("--hl", CAP.highlight);
         const show = (id, on, display) => { document.getElementById(id).style.display = on ? (display || "block") : "none"; };
         const investigative = HUD.style === "case_file" || HUD.style === "breakdown";
+        // Chapter mode: the beat's kicker moves up into the chip at the top, so scenes don't repeat it.
+        const CHAPTERS = HUD.style === "chapter";
         show("brand", HUD.style === "brand", "flex");
         show("hud", investigative, "flex");
         show("hudshade", investigative);
@@ -354,7 +378,8 @@
           const atmoImg = image(PHOTO.bg, atmo);
           document.getElementById("glow").style.opacity = ".14";
           const LEVEL = { hook: 0.95, hero: 0.95, text: 0.75, conclusion: 0.85, quote: 0.75, evidence: 0.55, why: 0.75, impact: 0.55, bigger_picture: 0.85, scream: 0.45, cta: 0.8,
-            headline: 0.9, question: 0.6, number: 0.4, dates: 0.5, chain: 0.4, grid: 0.4, cards: 0.5, split: 0.45, excerpt: 0.6, terminal: 0.35, checklist: 0.7, endcard: 0.8 };
+            headline: 0.9, question: 0.6, number: 0.4, dates: 0.5, chain: 0.4, grid: 0.4, cards: 0.5, split: 0.45, excerpt: 0.6, terminal: 0.35, checklist: 0.7, endcard: 0.8,
+            ask: 0.55, source: 0.6, recap: 0.4, world: 0.3 };
           let prev = 0;
           slides.forEach((s, i) => {
             const v = LEVEL[s.kind] == null ? 0.42 : LEVEL[s.kind];
@@ -377,9 +402,10 @@
 
         // Fast entrances (house rules: text lands in 0.15-0.35 s, items x stagger <= ~0.35 s).
         const E = 0.3;
+        const vary = window.CUAmbient.rng(DECK.seed ^ 0x51ed27);
         const stag = (n, per) => Math.min(per, 0.35 / Math.max(n, 1));
         const B = {};
-        const kick = (sc, s) => (s.kicker ? el("div", "kicker", s.kicker, sc) : null);
+        const kick = (sc, s) => (s.kicker && !CHAPTERS ? el("div", "kicker", s.kicker, sc) : null);
         const heading = (sc, text, size, maxH, mark) => {
           if (!text) return null;
           const h = el("h1", "h", null, sc); words(h, text, mark); fit(h, maxH, size, 44);
@@ -394,6 +420,9 @@
           const ws = sc.querySelectorAll(".h .w > span");
           if (ws.length) {
             if (slam) tl.from(ws, { yPercent: 120, scale: 1.25, duration: D(E), ease: "power4.out", stagger: stag(ws.length, 0.05), immediateRender: false }, a(0.04));
+            // Vary the entrance within a reel (a title that always slides up reads as generated):
+            // per word, a blur clearing with no movement, or the slide-up.
+            else if (vary() < 0.5) tl.fromTo(ws, { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.16, ease: "power2.out", stagger: Math.min(0.067, 0.5 / ws.length) }, a(0.04));
             else tl.from(ws, { yPercent: 120, duration: D(E), ease: "power4.out", stagger: stag(ws.length, 0.04), immediateRender: false }, a(0.04));
           }
         };
@@ -662,6 +691,7 @@
         Object.assign(B, window.CUScenes({
           tl, el, image, fit, words, figures, phraseAt, heading, kick, introHead, barIn, V, mh, SH, OV, PHOTO, UI, DECK, opener,
         }));
+        const WORLD = B._world; delete B._world;
         // Headline numbers sit on a full-frame accent wash (unless they are falling, which reads red on dark).
         const flooded = slides.map((s) => UI.flood !== false && s.kind === "number" && !(s.data && s.data.down));
 
@@ -681,12 +711,19 @@
           // offset below their place -- would otherwise count as overflow.)
           const over = inner.offsetHeight / SH;
           if (over > 1) gsap.set(inner, { scale: 1 / over, transformOrigin: "left center" });
-          // Nothing on screen is ever perfectly still: a held scene keeps drifting upward while
-          // the camera pushes in a touch.
-          tl.fromTo(inner, { y: 7 }, { y: -7, duration: dur, ease: "none" }, t0);
+          // The camera reacts to the voice: each new spoken line punches in a step (an eased move
+          // that lands and holds), instead of a slow creep that never settles. The background
+          // field keeps the frame alive in between.
           if (over <= 1) {
-            gsap.set(inner, { transformOrigin: "50% 50%" });
-            tl.fromTo(inner, { scale: 1 }, { scale: 1.035, duration: dur, ease: "none" }, t0);
+            gsap.set(inner, { transformOrigin: "50% 45%" });
+            const ps = s.parts || [];
+            let z = 1;
+            ps.slice(1).forEach((p, j) => {
+              const nz = Math.min(1.075, 1 + 0.035 * (j + 1));
+              const T = Math.min(t0 + p.at - 0.04, t0 + dur - OV - 0.3);
+              tl.fromTo(inner, { scale: z }, { scale: nz, duration: 0.42, ease: "power3.out", immediateRender: false }, T);
+              z = nz;
+            });
           }
           return sc;
         });
@@ -696,6 +733,57 @@
           if (v !== floodWas) tl.fromTo("#flood", { opacity: floodWas }, { opacity: v, duration: OV, ease: "power2.out", immediateRender: false }, starts[i]);
           floodWas = v;
         });
+        // The 3D world (world.js): every world beat is a station of it, and it stays on screen
+        // behind the beats between them -- fainter and blurred behind a question or a receipt,
+        // faint behind the recap and the end card, gone behind the other scene types.
+        const worldBox = WORLD && WORLD.start(total);
+        if (worldBox) {
+          const SEEN = { world: 1, ask: 0.45, source: 0.35, recap: 0.25, endcard: 0.35 }, BLUR = { ask: 5, source: 7 };
+          let was = 0, blurWas = 0;
+          slides.forEach((s, i) => {
+            const v = SEEN[s.kind] == null ? 0 : SEEN[s.kind], b = BLUR[s.kind] || 0;
+            if (v !== was) tl.fromTo(worldBox, { opacity: was }, { opacity: v, duration: i ? OV + 0.1 : 0.45, ease: "power2.out", immediateRender: i === 0 }, starts[i]);
+            if (b !== blurWas) tl.fromTo(worldBox, { filter: `blur(${blurWas}px)` }, { filter: `blur(${b}px)`, duration: 0.3, ease: "power2.out", immediateRender: false }, starts[i]);
+            was = v; blurWas = b;
+          });
+        }
+        // The world dims behind a receipt so the paper card is the only thing to read.
+        let dimWas = 0;
+        slides.forEach((s, i) => {
+          const v = s.kind === "source" ? 1 : 0;
+          if (v !== dimWas) tl.fromTo("#dim", { opacity: dimWas }, { opacity: v, duration: 0.35, ease: "power2.inOut", immediateRender: false }, starts[i]);
+          dimWas = v;
+        });
+
+        // Chapter chip: the current chapter (the beat's kicker, carried until the next one) over
+        // one dash per chapter -- done ones white, the current one lit. The name swaps with a blur.
+        if (CHAPTERS) {
+          const names = [];
+          let cur = null;
+          const at = slides.map((s) => { if (s.kicker && s.kicker !== cur) { cur = s.kicker; names.push(cur); } return names.length - 1; });
+          if (names.length) {
+            show("chap", true, "flex");
+            const chip = document.getElementById("chapchip"), dashes = document.getElementById("chapdash");
+            const labels = names.map((n) => { const sp = el("span", null, null, chip); sp.textContent = n; return sp; });
+            const widest = Math.max(...labels.map((sp) => { sp.style.position = "static"; const w = sp.offsetWidth; sp.style.position = ""; return w; }));
+            chip.style.width = Math.min(936, widest + 72) + "px";
+            const ds = names.map(() => el("i", null, null, dashes));
+            const DIM = "rgba(255,255,255,0.18)", DONE = "rgba(255,255,255,0.6)", HL = CAP.highlight || "#FACC15";
+            tl.fromTo("#chap", { opacity: 0, y: -16 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 0.05);
+            let was = -1;
+            at.forEach((k, i) => {
+              if (k === was || k < 0) return;
+              const T = starts[i] + (i ? 0.05 : 0);
+              if (was >= 0) {
+                tl.fromTo(labels[was], { opacity: 1, filter: "blur(0px)" }, { opacity: 0, filter: "blur(8px)", duration: 0.16, ease: "power2.in", immediateRender: false }, T);
+                tl.fromTo(ds[was], { backgroundColor: HL }, { backgroundColor: DONE, duration: 0.2, immediateRender: false }, T);
+              }
+              tl.fromTo(labels[k], { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.2, ease: "power2.out" }, T + (was >= 0 ? 0.12 : 0));
+              tl.fromTo(ds[k], { backgroundColor: DIM, scaleX: 0.6 }, { backgroundColor: HL, scaleX: 1, duration: 0.3, ease: "back.out(2)" }, T + 0.1);
+              was = k;
+            });
+          }
+        }
 
         // Captions: one line per narrated scene. Each word gets a time across the spoken clip in
         // proportion to its length; the style (DECK.ui.captions) decides what happens at that time.
@@ -709,7 +797,7 @@
         };
         // karaoke: a few words at a time (a chunk also ends at punctuation); within a chunk the
         // word being said is lit, the ones said are white and the ones coming are dimmed.
-        const karaoke = (box, toks, at, end) => {
+        const chunks = (toks) => {
           const N = Math.max(1, CAP.chunk || 3);
           const groups = [];
           let cur = [];
@@ -723,6 +811,35 @@
             if (cur.length === 1 && prev && prev.length <= N && !/[.!?…]$/.test(toks[prev[prev.length - 1]])) prev.push(...cur);
             else groups.push(cur);
           }
+          return groups;
+        };
+        // boxed: a few words on a white box; the word being said is inverted (ink box, white text).
+        const boxed = (box, toks, at, end) => {
+          const groups = chunks(toks);
+          const INK = "#0A0E1A", PAPER = "rgba(247,248,250,0)";
+          groups.forEach((g, gi) => {
+            const chunk = el("div", "bchunk", null, box);
+            const bb = el("span", "bbox", null, chunk);
+            const spans = g.map((j, k) => {
+              const sp = el("span", "bw", toks[j], bb);
+              if (k < g.length - 1) bb.appendChild(document.createTextNode(" "));
+              return sp;
+            });
+            let size = 46;
+            bb.style.fontSize = size + "px";
+            while (chunk.scrollWidth > 900 && size > 30) { size -= 2; bb.style.fontSize = size + "px"; }
+            const from = at[g[0]] - 0.05;
+            const to = gi + 1 < groups.length ? at[groups[gi + 1][0]] - 0.05 : end;
+            tl.fromTo(chunk, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.1, ease: "power2.out" }, from);
+            tl.fromTo(chunk, { opacity: 1 }, { opacity: 0, duration: 0.05, ease: "none", immediateRender: false }, Math.max(from + 0.1, to));
+            spans.forEach((sp, k) => {
+              tl.fromTo(sp, { backgroundColor: PAPER, color: INK }, { backgroundColor: INK, color: "#FFFFFF", duration: 0.05, ease: "none" }, at[g[k]]);
+              if (k + 1 < spans.length) tl.fromTo(sp, { backgroundColor: INK, color: "#FFFFFF" }, { backgroundColor: PAPER, color: INK, duration: 0.06, ease: "none", immediateRender: false }, at[g[k + 1]]);
+            });
+          });
+        };
+        const karaoke = (box, toks, at, end) => {
+          const groups = chunks(toks);
           const HL = CAP.highlight || "#FACC15", UP = "rgba(243,245,250,.55)", DONE = "rgba(243,245,250,1)";
           groups.forEach((g, gi) => {
             const chunk = el("div", "kchunk", null, box);
@@ -770,6 +887,7 @@
         if (CAPTIONS) {
           const capBox = document.getElementById("captions");
           slides.forEach((s, i) => {
+            if (s.speaker === "viewer") return; // the question bubble is this beat's caption
             const parts = (s.parts || []).filter((p) => p.caption);
             parts.forEach((p, j) => {
               const t0 = starts[i] + p.at; // this line starts being spoken
@@ -782,6 +900,7 @@
               const next = j + 1 < parts.length ? starts[i] + parts[j + 1].at - 0.1 : starts[i] + s.duration - OV - 0.04;
               const end = last ? starts[i] + s.duration - 0.25 : Math.max(t0 + 0.3, Math.min(t0 + p.voice + 0.12, next));
               if (CAP.style === "karaoke") karaoke(capBox, toks, at, end);
+              else if (CAP.style === "boxed") boxed(capBox, toks, at, end);
               else if (CAP.style === "pill") pill(capBox, toks, at, end, p.cmark, t0 - 0.09);
               else brighten(capBox, toks, at, end, t0 - 0.09);
             });
@@ -795,8 +914,12 @@
         const TRANS = [];
         for (let i = 1; i < slides.length; i++) {
           const r = pick();
-          let kind = r < 0.55 ? "push" : r < 0.8 ? "whip" : "zoom";
+          let kind = r < 0.4 ? "push" : r < 0.6 ? "whip" : r < 0.75 ? "zoom" : "blur";
           if (kind !== "push" && TRANS[TRANS.length - 1] === kind) kind = "push";
+          // The viewer cutting in is a hard interruption; a receipt arrives over the dimmed world.
+          if (slides[i].kind === "ask" || slides[i].kind === "source") kind = "blur";
+          // From one world beat to the next the camera flies across the world; the titles just swap.
+          if (worldBox && slides[i].kind === "world" && slides[i - 1].kind === "world") kind = "blur";
           TRANS.push(kind);
         }
         scs.forEach((sc, i) => {
@@ -809,6 +932,9 @@
           } else if (kind === "whip") {
             tl.fromTo(sc, { xPercent: 100, opacity: 1 }, { xPercent: 0, duration: OV, ease: "expo.out", immediateRender: false }, T);
             tl.to(prev, { xPercent: -100, duration: OV, ease: "expo.out" }, T);
+          } else if (kind === "blur") { // blur swap on one stage: the ground never cuts
+            tl.fromTo(prev, { opacity: 1, filter: "blur(0px)" }, { opacity: 0, filter: "blur(10px)", duration: 0.18, ease: "power2.in", immediateRender: false }, T);
+            tl.fromTo(sc, { opacity: 0, scale: 1.04, filter: "blur(10px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.24, ease: "power3.out", immediateRender: false }, T + 0.08);
           } else { // zoom-through
             tl.fromTo(sc, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: OV, ease: "power4.out", immediateRender: false }, T);
             tl.to(prev, { scale: 1.45, opacity: 0, duration: OV, ease: "power4.in" }, T);

@@ -8,18 +8,20 @@ captions and music, writes the caption and hashtags, and publishes it to
 Instagram, on a schedule, for as many channels as you configure.
 
 It runs the live account [@contextunfiltered](https://www.instagram.com/contextunfiltered/)
-(tech and AI news), whose full config is
+(AI, tech, health and finance news, plus "How AI works" lessons), whose full config is
 [`config/channels/example-tech-ig.yaml`](config/channels/example-tech-ig.yaml).
 
 - **Finds stories** per genre from RSS (and optionally NewsAPI) via
   [`info-snipe`](https://github.com/CosmiX-6/info-snipe), never posting the same
   story twice; optional "viral" slots post whatever many outlets are covering right now.
+- **Teaches** lesson series between the news ([`config/lessons/`](config/lessons/)):
+  one idea per video, told through one metaphor and checked against its reference page.
 - **Writes** with a fallback chain of text models (Gemini, OpenAI, OpenRouter free
   models): a scored hook, a storyboard for the video, the voice-over, the caption.
   Every number shown must appear in the article.
-- **Renders** motion-graphics Reels (HTML + GSAP rendered by
-  [HyperFrames](https://github.com/heygen-com/hyperframes)), with the article's
-  photo, animated charts of its figures, burned-in captions and a voice-over
+- **Renders** animated Reels (HTML + GSAP + three.js rendered by
+  [HyperFrames](https://github.com/heygen-com/hyperframes)): one continuous 3D world
+  where characters and objects act the story out, burned-in captions and a voice-over
   (OpenAI, Gemini, or free local Kokoro). Any render failure falls back to a simple
   slideshow Reel, so a post is never lost.
 - **Publishes** through the official Instagram API, tracks every post in Postgres,

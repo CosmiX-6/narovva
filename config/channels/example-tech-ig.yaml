@@ -1,5 +1,6 @@
 # The live config of Context Unfiltered (instagram.com/contextunfiltered), an
-# Instagram account covering tech + AI news. It doubles as the reference for
+# Instagram account covering AI, tech, health and finance news, plus short lessons on
+# how AI works. It doubles as the reference for
 # every option: copy it to config/channels/<your-channel>.yaml and change the
 # account id, brand, genres and credentials names for your own account.
 # File/id kept as example-tech-ig for continuity with existing credentials,
@@ -15,8 +16,8 @@ ig_business_account_id: "27851606094524604"
 # Unused by the Instagram Login flow (no Facebook Page involved); left unset.
 ig_page_id: null
 
-# Post at most one item every 2 hours, alternating tech -> ai -> tech -> ...
-# in the order listed below. Overrides each genre's own cadence_minutes for
+# Post at most one item every 2 hours, cycling through the genres below in order
+# (ai -> tech -> lessons -> health -> finance -> ai ...). Overrides each genre's own cadence_minutes for
 # scheduling purposes (still used as each fetch's article-freshness window).
 rotation_minutes: 120
 
@@ -57,13 +58,14 @@ viral:
   hook_style: auto          # curiosity | stakes | auto (the model picks per story)
   asset_types: [cover, carousel]
 
-# Temporary focus: while enabled, every post (rotation AND viral) is a practical AI
+# Temporary focus (off since 2026-11-17, when the channel widened to AI, tech, health,
+# finance and lessons): while enabled, every post (rotation AND viral) is a practical AI
 # update for people who build with AI or use it at work. The genres below are set
 # aside, viral posts must be AI stories, and an AI screener ranks fresh articles by
 # how useful they are to this audience (no funding rounds, stock moves or drama).
 # Set enabled: false to go back to the normal mix -- nothing else needs to change.
 focus:
-  enabled: true
+  enabled: false
   name: "AI for practitioners"
   audience: >-
     an engineer or knowledge worker who uses ChatGPT, Claude, Copilot or Cursor every
@@ -85,28 +87,36 @@ focus:
 # change it to restyle the next reel (no code change needed).
 motion:
   story:
-    # storyboard: an explainer written for video -- hook, context, what happened, fallout,
-    # verdict, follow -- where every line gets a motion graphic that shows it (date track,
-    # cause-and-effect chain, grid, counting number, quote, log, checklist). Falls back to
-    # "slides" (re-animated carousel slides) if the writer's reply doesn't check out.
-    mode: storyboard
+    # animated: the whole video is one continuous 3D animation -- a small world of characters
+    # and objects acting the story out through one metaphor, the camera flying from one set
+    # piece to the next (gate, flow, pile, race, split, machine, wall, balance, steps, sort,
+    # cluster, hill, fetch, focus, slice, window, target). Figures appear as labels in the world.
+    # storyboard: motion-graphic scenes instead (date track, cause-and-effect chain, grid,
+    # counting number, quote, log, checklist), with a world scene now and then.
+    # Either falls back to "slides" (re-animated carousel slides) if the writer's reply doesn't
+    # check out. Lessons are always animated.
+    mode: animated
     max_beats: 10        # 5-14
     target_seconds: 45   # what the writer aims for
     flood: true          # full-frame accent wash behind headline numbers
+    # Beats where the viewer cuts in with the question they'd ask ("Wait, who pays for
+    # this?"), answered by the next beat and read in a second voice. 0 = none.
+    viewer_questions: 2
   hud:
     # case_file: "(rec dot) REC  CASE FILE: <SUBJECT> ..... 00:00:04:29"
     # breakdown: "(rec dot) <SUBJECT> BREAKDOWN ..... 24 OCT 2026" with the progress line under it
     # brand: the CU logo + name header. none: no header.
-    style: case_file
+    # chapter: the current chapter ("WHAT HAPPENED") in a chip at the top, one dash per chapter.
+    style: chapter
     # Optional custom header text: {subject} {category} {brand} {date}. Unset = the style's own.
     # label: "{subject} FILE"
     # meta: timecode     # timecode | date | none (unset = the style's own)
     rec_dot: true
   progress: auto         # auto | top | hud | bottom | none
   captions:
-    style: karaoke       # karaoke | pill | brighten  (on/off is narration.captions)
+    style: boxed         # boxed | karaoke | pill | brighten  (on/off is narration.captions)
     highlight: "#FACC15"
-    chunk_words: 3       # karaoke: most words on screen at once
+    chunk_words: 4       # boxed / karaoke: most words on screen at once
   stamps:
     enabled: true        # verdict stamps like BLOCKED / FALSE / -20%, only where a slide's data backs one
     max_per_reel: 3
@@ -119,26 +129,27 @@ motion:
   show_handle: true
 
 genres:
+  - genre: ai
+    limit: 8
+    cadence_minutes: 60
+    asset_types: [cover, carousel]
   - genre: tech
     country: us
     limit: 8
     cadence_minutes: 60
     asset_types: [cover, carousel]
-  - genre: ai
-    limit: 8
-    cadence_minutes: 60
+  # "How AI works": one lesson per turn, in the order of config/lessons/how-ai-works.yaml
+  # (each grounded in its Wikipedia article; never repeated). With 5 genres and a 2-hour
+  # rotation that is about 2 lessons a day, so the 60 lessons last about a month.
+  - genre: lessons
+    series: how-ai-works
     asset_types: [cover, carousel]
-  - genre: science
-    limit: 8
-    cadence_minutes: 90
-    asset_types: [cover, carousel]
-  - genre: world
-    country: us
+    music_tags: [technology, ambient]
+  - genre: health
     limit: 8
     cadence_minutes: 90
     asset_types: [cover, carousel]
-  - genre: entrepreneurs
-    country: in
+  - genre: finance
     limit: 8
     cadence_minutes: 90
     asset_types: [cover, carousel]
@@ -174,8 +185,8 @@ brand:
 # replaces the one here. Edit freely -- no code change needed.
 voice:
   audience: >-
-    a curious professional who follows tech and AI and wants the context behind the
-    headline in 30 seconds, without hype
+    a curious professional who follows AI, tech, health and money and wants the context
+    behind the headline -- or how a piece of AI actually works -- in under a minute, without hype
   banned_words: [game-changer, game changer, dive in, deep dive, unlock, revolutionary,
                  mind-blowing, insane, crazy, "let's get into it", buckle up, "in today's video",
                  skyrocket, supercharge, "the future is here", jaw-dropping, smash that]
@@ -230,10 +241,20 @@ text_provider: gemini
 # misspelled model id (404) is skipped for the run; Google's 404 names the replacement.
 llm_chain:
   - gemini:gemini-flash-latest
+  - gemini:gemini-3.8-flash          # the newest Flash, its own free-tier pool
   - gemini:gemini-3.5-flash-lite
   - openrouter:meta-llama/llama-3.3-70b-instruct:free
   - openrouter:qwen/qwen3-235b-a22b:free
   - openai:gpt-4o-mini
+# A stronger model for the storyboard writer only -- the call that decides how good the video
+# is -- tried before llm_chain (which stays the fallback). Pro models are paid (they need billing
+# on the Google key; without it they are skipped and llm_chain writes):
+#   gemini:gemini-3.1-pro-preview  $2 / $12 per 1M tokens in / out, roughly $0.05-0.15 a storyboard
+# use_for: lessons (only the "How AI works" posts) or all (every post).
+writer:
+  chain: []
+  use_for: lessons
+
 # 'none': poster_core's Gemini image generation uses Imagen, which the Gemini
 # Developer API key can't call (every article lacking a usable image failed).
 # Posts use the article's own image, else the branded text layout.

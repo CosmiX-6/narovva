@@ -44,3 +44,40 @@ register_genre(
     ),
     overwrite=True,
 )
+
+# Health: medical research, public health, health policy. Checked reachable (RSS, and
+# the article pages open without a login) 2026-11.
+HEALTH_FEEDS = [
+    "https://www.statnews.com/feed/",
+    "https://medicalxpress.com/rss-feed/",
+    "https://www.sciencedaily.com/rss/health_medicine.xml",
+    "https://feeds.bbci.co.uk/news/health/rss.xml",
+    "https://www.theguardian.com/society/health/rss",
+]
+
+register_genre(
+    GenreConfig(
+        key="health",
+        label="Health",
+        newsapi_query='(health OR medicine OR medical OR disease OR vaccine OR drug OR FDA OR WHO) AND (study OR trial OR approval OR outbreak OR research)',
+        rss_feeds=HEALTH_FEEDS,
+    ),
+    overwrite=True,
+)
+
+# Finance: markets, companies, the economy, personal money. Checked reachable 2026-11.
+FINANCE_FEEDS = [
+    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+    "https://feeds.bbci.co.uk/news/business/rss.xml",
+    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+]
+
+register_genre(
+    GenreConfig(
+        key="finance",
+        label="Finance",
+        newsapi_query='(markets OR stocks OR economy OR inflation OR "interest rates" OR earnings OR "central bank") AND (rise OR fall OR report OR cut OR record)',
+        rss_feeds=FINANCE_FEEDS,
+    ),
+    overwrite=True,
+)

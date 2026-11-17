@@ -9,6 +9,7 @@ on:
     branches: ["claude/**"]
     paths:
       - "src/narovva/motion/**"
+      - "src/narovva/lessons.py"
       - "package*.json"
       - ".github/workflows/motion-smoke.yml"
   pull_request:
@@ -60,15 +61,31 @@ jobs:
           time python -m narovva.motion motion-sample.mp4
           ffmpeg -hide_banner -i motion-sample.mp4 2>&1 | grep -E "Duration|Stream"
 
+      - name: Render the story-world gallery (every 3D set piece)
+        run: |
+          time python -m narovva.motion motion-worlds.mp4 --worlds
+          ffmpeg -hide_banner -i motion-worlds.mp4 2>&1 | grep -E "Duration|Stream"
+
+      - name: Render the sample lesson
+        run: |
+          time python -m narovva.motion motion-lesson.mp4 --lesson
+          ffmpeg -hide_banner -i motion-lesson.mp4 2>&1 | grep -E "Duration|Stream"
+
       - name: Extract review frames (one per second)
         run: |
-          mkdir -p motion-frames
+          mkdir -p motion-frames world-frames lesson-frames
           ffmpeg -hide_banner -loglevel error -i motion-sample.mp4 -vf "fps=1,scale=540:-1" motion-frames/f_%03d.jpg
+          ffmpeg -hide_banner -loglevel error -i motion-worlds.mp4 -vf "fps=1,scale=540:-1" world-frames/w_%03d.jpg
+          ffmpeg -hide_banner -loglevel error -i motion-lesson.mp4 -vf "fps=1,scale=540:-1" lesson-frames/l_%03d.jpg
 
       - uses: actions/upload-artifact@v4
         with:
           name: motion-sample
           path: |
             motion-sample.mp4
+            motion-worlds.mp4
+            motion-lesson.mp4
             motion-frames/
+            world-frames/
+            lesson-frames/
           retention-days: 7

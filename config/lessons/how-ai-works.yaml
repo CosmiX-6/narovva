@@ -1,0 +1,447 @@
+# "How AI works": one small idea per video, each told through one everyday metaphor that
+# the 3D world acts out. Posted in this order, one lesson each time the channel's lesson
+# genre comes up in the rotation (see config/channels/example-tech-ig.yaml); a posted
+# lesson is never posted again.
+#
+# Each lesson:
+#   id         stable slug (it is how the channel remembers the lesson was posted)
+#   title      what the lesson is about
+#   hook       the video's first line: the everyday puzzle the idea explains (max ~12 words)
+#   reference  the page every claim is checked against. A Wikipedia URL is read as plain text
+#              through Wikipedia's API; "#Section" puts that section first.
+#   metaphor   optional: a picture that works (the writer may find a clearly better one)
+#   cover      optional: 2-5 words for the cover image (default: the title)
+#
+# Add lessons anywhere; reordering is fine. Check new references with
+#   python -m narovva.lessons check how-ai-works
+
+name: How AI works
+kicker: HOW AI WORKS
+# A lesson runs as long as its explanation needs, around this target: hook, the plain-words
+# answer, the metaphor and its map, the steps, a worked example, the catch, the recap. The
+# writer is told to cover every part rather than stop short, and is asked once more if it
+# leaves one out.
+length:
+  target_seconds: 80
+  max_beats: 16
+
+lessons:
+  - id: tokens
+    title: "How AI reads text in tokens"
+    cover: "AI reads in tokens"
+    hook: "Why can't a chatbot count the r's in strawberry?"
+    reference: https://en.wikipedia.org/wiki/Large_language_model#Tokenization
+    metaphor: "the model never sees letters, only Lego bricks of text, each with a number on it"
+
+  - id: next-token
+    title: "How a chatbot writes one piece at a time"
+    cover: "One word at a time"
+    hook: "ChatGPT never plans its answer. It guesses the next piece."
+    reference: https://en.wikipedia.org/wiki/Language_model
+    metaphor: "your phone's autocomplete, trained on a library and run thousands of times in a row"
+
+  - id: embeddings
+    title: "How AI turns words into numbers"
+    cover: "Words as a map"
+    hook: "How does AI know that king and queen belong together?"
+    reference: https://en.wikipedia.org/wiki/Word_embedding
+    metaphor: "a map where every word has an address, and similar words live on the same street"
+
+  - id: attention
+    title: "Attention, the idea behind modern AI"
+    cover: "How attention works"
+    hook: "In \"the cat sat because it was tired\", how does AI know what \"it\" is?"
+    reference: https://en.wikipedia.org/wiki/Attention_(machine_learning)
+    metaphor: "each word shines a spotlight on the other words that explain it"
+
+  - id: transformer
+    title: "The transformer, the T in ChatGPT"
+    cover: "The T in ChatGPT"
+    hook: "The most important letter in ChatGPT is the T."
+    reference: https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)
+    metaphor: "an assembly line where every station reads the whole sentence at once and adds a note"
+
+  - id: hallucination
+    title: "Why AI makes things up"
+    cover: "Why AI makes things up"
+    hook: "Why does AI invent facts, and sound so sure about them?"
+    reference: https://en.wikipedia.org/wiki/Hallucination_(artificial_intelligence)
+    metaphor: "a student who must always write something, even when they never studied that chapter"
+
+  - id: rag
+    title: "How chatbots look things up (RAG)"
+    cover: "Open-book AI"
+    hook: "How can a chatbot answer questions about documents it was never trained on?"
+    reference: https://en.wikipedia.org/wiki/Retrieval-augmented_generation
+    metaphor: "an open-book exam: fetch the right pages first, then answer"
+
+  - id: temperature
+    title: "Temperature, the creativity dial"
+    cover: "The creativity dial"
+    hook: "Ask the same question twice and you get two different answers. Why?"
+    reference: https://en.wikipedia.org/wiki/Softmax_function
+    metaphor: "a dial between always picking the favourite word and rolling dice among the likely ones"
+
+  - id: context-window
+    title: "The context window, AI's short-term memory"
+    cover: "AI's short-term memory"
+    hook: "Why does a long chat make the AI forget what you said first?"
+    reference: https://en.wikipedia.org/wiki/Large_language_model#Attention_mechanism_and_context_window
+    metaphor: "a desk that only holds so many pages; new pages push the oldest off the edge"
+
+  - id: gradient-descent
+    title: "Gradient descent, how AI learns"
+    cover: "How AI learns"
+    hook: "An AI learns the way you'd find your way down a hill in fog."
+    reference: https://en.wikipedia.org/wiki/Gradient_descent
+    metaphor: "walking downhill in fog, one small step at a time in the steepest direction"
+
+  - id: neural-network
+    title: "What a neural network actually is"
+    cover: "Inside a neural network"
+    hook: "A neural network is not a brain. Here's what it actually is."
+    reference: https://en.wikipedia.org/wiki/Neural_network_(machine_learning)
+    metaphor: "rows of tiny voters, each passing a weighted opinion to the next row"
+
+  - id: backpropagation
+    title: "Backpropagation, learning from mistakes"
+    cover: "Learning from mistakes"
+    hook: "When an AI gets it wrong, who takes the blame?"
+    reference: https://en.wikipedia.org/wiki/Backpropagation
+    metaphor: "blame passed back down an assembly line, each station adjusting its share"
+
+  - id: training-data
+    title: "Why AI is tested on data it never saw"
+    cover: "The final exam"
+    hook: "Why would you never test an AI on the questions it practised?"
+    reference: https://en.wikipedia.org/wiki/Training,_validation,_and_test_data_sets
+    metaphor: "practice papers, a mock exam, and a final exam the student has never seen"
+
+  - id: overfitting
+    title: "Overfitting, when AI memorises"
+    cover: "When AI memorises"
+    hook: "An AI can ace every practice test and still fail the real one."
+    reference: https://en.wikipedia.org/wiki/Overfitting
+    metaphor: "a student who memorised the answer key instead of learning the subject"
+
+  - id: fine-tuning
+    title: "Fine-tuning, teaching a model a specialty"
+    cover: "Teaching a specialty"
+    hook: "How do you turn a general AI into a specialist?"
+    reference: https://en.wikipedia.org/wiki/Fine-tuning_(deep_learning)
+    metaphor: "a doctor who finished general training, then spends a year in one ward"
+
+  - id: rlhf
+    title: "RLHF, how chatbots learned manners"
+    cover: "How chatbots learned manners"
+    hook: "Raw AI models are blunt and messy. Humans taught them to be helpful."
+    reference: https://en.wikipedia.org/wiki/Reinforcement_learning_from_human_feedback
+    metaphor: "a trainer who shows two answers to judges and rewards the one they prefer"
+
+  - id: mixture-of-experts
+    title: "Mixture of experts"
+    cover: "A team of specialists"
+    hook: "The biggest AI models only use a slice of their brain per word."
+    reference: https://en.wikipedia.org/wiki/Mixture_of_experts
+    metaphor: "a hospital front desk that sends each patient to the one specialist they need"
+
+  - id: distillation
+    title: "Distillation, big models teaching small ones"
+    cover: "Big teaches small"
+    hook: "How do small AI models get so smart so fast?"
+    reference: https://en.wikipedia.org/wiki/Knowledge_distillation
+    metaphor: "a master chef cooking next to an apprentice, who copies every taste, not just the recipe"
+
+  - id: quantization
+    title: "Quantization, shrinking AI to fit a laptop"
+    cover: "Shrinking AI"
+    hook: "How does a giant AI model fit on a laptop?"
+    reference: https://en.wikipedia.org/wiki/Large_language_model#Quantization
+    metaphor: "rounding every price in a shop to the nearest coin: a little less exact, far lighter"
+
+  - id: diffusion
+    title: "How AI image generators work"
+    cover: "Images from noise"
+    hook: "AI image generators start every picture from pure static."
+    reference: https://en.wikipedia.org/wiki/Diffusion_model
+    metaphor: "a sculptor removing noise step by step until a picture is left"
+
+  - id: gan
+    title: "GANs, a forger versus a detective"
+    cover: "Forger versus detective"
+    hook: "One AI forges pictures. Another catches fakes. Both get better."
+    reference: https://en.wikipedia.org/wiki/Generative_adversarial_network
+    metaphor: "a forger and a detective who train each other"
+
+  - id: cnn
+    title: "How AI sees images"
+    cover: "How AI sees"
+    hook: "To an AI, a photo of your cat is just a grid of numbers."
+    reference: https://en.wikipedia.org/wiki/Convolutional_neural_network
+    metaphor: "a small flashlight sliding over the picture, looking for edges, then shapes, then faces"
+
+  - id: rnn
+    title: "Before transformers, AI read one word at a time"
+    cover: "Reading one word at a time"
+    hook: "Old AI read sentences like a person with a goldfish memory."
+    reference: https://en.wikipedia.org/wiki/Recurrent_neural_network
+    metaphor: "a reader passing a short note to themself after every word"
+
+  - id: lora
+    title: "LoRA, cheap fine-tuning"
+    cover: "Cheap fine-tuning"
+    hook: "You can customise a giant model by training under one percent of it."
+    reference: https://en.wikipedia.org/wiki/Fine-tuning_(deep_learning)#Low-rank_adaptation
+    metaphor: "clip-on lenses for a camera: the camera stays, a small add-on changes the look"
+
+  - id: prompting
+    title: "Prompt engineering, briefing the model"
+    cover: "How to brief AI"
+    hook: "The same AI gives a bad answer or a great one. The prompt decides."
+    reference: https://en.wikipedia.org/wiki/Prompt_engineering
+    metaphor: "briefing a brilliant new intern who knows nothing about your company"
+
+  - id: chain-of-thought
+    title: "Chain of thought, thinking out loud"
+    cover: "Thinking out loud"
+    hook: "Telling an AI to think step by step makes it smarter. Why?"
+    reference: https://en.wikipedia.org/wiki/Prompt_engineering#Chain-of-thought
+    metaphor: "showing your working in a maths exam"
+
+  - id: in-context-learning
+    title: "Learning from examples in the prompt"
+    cover: "Learning from examples"
+    hook: "Show an AI two examples and it picks up a new task instantly."
+    reference: https://en.wikipedia.org/wiki/Prompt_engineering#In-context_learning
+    metaphor: "showing a new colleague two finished forms before they fill in the third"
+
+  - id: agents
+    title: "AI agents, models that take actions"
+    cover: "AI that acts"
+    hook: "A chatbot talks. An AI agent does things. What's the difference?"
+    reference: https://en.wikipedia.org/wiki/Intelligent_agent
+    metaphor: "an assistant with a toolbox who plans, uses a tool, checks the result, and repeats"
+
+  - id: vector-database
+    title: "Vector databases, search by meaning"
+    cover: "Search by meaning"
+    hook: "Search \"cheap flights\" and find \"budget airfare\". How?"
+    reference: https://en.wikipedia.org/wiki/Vector_database
+    metaphor: "a library shelved by meaning instead of alphabet"
+
+  - id: cosine-similarity
+    title: "How AI measures similarity"
+    cover: "Measuring similarity"
+    hook: "How does AI decide two sentences mean the same thing?"
+    reference: https://en.wikipedia.org/wiki/Cosine_similarity
+    metaphor: "two arrows on a map: the closer they point the same way, the more alike they are"
+
+  - id: k-means
+    title: "Clustering, sorting without labels"
+    cover: "Sorting without labels"
+    hook: "How does an AI group your customers without being told the groups?"
+    reference: https://en.wikipedia.org/wiki/K-means_clustering
+    metaphor: "guests at a party drifting into groups around a few hosts"
+
+  - id: decision-trees
+    title: "Decision trees, AI as twenty questions"
+    cover: "Twenty questions"
+    hook: "Some AI decides like a game of twenty questions."
+    reference: https://en.wikipedia.org/wiki/Decision_tree_learning
+    metaphor: "a game of twenty questions, each answer sending you down a branch"
+
+  - id: reinforcement-learning
+    title: "Reinforcement learning, learning by reward"
+    cover: "Learning by reward"
+    hook: "How did an AI teach itself to beat the world champion at Go?"
+    reference: https://en.wikipedia.org/wiki/Reinforcement_learning
+    metaphor: "a dog learning tricks for treats, by trial and error"
+
+  - id: supervised-learning
+    title: "Supervised learning, flashcards for AI"
+    cover: "Flashcards for AI"
+    hook: "Most AI learns the way you learned vocabulary."
+    reference: https://en.wikipedia.org/wiki/Supervised_learning
+    metaphor: "flashcards with the answer on the back"
+
+  - id: unsupervised-learning
+    title: "Unsupervised learning, finding patterns alone"
+    cover: "Patterns without answers"
+    hook: "Can an AI learn when nobody gives it the answers?"
+    reference: https://en.wikipedia.org/wiki/Unsupervised_learning
+    metaphor: "sorting a drawer of odd socks with no labels"
+
+  - id: self-supervised
+    title: "Self-supervised learning, fill in the blank"
+    cover: "Fill in the blank"
+    hook: "ChatGPT learned from text nobody labelled. Here's the trick."
+    reference: https://en.wikipedia.org/wiki/Self-supervised_learning
+    metaphor: "a fill-in-the-blank quiz the AI writes for itself from any page"
+
+  - id: transfer-learning
+    title: "Transfer learning, reusing what a model knows"
+    cover: "Reusing knowledge"
+    hook: "Why don't AI teams train every model from scratch?"
+    reference: https://en.wikipedia.org/wiki/Transfer_learning
+    metaphor: "a pianist learning the organ: most of the skill carries over"
+
+  - id: algorithmic-bias
+    title: "Why AI can be biased"
+    cover: "Where AI bias comes from"
+    hook: "An AI has no opinions. So why can it be unfair?"
+    reference: https://en.wikipedia.org/wiki/Algorithmic_bias
+    metaphor: "a mirror that reflects whatever the training data showed it"
+
+  - id: data-augmentation
+    title: "Data augmentation, more data from less"
+    cover: "More data from less"
+    hook: "How do you train an AI when you only have a few photos?"
+    reference: https://en.wikipedia.org/wiki/Data_augmentation
+    metaphor: "practising a song in different keys and tempos so you can play it anywhere"
+
+  - id: activation-function
+    title: "Activation functions, the neuron's switch"
+    cover: "The neuron's switch"
+    hook: "One tiny function lets AI learn curves, not just straight lines."
+    reference: https://en.wikipedia.org/wiki/Activation_function
+    metaphor: "a dimmer switch that only lets a signal through once it's strong enough"
+
+  - id: dropout
+    title: "Dropout, training with missing players"
+    cover: "Training with gaps"
+    hook: "Switching off random parts of an AI during training makes it smarter."
+    reference: https://en.wikipedia.org/wiki/Dilution_(neural_networks)
+    metaphor: "a team that practises with random players missing, so nobody leans on one star"
+
+  - id: beam-search
+    title: "Beam search, keeping options open"
+    cover: "Keeping options open"
+    hook: "Translation AI doesn't just take the best next word. Why not?"
+    reference: https://en.wikipedia.org/wiki/Beam_search
+    metaphor: "a hiker who scouts the few most promising paths before committing"
+
+  - id: multimodal
+    title: "Multimodal AI, seeing and reading at once"
+    cover: "Seeing and reading"
+    hook: "How can one AI read text, look at photos and listen?"
+    reference: https://en.wikipedia.org/wiki/Multimodal_learning
+    metaphor: "translating pictures, sounds and words into one shared language first"
+
+  - id: speech-recognition
+    title: "How AI turns speech into text"
+    cover: "Speech into text"
+    hook: "How does your phone write down what you say?"
+    reference: https://en.wikipedia.org/wiki/Speech_recognition
+    metaphor: "chopping sound into tiny slices and matching each to the likeliest sounds and words"
+
+  - id: text-to-speech
+    title: "How AI voices are made"
+    cover: "How AI voices are made"
+    hook: "The voice reading this to you was never recorded."
+    reference: https://en.wikipedia.org/wiki/Speech_synthesis
+    metaphor: "text goes in one end of a machine, a sound wave comes out the other"
+
+  - id: ocr
+    title: "How AI reads a photo of a page"
+    cover: "Reading a photo"
+    hook: "How does your phone copy text straight out of a photo?"
+    reference: https://en.wikipedia.org/wiki/Optical_character_recognition
+    metaphor: "finding the lines, then the letters, then guessing each letter from its shape"
+
+  - id: recommender-systems
+    title: "How recommendation algorithms work"
+    cover: "Why you see what you see"
+    hook: "How does your feed know what you'll watch next?"
+    reference: https://en.wikipedia.org/wiki/Recommender_system
+    metaphor: "a friend who knows people with your taste, and what they liked next"
+
+  - id: spam-filter
+    title: "How a spam filter decides"
+    cover: "How spam filters decide"
+    hook: "How does your inbox catch spam before you see it?"
+    reference: https://en.wikipedia.org/wiki/Naive_Bayes_spam_filtering
+    metaphor: "a mail sorter weighing each word as a clue toward spam or not spam"
+
+  - id: precision-recall
+    title: "Precision and recall, two ways to be right"
+    cover: "Two ways to be right"
+    hook: "An AI can be 99% accurate and still useless."
+    reference: https://en.wikipedia.org/wiki/Precision_and_recall
+    metaphor: "a fishing net: catch every fish, or catch only fish and no boots"
+
+  - id: cross-validation
+    title: "Cross-validation, testing fairly"
+    cover: "Testing fairly"
+    hook: "One lucky test can make a bad AI look good."
+    reference: https://en.wikipedia.org/wiki/Cross-validation_(statistics)
+    metaphor: "rotating which chapter is the exam, so every chapter gets tested once"
+
+  - id: scaling-laws
+    title: "Scaling laws, why AI keeps getting bigger"
+    cover: "Why AI keeps growing"
+    hook: "Why do AI labs keep building bigger and bigger models?"
+    reference: https://en.wikipedia.org/wiki/Neural_scaling_law
+    metaphor: "a staircase: more data, chips and size each buy a predictable step up"
+
+  - id: synthetic-data
+    title: "Synthetic data, AI training on made-up data"
+    cover: "Made-up training data"
+    hook: "Some AI is trained on data that never happened."
+    reference: https://en.wikipedia.org/wiki/Synthetic_data
+    metaphor: "a flight simulator: practice on situations built to look real"
+
+  - id: vision-transformer
+    title: "How transformers see pictures"
+    cover: "Pictures as tokens"
+    hook: "To read a photo, some AI cuts it into little squares first."
+    reference: https://en.wikipedia.org/wiki/Vision_transformer
+    metaphor: "cutting a photo into puzzle tiles and reading them like words"
+
+  - id: word2vec
+    title: "Word2vec, words known by their company"
+    cover: "Words by their company"
+    hook: "King minus man plus woman equals queen. In AI, that's real maths."
+    reference: https://en.wikipedia.org/wiki/Word2vec
+    metaphor: "you can tell a word by the words it hangs out with"
+
+  - id: gpu
+    title: "Why AI runs on graphics cards"
+    cover: "Why AI needs GPUs"
+    hook: "The chips behind AI were built for video games."
+    reference: https://en.wikipedia.org/wiki/Graphics_processing_unit
+    metaphor: "one brilliant chef versus a thousand line cooks chopping at once"
+
+  - id: turing-test
+    title: "The Turing test"
+    cover: "The Turing test"
+    hook: "In 1950 a mathematician asked: can a machine pass as human?"
+    reference: https://en.wikipedia.org/wiki/Turing_test
+    metaphor: "a judge chatting through a wall with a person and a machine"
+
+  - id: prompt-injection
+    title: "Prompt injection, hijacking an AI"
+    cover: "Hijacking an AI"
+    hook: "A hidden sentence on a web page can hijack your AI assistant."
+    reference: https://en.wikipedia.org/wiki/Prompt_injection
+    metaphor: "a forged note slipped into an assistant's in-tray, telling them to ignore their boss"
+
+  - id: alignment
+    title: "AI alignment, doing what we meant"
+    cover: "Doing what we meant"
+    hook: "The hard part of AI isn't making it smart. It's making it do what we meant."
+    reference: https://en.wikipedia.org/wiki/AI_alignment
+    metaphor: "a genie that grants exactly what you said, not what you meant"
+
+  - id: reward-hacking
+    title: "Reward hacking, gaming the score"
+    cover: "Gaming the score"
+    hook: "Give an AI a score to chase and it may find a cheat."
+    reference: https://en.wikipedia.org/wiki/Reward_hacking
+    metaphor: "a student paid per page who writes in bigger and bigger letters"
+
+  - id: open-weights
+    title: "Open-weight models"
+    cover: "What open weights mean"
+    hook: "Some AI models you can download and run yourself. What does that mean?"
+    reference: https://en.wikipedia.org/wiki/Open-source_artificial_intelligence
+    metaphor: "getting a cake versus getting the recipe and the oven"

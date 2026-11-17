@@ -52,6 +52,9 @@ class GenreSetting(BaseModel):
     # "corporate", "inspiring"]). Falls back to a genre-keyed default in
     # narovva.music.jamendo if unset.
     music_tags: list[str] | None = None
+    # A lesson series (config/lessons/<series>.yaml) instead of news feeds: each post of
+    # this genre teaches the series' next unposted lesson, grounded in its reference page.
+    series: str | None = None
 
 
 class CredentialRefs(BaseModel):
@@ -238,7 +241,9 @@ class HudConfig(BaseModel):
     # case_file: "● REC  CASE FILE: STARLINK ........ 00:00:04:29", progress bar on the top edge.
     # breakdown: "● STARLINK BREAKDOWN ........ 24 OCT 2026", progress line under it.
     # brand: the channel logo and name (the original header). none: no header.
-    style: Literal["case_file", "breakdown", "brand", "none"] = "case_file"
+    # chapter: a chip at the top centre naming the current chapter (the beat's kicker:
+    # "THE BACKSTORY", "WHAT HAPPENED") over one dash per chapter, the current one lit.
+    style: Literal["case_file", "breakdown", "brand", "chapter", "none"] = "case_file"
     # Header text; unset = the style's own. Placeholders: {subject} (what the story is
     # about in 1-3 words, chosen by the script writer, else the brief's main entity,
     # else the category), {category}, {brand}, {date}. Always shown in capitals.
@@ -255,9 +260,10 @@ class MotionCaptionStyle(BaseModel):
     # karaoke: a few words at a time in bold capitals, the word being spoken lit in `highlight`.
     # pill: the whole line, words appearing as they are said, the key phrase on a `highlight` pill.
     # brighten: the whole line, each word brightening as it is said.
-    style: Literal["karaoke", "pill", "brighten"] = "karaoke"
+    # boxed: a few words at a time on a white box, the word being spoken inverted.
+    style: Literal["karaoke", "pill", "brighten", "boxed"] = "karaoke"
     highlight: str = "#FACC15"
-    # karaoke only: most words on screen at once (a chunk also ends at punctuation).
+    # karaoke and boxed: most words on screen at once (a chunk also ends at punctuation).
     chunk_words: int = Field(3, ge=1, le=6)
 
 
@@ -281,12 +287,18 @@ class StoryConfig(BaseModel):
     # the voice (hook, context, what happened, fallout, verdict, follow). Falls back to
     # "slides" when its reply doesn't validate.
     # slides: re-animate poster-core's carousel slides, one spoken line each.
-    mode: Literal["storyboard", "slides"] = "storyboard"
+    # animated: the whole video is one continuous 3D animation -- every beat a moment of a
+    # small world where characters and objects act the story out, the camera flying from one
+    # to the next. Falls back to "slides" when its reply doesn't validate. Lessons always use it.
+    mode: Literal["animated", "storyboard", "slides"] = "animated"
     max_beats: int = Field(10, ge=5, le=14)
     # Length the writer aims for (Instagram accepts much longer Reels).
     target_seconds: int = Field(45, ge=20, le=90)
     # A full-frame accent wash behind headline numbers, for rhythm between dark scenes.
     flood: bool = True
+    # Beats where the viewer interrupts with the question they would ask ("Wait, why would
+    # they do that?"), answered by the next beat; spoken in a second voice. 0 = none.
+    viewer_questions: int = Field(2, ge=0, le=3)
 
 
 class MotionStyleConfig(BaseModel):
@@ -316,6 +328,16 @@ class MotionStyleConfig(BaseModel):
         )
 
 
+class WriterConfig(BaseModel):
+    """The model(s) that write the video's storyboard -- the one call that decides how good the
+    video is -- tried before the channel's llm_chain, which stays the fallback (a model whose key
+    has no billing, or no quota left, is simply skipped). Everything else (article analysis,
+    caption, hooks) keeps using llm_chain."""
+
+    chain: list[str] = Field(default_factory=list)   # "provider:model", e.g. "gemini:gemini-3.1-pro-preview"
+    use_for: Literal["lessons", "all"] = "lessons"    # lessons only, or every post
+
+
 class ChannelConfig(BaseModel):
     id: str
     enabled: bool = True
@@ -335,6 +357,8 @@ class ChannelConfig(BaseModel):
     # gemini, openai, openrouter). Unset = just `text_provider`. Free-tier quotas
     # are per model, so listing several Gemini models gives several pools.
     llm_chain: list[str] | None = None
+    # A stronger model for the storyboard writer only (see WriterConfig). Empty = llm_chain.
+    writer: WriterConfig = Field(default_factory=WriterConfig)
     image_provider: Literal["openai", "gemini", "none"] = "openai"
     # "carousel" (default): post poster-core's rendered images directly.
     # "reel": assemble those same images into a short Ken-Burns video with

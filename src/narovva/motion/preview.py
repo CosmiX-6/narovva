@@ -6,7 +6,7 @@ working on the template without the HyperFrames toolchain (Node 22):
                                              [--hud case_file|breakdown|brand|none]
                                              [--captions-style karaoke|pill|brighten]
                                              [--timeline cards|spine] [--no-stamps]
-                                             [--story storyboard|slides]
+                                             [--story animated|lesson|storyboard|slides|worlds]
 
 Stages the sample deck, then for each timestamp loads the composition in
 headless Chrome, seeks its timeline there and saves a 1080x1920 PNG, plus a
@@ -116,12 +116,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--via", type=float, help="seek here first, then to each timestamp")
     parser.add_argument("--logo", default="assets/logo/CU.png")
     parser.add_argument("--accent", default="#3B82F6")
-    parser.add_argument("--hud", choices=["case_file", "breakdown", "brand", "none"])
-    parser.add_argument("--captions-style", choices=["karaoke", "pill", "brighten"])
+    parser.add_argument("--hud", choices=["case_file", "breakdown", "brand", "chapter", "none"])
+    parser.add_argument("--captions-style", choices=["karaoke", "pill", "brighten", "boxed"])
     parser.add_argument("--timeline", choices=["cards", "spine"])
     parser.add_argument("--no-stamps", action="store_true")
-    parser.add_argument("--story", choices=["storyboard", "slides"], default="storyboard",
-                        help="the explainer storyboard sample, or the slide-based reel")
+    parser.add_argument("--story", choices=["animated", "lesson", "storyboard", "slides", "worlds"], default="animated",
+                        help="the animated news sample, the sample lesson, the motion-graphics storyboard sample, "
+                             "the slide-based reel, or every 3D set piece")
     args = parser.parse_args(argv)
     look = MotionStyleConfig()
     if args.hud:
@@ -131,13 +132,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.timeline:
         look.timeline = args.timeline
     look.stamps.enabled = not args.no_stamps
+    look.story.mode = "storyboard" if args.story == "storyboard" else "animated"
 
     out = Path(args.out_dir)
     project = out / "project"
     if project.exists():
         shutil.rmtree(project)
     out.mkdir(parents=True, exist_ok=True)
-    if args.story == "storyboard":
+    if args.story == "worlds":
+        from .sample import world_gallery
+        slides, subject = world_gallery(look=look)
+    elif args.story == "lesson":
+        from .sample import sample_lesson
+        slides, subject = sample_lesson(captions=not args.no_captions, look=look)
+    elif args.story in ("animated", "storyboard"):
         slides, subject = sample_story(captions=not args.no_captions, look=look)
     else:
         slides, subject = sample_deck(captions=not args.no_captions, look=look), SAMPLE_SUBJECT

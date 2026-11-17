@@ -149,14 +149,14 @@ SAMPLE_STORYBOARD: dict = {
         {"scene": "question", "kicker": "THE QUESTION", "lines": ["So why would a leader slash its own prices?"],
          "screen": ["So why would a leader slash its own prices?"], "mark": ["slash"],
          "data": {"text": "WHY?", "icon": "coins"}},
-        {"scene": "chain", "kicker": "HOW IT WORKS",
-         "lines": ["Every answer burns compute, rented by the hour.", "The lab resells it to you, token by token."],
-         "screen": ["Every answer burns compute, rented by the hour.", "The lab resells it to you, token by token."],
-         "mark": ["compute", "token by token"],
-         "data": {"title": "Where your money goes", "mark": "money", "nodes": [
-             {"label": "GPUs", "sub": "compute rented by the hour", "icon": "cpu"},
-             {"label": "The model", "sub": "turns compute into answers", "icon": "brain"},
-             {"label": "Your app", "sub": "pays per million tokens", "icon": "smartphone"}]}},
+        {"scene": "world", "kicker": "HOW IT WORKS",
+         "lines": ["Think of the flagship model as a club with a pricey door.",
+                   "At fifteen dollars a million tokens, most developers got turned away."],
+         "screen": ["Think of the flagship model as a club with a pricey door.",
+                    "At $15 a million tokens, most developers got turned away."],
+         "mark": ["pricey door", "turned away"],
+         "data": {"piece": "gate", "title": "Who could afford it", "mark": "afford", "gate": "Flagship AI",
+                  "crowd": "Developers", "keeper": "The price", "allowed": "In", "blocked": "Too pricey", "count": 3}},
         {"scene": "dates", "kicker": "WHAT HAPPENED",
          "lines": ["First, a rival halved its prices.", "Then open models caught the leader.", "Now the leader has answered."],
          "screen": ["First, a rival halved its prices.", "Then open models caught the leader.", "Now the leader has answered."],
@@ -173,6 +173,8 @@ SAMPLE_STORYBOARD: dict = {
          "screen": ["A million tokens cost $15. Now it costs $5."], "mark": ["$5"],
          "stamp": {"text": "PRICE CUT", "tone": "positive"},
          "data": {"title": "Cost per million tokens", "a": {"label": "Before", "value": "$15"}, "b": {"label": "After", "value": "$5"}}},
+        {"scene": "ask", "lines": ["Wait, so who actually pays for this?"],
+         "screen": ["Wait, so who actually pays for this?"], "mark": ["who actually pays"], "data": {}},
         {"scene": "grid", "kicker": "THE FALLOUT",
          "lines": ["Every rival now faces the same choice.", "Match the price, or lose the customers."],
          "screen": ["Every rival now faces the same choice.", "Match the price, or lose the customers."],
@@ -191,10 +193,18 @@ SAMPLE_STORYBOARD: dict = {
         {"scene": "quote", "kicker": "IN THEIR WORDS", "lines": ["The official line: intelligence should be too cheap to meter."],
          "screen": ["The official line: intelligence should be too cheap to meter."], "mark": ["too cheap to meter"],
          "data": {"text": "Intelligence should be too cheap to meter.", "who": "Company spokesperson", "mark": "too cheap to meter"}},
-        {"scene": "terminal", "kicker": "THE RECEIPTS", "lines": ["Run the numbers: faster, cheaper, one point two billion saved."],
-         "screen": ["Run the numbers: faster, cheaper, $1.2B saved."], "mark": ["$1.2B"],
-         "data": {"title": "price check", "lines": ["flagship: $5 per million tokens", "speed: 3.2x faster responses",
-                                                     "savings: $1.2B this year"]}},
+        {"scene": "source", "kicker": "THE RECEIPTS", "lines": ["It's in black and white: five dollars, down from fifteen."],
+         "screen": ["It's in black and white: $5, down from $15."], "mark": ["down from $15"],
+         "data": {"text": "OpenAI cut prices across its model lineup on Thursday, with the flagship now costing $5 per "
+                          "million tokens, down from $15.", "mark": "down from $15"}},
+        {"scene": "recap", "kicker": "THE SHORT VERSION",
+         "lines": ["Developers pay a third of what they did.", "Rivals match the price, or lose customers."],
+         "screen": ["Developers pay a third of what they did.", "Rivals match the price, or lose customers."],
+         "mark": ["a third", "lose customers"],
+         "data": {"title": "Who gets what", "mark": "what", "rows": [
+             {"label": "Developers", "note": "pay $5, not $15"},
+             {"label": "Rivals", "note": "match the price or lose"},
+             {"label": "Smaller labs", "note": "lose on price"}]}},
         {"scene": "checklist", "kicker": "THE VERDICT",
          "lines": ["When intelligence is cheap, the product is the edge.", "So watch who matches the price first."],
          "screen": ["When intelligence is cheap, the product is the edge.", "So watch who matches the price first."],
@@ -236,6 +246,8 @@ def sample_story(captions: bool = True, look=None) -> tuple[list[dict], str]:
 
     look = look or MotionStyleConfig()
     brief, article = sample_brief_and_article()
+    if look.story.mode == "animated":
+        return _prepared(SAMPLE_ANIMATED, brief, article, look, captions)
     board = parse_storyboard(SAMPLE_STORYBOARD, brief, article, brand="Context Unfiltered", max_beats=14,
                              max_stamps=look.stamps.max_per_reel if look.stamps.enabled else 0)
     if board is None:
@@ -246,3 +258,223 @@ def sample_story(captions: bool = True, look=None) -> tuple[list[dict], str]:
             for part in spec["parts"]:
                 part.pop("caption", None)
     return specs, board.subject or SAMPLE_SUBJECT
+
+
+# -- the story world gallery -------------------------------------------------------
+# One beat per 3D set piece (templates/reel/world.js), checked against the same sample
+# article, for previewing them all:  python -m narovva.motion.preview out/ --story worlds
+
+def _w(piece, kicker, lines, **data):
+    return {"scene": "world", "kicker": kicker, "lines": lines, "screen": lines, "data": {"piece": piece, **data}}
+
+
+SAMPLE_WORLDS: dict = {
+    "subject": "AI pricing",
+    "beats": [
+        {"scene": "headline", "kicker": "AI", "lines": ["The smartest AI just got a lot cheaper."],
+         "screen": ["The smartest AI just got a lot cheaper."], "data": {"text": "The smartest AI just got 67% cheaper"}},
+        _w("gate", "GATE", ["Think of the flagship model as a club with a pricey door.",
+                            "Most developers got turned away."],
+           gate="Flagship AI", crowd="Developers", keeper="The price", allowed="In", blocked="Too pricey", count=3),
+        _w("flow", "FLOW", ["Every app pays the lab, token by token.", "Cheaper tokens mean far more of it flows."],
+           **{"from": "Your app", "to": "The lab"}, item="money", amount="$1.2B", change="grows"),
+        _w("pile", "PILE", ["A million tokens used to cost fifteen dollars.", "Now it is five."],
+           item="money", label="Per million tokens", start="$15", end="$5"),
+        _w("race", "RACE", ["Every lab is racing to cut prices.", "This time, one pulled ahead."],
+           lanes=["OpenAI", "Anthropic", "Google"], leader=0),
+        _w("split", "SPLIT", ["The whole industry feels it.", "Developers win. Smaller labs pay."],
+           crowd="AI labs", win="Developers", lose="Smaller labs", share=0.6),
+        _w("machine", "MACHINE", ["Chips go in one side.", "Answers come out the other."],
+           input="Compute", machine="The model", output="Answers", in_item="chips", out_item="documents"),
+        _w("wall", "WALL", ["Customers used to move freely between labs.", "The price war just put up a wall."],
+           left="Rivals", right="Customers", wall="Price war", item="people"),
+        _w("balance", "BALANCE", ["Price used to decide everything.", "Now the product outweighs it."],
+           left="Price", right="Product", heavier="right"),
+        _w("steps", "STEPS", ["A request goes to the router.", "Then the model.", "Then the safety check."],
+           steps=["Router", "Model", "Safety check"], item="data", result="Answer"),
+        _w("sort", "SORT", ["Every request lands on one desk.", "The router sends each to an expert."],
+           sorter="Router", bins=["Code", "Maths", "Writing"], item="documents"),
+        _w("cluster", "CLUSTER", ["Similar ideas drift together.", "A new question lands beside its kind."],
+           groups=["Pricing", "Chips", "Safety"], query="Your question"),
+        _w("hill", "HILL", ["Training is a walk down a foggy hill.", "Each step a little smaller, until the bottom."],
+           start="Wrong", goal="Best answer"),
+        _w("fetch", "FETCH", ["Ask a question, and it looks it up first.", "Then it answers from the page."],
+           asker="You", shelf="Your files", answer="Found it"),
+        _w("focus", "FOCUS", ["Each word looks back at the others.", "It weighs the one that explains it most."],
+           words=["the", "cat", "sat", "because", "it"], focus=4, strongest=1, strong="Most weight"),
+        _w("slice", "SLICE", ["The model never sees the whole word.", "It sees the pieces."],
+           whole="strawberry", parts=["str", "aw", "berry"]),
+        _w("window", "WINDOW", ["It only holds a few pages at once.", "The oldest ones fall away."],
+           window="Context window", size=4, item="documents", dropped="Forgotten"),
+        _w("target", "TARGET", ["At first, the throws go everywhere.", "With feedback, each lands closer."],
+           thrower="The model", target="Right answer", result="Closer"),
+        {"scene": "cta", "lines": ["Follow Context Unfiltered for the story behind the news."],
+         "screen": ["Follow Context Unfiltered for the story behind the news."], "data": {}},
+    ],
+}
+
+
+def world_gallery(look=None) -> tuple[list[dict], str]:
+    """Every 3D set piece, prepared like sample_story. Returns (specs, subject)."""
+    from ..config.schema import MotionStyleConfig
+    from .storyboard import beat_specs, parse_storyboard
+    from .style import stamp_colors
+
+    look = look or MotionStyleConfig()
+    brief, article = sample_brief_and_article()
+    board = parse_storyboard(SAMPLE_WORLDS, brief, article, brand="Context Unfiltered", max_beats=24, max_stamps=0)
+    if board is None:
+        raise RuntimeError("the world gallery no longer validates")
+    missing = {b["data"]["piece"] for b in SAMPLE_WORLDS["beats"] if b["scene"] == "world"} - {
+        b["data"]["piece"] for b in board.beats if b["scene"] == "world"}
+    if missing:
+        raise RuntimeError(f"world gallery pieces failed validation: {sorted(missing)}")
+    return beat_specs(board, stamp_colors=stamp_colors(look), heading_marks=look.heading_marks), board.subject or "AI"
+
+
+# -- the animated story samples ------------------------------------------------------
+# The same news story told as one continuous 3D animation (motion.story.mode "animated"),
+# and a lesson from a series (narovva.lessons): python -m narovva.motion [--lesson]
+
+def _beat(scene, kicker, lines, screen=None, cmark=None, part=None, **data):
+    """A model-reply beat: `cmark` are the captions' highlights, `part` its place in a lesson's
+    arc, the keywords its scene data."""
+    beat = {"scene": scene, "kicker": kicker, "lines": lines, "screen": screen or lines, "mark": cmark or [], "data": data}
+    if part:
+        beat["part"] = part
+    return beat
+
+
+SAMPLE_ANIMATED: dict = {
+    "subject": "AI pricing",
+    "beats": [
+        _beat("world", "THE DOOR", ["What if the smartest AI cost a third tomorrow?",
+                                    "For years, its price kept most developers out."],
+              piece="gate", title="The smartest AI just got 67% cheaper", mark="cheaper", gate="Flagship AI",
+              crowd="Developers", keeper="The price", allowed="In", blocked="Too pricey", count=2),
+        _beat("world", None, ["A million tokens used to cost fifteen dollars.", "Now it costs five."],
+              ["A million tokens used to cost $15.", "Now it costs $5."],
+              piece="pile", title="Price per million tokens", mark="Price", item="money", label="Per million tokens",
+              start="$15", end="$5"),
+        _beat("ask", None, ["Wait, why would a leader cut its own price?"]),
+        _beat("world", "THE PRICE WAR", ["Because every lab is in the same race.", "And this time, the leader sprinted."],
+              piece="race", title="A price war", mark="price war", lanes=["OpenAI", "Anthropic", "Google"], leader=0),
+        _beat("world", None, ["Cheaper tokens mean far more of them flow.",
+                              "Customers save one point two billion dollars this year."],
+              ["Cheaper tokens mean far more of them flow.", "Customers save $1.2B this year."],
+              piece="flow", title="More flows through", mark="flows", **{"from": "Your app", "to": "The lab"},
+              item="money", amount="$1.2B", change="grows"),
+        _beat("world", "THE FALLOUT", ["The industry splits in two.", "Developers win. Smaller labs pay."],
+              piece="split", title="Who wins, who pays", mark="wins", crowd="AI labs", win="Developers",
+              lose="Smaller labs", share=0.6),
+        _beat("source", "THE RECEIPTS", ["It's in black and white: five dollars, down from fifteen."],
+              ["It's in black and white: $5, down from $15."], cmark=["down from $15"],
+              text="OpenAI cut prices across its model lineup on Thursday, with the flagship now costing $5 per "
+                   "million tokens, down from $15.", mark="down from $15"),
+        _beat("world", "THE VERDICT", ["When intelligence is cheap, price stops deciding.", "The product does."],
+              piece="balance", title="Now the product decides", mark="product", left="Price", right="Product",
+              heavier="right"),
+        _beat("cta", None, ["Follow Context Unfiltered for the story behind the news."], cmark=["Context Unfiltered"]),
+    ],
+}
+
+# A lesson's reference text (written for the sample, in the way a reference page states it).
+SAMPLE_LESSON_TEXT = (
+    "Large language models do not read text letter by letter. Before training, text is split into tokens by a "
+    "tokenizer: common words become a single token, while rarer words are split into several pieces. Each token "
+    "is mapped to a number, and the model only ever sees these numbers. A typical tokenizer has a vocabulary of "
+    "50,000 to 100,000 tokens, and one token is about 4 characters of English text on average. Because a word "
+    "such as strawberry may be split into pieces like str, aw and berry, the model has no direct view of its "
+    "individual letters, which is one reason models struggle to count letters or to spell words backwards. "
+    "Models can also only attend to a limited number of tokens at once, called the context window; text beyond "
+    "it is not seen."
+)
+
+SAMPLE_LESSON: dict = {
+    "subject": "Tokens",
+    "metaphor": {"picture": "The model reads in Lego bricks, never in letters.",
+                 "map": [{"everyday": "brick", "real": "token"}, {"everyday": "brick cutter", "real": "tokenizer"},
+                         {"everyday": "box of bricks", "real": "vocabulary"}, {"everyday": "the desk", "real": "context window"}]},
+    "beats": [
+        _beat("world", "THE PUZZLE", ["Why can't a chatbot count the r's in strawberry?",
+                                      "The answer is simpler than you think."],
+              part="hook", piece="slice", title="Why can't a chatbot count the r's in strawberry?", whole="strawberry",
+              parts=["str", "aw", "berry"]),
+        _beat("world", None, ["It never sees letters.", "It sees chunks of words, and each chunk is a number."],
+              part="answer", piece="machine", title="It never sees letters", mark="letters", input="Words",
+              machine="Brick cutter", output="Numbers", in_item="documents", out_item="tokens"),
+        _beat("world", "THE PICTURE", ["Think of text as Lego bricks.", "Each brick is called a token."],
+              cmark=["Lego bricks", "token"], part="metaphor", piece="slice", title="Text is Lego bricks",
+              mark="bricks", whole="Your sentence", parts=["Think", "of", "text", "as", "Lego"]),
+        _beat("world", "HOW IT WORKS", ["First, a brick cutter chops your text.", "It's called a tokenizer.",
+                                        "Then every brick becomes a number."],
+              cmark=["brick cutter", "tokenizer", "number"], part="how", piece="steps", title="Text, bricks, numbers",
+              mark="numbers", steps=["Your text", "Brick cutter", "Numbers"], item="tokens", result="The model"),
+        _beat("world", None, ["Common words are one whole brick.", "Rare words get cut into several."],
+              part="how", piece="sort", title="One brick, or several", sorter="Brick cutter",
+              bins=["One brick", "Several bricks"], item="tokens"),
+        _beat("ask", None, ["Wait, so it never sees single letters?"], part="ask"),
+        _beat("world", "AN EXAMPLE", ["Ask it how many r's are in strawberry.",
+                                      "It sees three bricks: str, aw, berry.", "The letters are hidden inside them."],
+              part="example", piece="focus", title="It guesses from the bricks", mark="guesses",
+              words=["how", "many", "r", "in", "strawberry"], focus=2, strongest=4, strong="Letters hidden"),
+        _beat("world", "THE CATCH", ["Here the picture breaks: the desk is small.",
+                                     "Past its limit, the oldest bricks fall off."],
+              part="catch", piece="window", title="The desk only holds so much", mark="desk",
+              window="Context window", size=4, item="tokens", dropped="Not seen"),
+        _beat("recap", "THE KEY", ["A brick is a token.", "The brick cutter is the tokenizer.",
+                                   "The desk is the context window."],
+              part="takeaway", title="The Lego key", mark="key",
+              rows=[{"label": "Brick", "note": "a token"}, {"label": "Brick cutter", "note": "the tokenizer"},
+                    {"label": "The desk", "note": "the context window"}]),
+        _beat("cta", None, ["Save this, and follow Context Unfiltered to see how AI works."], cmark=["Save this"],
+              part="cta"),
+    ],
+}
+
+
+def sample_lesson_inputs():
+    """The lesson sample's brief, reference article and Lesson."""
+    from poster_core.models import Article, ContentBrief
+
+    from ..lessons import Lesson
+
+    brief = ContentBrief(
+        key_event="How language models read text in tokens", headline="How AI reads text in tokens",
+        summary="Models split text into tokens and see only numbers, never letters.", category="ai",
+        tone="analytical", key_facts=["Vocabularies of 50,000 to 100,000 tokens", "One token is about 4 characters"],
+    )
+    article = Article(title="How AI reads text in tokens", text=SAMPLE_LESSON_TEXT, source_name="Wikipedia")
+    lesson = Lesson(id="tokens", title="How AI reads text in tokens", hook="Why can't a chatbot count the r's in strawberry?",
+                    reference="https://en.wikipedia.org/wiki/Large_language_model#Tokenization", series="How AI works",
+                    series_key="how-ai-works")
+    return brief, article, lesson
+
+
+def _prepared(raw, brief, article, look, captions=True, animated=True):
+    from ..config.schema import MotionStyleConfig
+    from .storyboard import beat_specs, parse_storyboard
+    from .style import stamp_colors
+
+    look = look or MotionStyleConfig()
+    board = parse_storyboard(raw, brief, article, brand="Context Unfiltered", max_beats=16,
+                             max_stamps=0 if animated else (look.stamps.max_per_reel if look.stamps.enabled else 0),
+                             animated=animated)
+    if board is None:
+        raise RuntimeError(f"the sample {raw['subject']!r} no longer validates")
+    lost = [b["data"].get("piece") for b in raw["beats"] if b["scene"] == "world"]
+    kept = [b["data"].get("piece") for b in board.beats if b["scene"] == "world"]
+    if lost != kept:
+        raise RuntimeError(f"sample world beats failed validation: {sorted(set(lost) - set(kept))}")
+    specs = beat_specs(board, stamp_colors=stamp_colors(look), heading_marks=look.heading_marks)
+    if not captions:
+        for spec in specs:
+            for part in spec["parts"]:
+                part.pop("caption", None)
+    return specs, board.subject or SAMPLE_SUBJECT
+
+
+def sample_lesson(captions: bool = True, look=None) -> tuple[list[dict], str]:
+    """The lesson sample, prepared like a real one. Returns (specs, subject)."""
+    brief, article, _ = sample_lesson_inputs()
+    return _prepared(SAMPLE_LESSON, brief, article, look, captions)
