@@ -9,11 +9,13 @@
 enabled: true
 platform: instagram
 
-# Instagram-scoped user id from Instagram API with Instagram Login (not the
-# Facebook-Page-linked Business Account id -- different namespace). Get it
-# with: curl "https://graph.instagram.com/v21.0/me?fields=id,username&access_token=..."
-ig_business_account_id: "27851606094524604"
-# Unused by the Instagram Login flow (no Facebook Page involved); left unset.
+# The Instagram account's id. New Meta apps only get "API setup with Unified login" (Facebook
+# Login for Business): its tokens start with EAA, are used on graph.facebook.com, and address
+# the account by the id the app dashboard shows next to it (Instagram > API setup with Unified
+# login > Generate access tokens). An Instagram Login token (IGAA..., graph.instagram.com,
+# older apps) uses that API's own id instead: curl "https://graph.instagram.com/v21.0/me?fields=user_id,username&access_token=..."
+ig_business_account_id: "17841477345424555"
+# Unused: no Facebook Page is involved.
 ig_page_id: null
 
 # Post at most one item every 2 hours, cycling through the genres below in order

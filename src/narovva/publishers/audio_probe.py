@@ -15,8 +15,8 @@ import httpx
 from ..config.schema import ChannelConfig
 from ..logsafe import redact
 from ..tokens import get_valid_token
+from ..tokens.instagram_token_store import graph_host
 
-_HOSTS = ("https://graph.instagram.com/v21.0",)
 _TIMEOUT = 30.0
 
 
@@ -25,7 +25,7 @@ def probe_audio_api(channel: ChannelConfig, query: str | None = None) -> list[di
     token = get_valid_token(channel)
     user_id = channel.ig_business_account_id
     results = []
-    for base in _HOSTS:
+    for base in (f"{graph_host(token)}/v21.0",):  # the host that accepts this kind of token
         for audio_type in ("music", "original_sound"):
             params = {"audio_type": audio_type, "user_id": user_id, "access_token": token}
             if query:

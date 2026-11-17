@@ -15,6 +15,7 @@ ig_refresh_token grant -- no app id/secret involved, just the current token.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -26,7 +27,17 @@ from ..db.repo import Repo
 from ..logsafe import redact
 from ..settings import get_settings, resolve_env
 
+logger = logging.getLogger(__name__)
+
 _GRAPH_BASE = "https://graph.instagram.com"
+
+
+def graph_host(token: str | None) -> str:
+    """Where a token is accepted. Instagram API with Instagram Login tokens ("IGAA...") live on
+    graph.instagram.com. Tokens from Facebook Login for Business -- the "Unified login" that new
+    Meta apps get, "EAA..." -- live on graph.facebook.com, with the Instagram account's own id
+    (the 1784... one the app dashboard shows). The calls narovva makes have the same shape on both."""
+    return "https://graph.facebook.com" if (token or "").strip().startswith("EAA") else _GRAPH_BASE
 
 
 class InstagramTokenError(RuntimeError):
@@ -91,7 +102,7 @@ def check_token(token: str) -> None:
     dead token is caught in seconds instead of after a multi-minute render."""
     try:
         resp = httpx.get(
-            f"{_GRAPH_BASE}/v21.0/me", params={"fields": "id", "access_token": token}, timeout=20.0,
+            f"{graph_host(token)}/v21.0/me", params={"fields": "id", "access_token": token}, timeout=20.0,
         )
     except httpx.HTTPError:
         # Network trouble isn't proof the token is bad; let the real publish decide.
@@ -117,6 +128,35 @@ def store_refreshed_token(channel: ChannelConfig, *, access_token: str, expires_
     )
 
 
+def _refresh_facebook_token(channel: ChannelConfig, current: str) -> None:
+    """A Facebook Login for Business token is exchanged with the app's id and secret
+    (fb_exchange_token). Without them configured it is left as it is -- regenerate it in the
+    app dashboard (Instagram > API setup with Unified login > Generate token) before it lapses."""
+    app_id = resolve_env(channel.credentials.instagram_app_id_env) if channel.credentials.instagram_app_id_env else None
+    secret = resolve_env(channel.credentials.instagram_app_secret_env) if channel.credentials.instagram_app_secret_env else None
+    if not (app_id and secret):
+        logger.warning("channel %s: Facebook Login token; no app id/secret configured to refresh it, so it is "
+                       "kept as is (regenerate it in the Meta app dashboard before it expires)", channel.id)
+        return
+    resp = httpx.get(
+        "https://graph.facebook.com/v21.0/oauth/access_token",
+        params={"grant_type": "fb_exchange_token", "client_id": app_id, "client_secret": secret,
+                "fb_exchange_token": current},
+        timeout=20.0,
+    )
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        try:
+            Repo(get_connection()).mark_instagram_token_refresh_failed(channel.id, redact(str(exc)))
+        except Exception:
+            pass
+        raise InstagramTokenError(f"token refresh failed for channel {channel.id!r}: {redact(str(exc))}") from exc
+    data = resp.json()
+    store_refreshed_token(channel, access_token=data["access_token"],
+                          expires_in_seconds=int(data.get("expires_in", 60 * 24 * 3600)))
+
+
 def refresh_token(channel: ChannelConfig) -> None:
     """Exchange the current long-lived token for a fresh ~60-day one. Meant
     to be called periodically (e.g. weekly), well before expiry.
@@ -126,6 +166,9 @@ def refresh_token(channel: ChannelConfig) -> None:
     token itself is the only credential required, no app id/secret.
     """
     current = get_valid_token(channel)
+    if current.startswith("EAA"):
+        _refresh_facebook_token(channel, current)
+        return
 
     resp = httpx.get(
         f"{_GRAPH_BASE}/refresh_access_token",

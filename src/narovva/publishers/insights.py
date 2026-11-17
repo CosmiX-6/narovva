@@ -26,9 +26,15 @@ class InsightsError(RuntimeError):
     pass
 
 
+def _host(token: str) -> str:
+    from ..tokens.instagram_token_store import graph_host
+
+    return f"{graph_host(token)}/v21.0"
+
+
 def _get(path: str, token: str, **params) -> dict:
     try:
-        resp = httpx.get(f"{GRAPH}/{path}", params={**params, "access_token": token}, timeout=_TIMEOUT)
+        resp = httpx.get(f"{_host(token)}/{path}", params={**params, "access_token": token}, timeout=_TIMEOUT)
     except httpx.HTTPError as exc:
         raise InsightsError(redact(f"request failed: {exc}")) from None
     try:
@@ -88,9 +94,14 @@ def probe(user_id: str, token: str) -> list[str]:
     """Human-readable lines: can this token list posts and read a reel's insights?"""
     lines = []
     try:
-        me = _get("me", token, fields="user_id,username")
-        lines.append(f"token belongs to: @{me.get('username')} (id {me.get('id')}, user_id {me.get('user_id')});"
-                     f" config ig_business_account_id is {user_id}")
+        if token.strip().startswith("EAA"):  # a Facebook Login token: ask the account itself
+            me = _get(str(user_id), token, fields="id,username")
+            lines.append(f"token reaches: @{me.get('username')} (id {me.get('id')}) on graph.facebook.com;"
+                         f" config ig_business_account_id is {user_id}")
+        else:
+            me = _get("me", token, fields="user_id,username")
+            lines.append(f"token belongs to: @{me.get('username')} (id {me.get('id')}, user_id {me.get('user_id')});"
+                         f" config ig_business_account_id is {user_id}")
     except InsightsError as exc:
         lines.append(f"token owner: unknown -- {exc}")
     try:
