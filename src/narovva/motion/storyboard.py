@@ -212,7 +212,10 @@ def _system_animated(brand: str, max_beats: int, target_seconds: int, max_asks: 
             "TEACHING (ELI5): talk to a curious twelve-year-old. Everyday words, short sentences, one new idea per "
             "line. Show it first, then name it: a technical word only after its everyday picture (\"this is called "
             "a token\"), and an abbreviation only after its full name. Keep the metaphor's words the same in every "
-            "line, label and recap row. Every step follows from the one before.\n"
+            "line, label and recap row. Every step follows from the one before. NO maths, formulas or notation "
+            "(no \"O of n squared\", no \"dot product\", no matrices, vectors, queries and keys): say what it "
+            "DOES in everyday words (\"it gets slow fast as the text grows\"). At most one new technical word per "
+            "beat, and only the ones the viewer needs.\n"
         )
         truth = (
             "TRUTH: the metaphor and the examples are yours; the FACTS are not. Every claim about how the technology "
@@ -707,6 +710,15 @@ LESSON_PARTS = ("hook", "answer", "metaphor", "how", "example", "catch", "takeaw
 _LESSON_NEEDS = {"answer": 1, "metaphor": 1, "how": 2, "example": 1, "catch": 1, "takeaway": 1}
 
 
+def _rows_said(rows) -> list[str]:
+    """A recap's rows as spoken lines ("Brick cutter: the tokenizer.")."""
+    out = []
+    for r in (rows if isinstance(rows, list) else [])[:3]:
+        if isinstance(r, dict) and r.get("label") and r.get("note"):
+            out.append(f"{' '.join(str(r['label']).split())}: {' '.join(str(r['note']).split())}.")
+    return out
+
+
 def _beat_data(beat: dict) -> dict:
     """The scene's data: the beat's "data" object, or -- as models often write it -- the
     scene's fields placed beside lines/screen at the top level of the beat."""
@@ -746,6 +758,9 @@ def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_sta
         data = _beat_data(b)
         if scene == "ask" and not b.get("lines") and isinstance(data.get("text"), str):
             b = dict(b, lines=[data["text"]], screen=[data["text"]])  # the question given only as its text
+        if scene == "recap" and not b.get("lines"):
+            said = _rows_said(data.get("rows"))
+            b = dict(b, lines=said, screen=said)  # a table with nothing said: read its rows
         lines, screens, cmarks = _lines(b, src)
         if builder is None or not lines or (animated and scene not in ANIMATED_SCENES):
             continue
@@ -807,6 +822,42 @@ def _metaphor(raw) -> dict | None:
         if e and r]
     picture = _text(raw.get("picture"), 25, 200)
     return {"picture": picture, "map": pairs[:6]} if picture or pairs else None
+
+
+# Words that mean the writer slipped from ELI5 into a lecture (unless the lesson is about them).
+_HEAVY = re.compile(
+    r"\b(matri(x|ces)|vectors?|dot products?|tensors?|logits?|softmax|quadratic|squared|logarithm\w*|"
+    r"o of [a-z]\b|big o|computational\w*|parameters?|architecture|sequential(ly)?|serial|quer(y|ies)|"
+    r"keys? and values?|derivatives?|coefficients?|probability distributions?|stochastic|heuristics?)\b", re.I)
+
+
+def heavy_lines(board: Storyboard | None, topic: str = "") -> list[str]:
+    """Spoken lines a twelve-year-old would trip on (heavy jargon or notation not in the topic)."""
+    if board is None:
+        return []
+    topic = topic.lower()
+    out = []
+    for b in board.beats:
+        for line in b["lines"]:
+            hits = [m.group(0) for m in _HEAVY.finditer(line) if m.group(0).lower() not in topic]
+            if hits:
+                out.append(line)
+    return out
+
+
+def _key_from_metaphor(board: Storyboard) -> bool:
+    """Give a lesson without a takeaway its metaphor's key -- each everyday part and what it
+    really is -- as the recap before the call to follow. False if there is no map to use."""
+    pairs = (board.metaphor or {}).get("map") or []
+    if len(pairs) < 2:
+        return False
+    rows = [{"label": p["everyday"].capitalize(), "note": p["real"]} for p in pairs[:4]]
+    said = _rows_said(rows)
+    recap = {"scene": "recap", "kicker": "THE KEY", "data": {"title": "The key", "mark": "key", "rows": rows},
+             "stamp": None, "lines": said, "screens": said, "cmarks": [auto_mark(x) for x in said], "part": "takeaway"}
+    at = len(board.beats) - 1 if board.beats and board.beats[-1]["scene"] == "cta" else len(board.beats)
+    board.beats.insert(at, recap)
+    return True
 
 
 def lesson_gaps(board: Storyboard | None) -> list[str]:
@@ -883,19 +934,31 @@ def write_storyboard(llm, brief, article, *, brand: str, max_beats: int = 10, ta
             best = board
             break
         gaps = lesson_gaps(board)
+        if board is not None and "takeaway" in gaps and _key_from_metaphor(board):
+            gaps = lesson_gaps(board)
+        heavy = heavy_lines(board, f"{lesson.title} {lesson.reference}")
+        if len(heavy) >= 2:
+            gaps = gaps + ["plain words"]
         if board is not None and (best is None or len(gaps) < len(best_gaps)):
             best, best_gaps = board, gaps
         if not gaps:
             break
-        # An incomplete lesson teaches a wrong picture: ask once more, saying what is missing.
+        # An incomplete or lecture-like lesson teaches a wrong picture: ask once more, saying why.
         logger.warning("lesson storyboard is missing %s (attempt %d)", ", ".join(gaps), attempt + 1)
+        missing = [g for g in gaps if g != "plain words"]
+        notes = []
+        if missing:
+            notes.append(f"after the checks it had no {', '.join(missing)} part. Beats are dropped when a figure is "
+                         "not in the reference text, a label is longer than 3 words, a line is longer than 16 words, "
+                         "a beat has no spoken lines, or a scene's fields are not inside \"data\"")
+        if "plain words" in gaps:
+            notes.append("these lines are a lecture, not ELI5 -- say what happens in everyday words instead: "
+                         + " | ".join(heavy[:4]))
         user = (user.split("\n\nYOUR LAST STORYBOARD")[0]
-                + f"\n\nYOUR LAST STORYBOARD WAS INCOMPLETE: after the checks it had no {', '.join(gaps)} part. "
-                "Beats are dropped when a figure is not in the reference text, a label is longer than 3 words, a "
-                "line is longer than 16 words, or a scene's fields are not inside \"data\". Write the whole "
-                "storyboard again, covering every part of the arc.")
+                + "\n\nYOUR LAST STORYBOARD NEEDS WORK: " + "; ".join(notes)
+                + ". Write the whole storyboard again, covering every part of the arc.")
     if lesson is not None and best is not None and best_gaps:
-        if any(p in best_gaps for p in ("metaphor", "how", "takeaway")):
+        if any(p in best_gaps for p in ("metaphor", "how", "takeaway")):  # the core of the explanation
             logger.warning("lesson storyboard still lacks %s; using the slide-based reel", ", ".join(best_gaps))
             return None
         logger.warning("lesson storyboard lacks %s; posting it anyway", ", ".join(best_gaps))

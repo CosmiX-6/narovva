@@ -228,14 +228,14 @@ def test_an_incomplete_lesson_is_asked_for_again_with_what_is_missing():
 
     llm = LLM()
     board = write_storyboard(llm, brief, article, brand="Context Unfiltered", max_beats=16, lesson=lesson)
-    assert len(llm.users) == 2 and "INCOMPLETE" in llm.users[1] and "example, catch" in llm.users[1]
+    assert len(llm.users) == 2 and "NEEDS WORK" in llm.users[1] and "no example, catch part" in llm.users[1]
     assert {"example", "catch"} <= {b["part"] for b in board.beats}
 
 
 def test_a_lesson_missing_its_core_twice_is_not_posted_as_an_animation():
     brief, article, lesson = sample_lesson_inputs()
     core_less = copy.deepcopy(SAMPLE_LESSON)
-    core_less["beats"] = [b for b in core_less["beats"] if b.get("part") != "takeaway"]
+    core_less["beats"] = [b for b in core_less["beats"] if b.get("part") not in ("how", "ask")]
     llm = _Animator(core_less)
     assert write_storyboard(llm, brief, article, brand="Context Unfiltered", max_beats=16, lesson=lesson) is None
     assert len(llm.prompts) == 2
@@ -257,3 +257,46 @@ def test_lessons_have_their_own_length():
     from narovva.lessons import load_series
     lesson = load_series("how-ai-works").lessons[0]
     assert lesson.target_seconds >= 75 and lesson.max_beats >= 14
+
+
+def test_a_lesson_without_a_takeaway_gets_its_metaphor_key():
+    brief, article, lesson = sample_lesson_inputs()
+    raw = copy.deepcopy(SAMPLE_LESSON)
+    raw["beats"] = [b for b in raw["beats"] if b.get("part") != "takeaway"]
+    llm = _Animator(raw)
+    board = write_storyboard(llm, brief, article, brand="Context Unfiltered", max_beats=16, lesson=lesson)
+    key = board.beats[-2]
+    assert len(llm.prompts) == 1 and key["scene"] == "recap" and board.beats[-1]["scene"] == "cta"
+    assert key["data"]["rows"][0] == {"label": "Brick", "note": "token"} and key["lines"][0] == "Brick: token."
+
+
+def test_a_recap_written_without_lines_is_read_from_its_rows():
+    raw = copy.deepcopy(SAMPLE_LESSON)
+    recap = next(b for b in raw["beats"] if b["scene"] == "recap")
+    recap.pop("lines"), recap.pop("screen")
+    board = _lesson_board(raw)
+    said = next(b for b in board.beats if b["scene"] == "recap")["lines"]
+    assert said == ["Brick: a token.", "Brick cutter: the tokenizer.", "The desk: the context window."]
+
+
+def test_a_lecture_is_sent_back_for_plain_words():
+    from narovva.motion.storyboard import heavy_lines
+    brief, article, lesson = sample_lesson_inputs()
+    lecture = copy.deepcopy(SAMPLE_LESSON)
+    lecture["beats"][3]["lines"] = ["Each token becomes a vector in a matrix.", "Attention costs O of n squared."]
+    lecture["beats"][3]["screen"] = lecture["beats"][3]["lines"]
+
+    class LLM:
+        def __init__(self):
+            self.users = []
+
+        def complete_json(self, system, user):
+            self.users.append(user)
+            return copy.deepcopy(lecture if len(self.users) == 1 else SAMPLE_LESSON)
+
+    llm = LLM()
+    board = write_storyboard(llm, brief, article, brand="Context Unfiltered", max_beats=16, lesson=lesson)
+    assert len(llm.users) == 2 and "not ELI5" in llm.users[1] and "matrix" in llm.users[1]
+    assert heavy_lines(board) == []
+    # the lesson's own subject is never jargon to itself
+    assert heavy_lines(_lesson_board(lecture), "What a matrix is: O of n squared vector") == []
