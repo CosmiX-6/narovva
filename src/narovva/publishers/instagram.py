@@ -17,7 +17,7 @@ import httpx
 from ..config.schema import ChannelConfig
 from ..logsafe import redact
 from ..platforms import PublishPlatform
-from ..tokens.instagram_token_store import get_valid_token
+from ..tokens.instagram_token_store import get_valid_token, graph_host
 from .base import PostResult, PublishAsset
 
 logger = logging.getLogger(__name__)
@@ -157,7 +157,8 @@ class InstagramGraphPublisher:
         last_exc: Exception | None = None
         for attempt in range(_REQUEST_RETRY_ATTEMPTS):
             try:
-                resp = httpx.request(method, f"{_GRAPH_BASE}{path}", timeout=self._timeout, **kwargs)
+                base = f"{graph_host(params.get('access_token'))}/v21.0"  # by the kind of token
+                resp = httpx.request(method, f"{base}{path}", timeout=self._timeout, **kwargs)
             except httpx.HTTPError as exc:
                 last_exc = _GraphAPIError(f"{method} {path} failed: {exc}")
                 time.sleep(2**attempt)
