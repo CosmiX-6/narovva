@@ -1,6 +1,6 @@
 """Render the sample deck from the repo root:
 
-    python -m narovva.motion [out.mp4] [logo.png] [photo.jpg] [--worlds]
+    python -m narovva.motion [out.mp4] [logo.png] [photo.jpg] [--worlds | --lesson]
 
 Without a photo argument a synthetic one is drawn, so every path the real
 pipeline takes (photo card, charts, captions) is exercised with no assets
@@ -35,7 +35,8 @@ def _look() -> MotionStyleConfig:
 
 def main() -> None:
     worlds = "--worlds" in sys.argv  # every 3D set piece instead of the sample story
-    sys.argv = [a for a in sys.argv if a != "--worlds"]
+    lesson = "--lesson" in sys.argv  # the sample lesson ("How AI works") instead of the news story
+    sys.argv = [a for a in sys.argv if a not in ("--worlds", "--lesson")]
     out = sys.argv[1] if len(sys.argv) > 1 else "motion-sample.mp4"
     # Relative to the working directory (repo root), like channel.brand.logo_path.
     logo = Path(sys.argv[2] if len(sys.argv) > 2 else "assets/logo/CU.png")
@@ -43,6 +44,9 @@ def main() -> None:
     if worlds:
         from .sample import world_gallery
         slides, subject = world_gallery(look=look)
+    elif lesson:
+        from .sample import sample_lesson
+        slides, subject = sample_lesson(captions=True, look=look)
     else:
         slides, subject = sample_story(captions=True, look=look)
     total = total_duration([s["duration"] for s in slides])

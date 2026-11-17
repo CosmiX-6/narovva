@@ -691,6 +691,7 @@
         Object.assign(B, window.CUScenes({
           tl, el, image, fit, words, figures, phraseAt, heading, kick, introHead, barIn, V, mh, SH, OV, PHOTO, UI, DECK, opener,
         }));
+        const WORLD = B._world; delete B._world;
         // Headline numbers sit on a full-frame accent wash (unless they are falling, which reads red on dark).
         const flooded = slides.map((s) => UI.flood !== false && s.kind === "number" && !(s.data && s.data.down));
 
@@ -732,6 +733,20 @@
           if (v !== floodWas) tl.fromTo("#flood", { opacity: floodWas }, { opacity: v, duration: OV, ease: "power2.out", immediateRender: false }, starts[i]);
           floodWas = v;
         });
+        // The 3D world (world.js): every world beat is a station of it, and it stays on screen
+        // behind the beats between them -- fainter and blurred behind a question or a receipt,
+        // faint behind the recap and the end card, gone behind the other scene types.
+        const worldBox = WORLD && WORLD.start(total);
+        if (worldBox) {
+          const SEEN = { world: 1, ask: 0.45, source: 0.35, recap: 0.25, endcard: 0.35 }, BLUR = { ask: 5, source: 7 };
+          let was = 0, blurWas = 0;
+          slides.forEach((s, i) => {
+            const v = SEEN[s.kind] == null ? 0 : SEEN[s.kind], b = BLUR[s.kind] || 0;
+            if (v !== was) tl.fromTo(worldBox, { opacity: was }, { opacity: v, duration: i ? OV + 0.1 : 0.45, ease: "power2.out", immediateRender: i === 0 }, starts[i]);
+            if (b !== blurWas) tl.fromTo(worldBox, { filter: `blur(${blurWas}px)` }, { filter: `blur(${b}px)`, duration: 0.3, ease: "power2.out", immediateRender: false }, starts[i]);
+            was = v; blurWas = b;
+          });
+        }
         // The world dims behind a receipt so the paper card is the only thing to read.
         let dimWas = 0;
         slides.forEach((s, i) => {
@@ -903,6 +918,8 @@
           if (kind !== "push" && TRANS[TRANS.length - 1] === kind) kind = "push";
           // The viewer cutting in is a hard interruption; a receipt arrives over the dimmed world.
           if (slides[i].kind === "ask" || slides[i].kind === "source") kind = "blur";
+          // From one world beat to the next the camera flies across the world; the titles just swap.
+          if (worldBox && slides[i].kind === "world" && slides[i - 1].kind === "world") kind = "blur";
           TRANS.push(kind);
         }
         scs.forEach((sc, i) => {

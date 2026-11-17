@@ -198,7 +198,7 @@ def _channel(**kw):
     base = dict(id="c", ig_business_account_id="1", genres=[GenreSetting(genre="ai")],
                 brand=BrandKitConfig(name="CONTEXT UNFILTERED", social_handle="cu", logo_path="assets/logo/CU.png"),
                 publish_format="motion_reel", narration=None,
-                motion=MotionStyleConfig.model_validate({"story": {"max_beats": 14}}))
+                motion=MotionStyleConfig.model_validate({"story": {"max_beats": 14, "mode": "storyboard"}}))
     base.update(kw)
     return ChannelConfig(**base)
 
@@ -342,7 +342,8 @@ def test_the_world_gallery_validates_every_set_piece():
     specs, _ = world_gallery()
     assert {s["data"]["piece"] for s in specs if s["kind"] == "world"} == {
         b["data"]["piece"] for b in SAMPLE_WORLDS["beats"] if b["scene"] == "world"} == {
-        "gate", "flow", "pile", "race", "split", "machine", "wall", "balance"}
+        "gate", "flow", "pile", "race", "split", "machine", "wall", "balance",
+        "steps", "sort", "cluster", "hill", "fetch", "focus", "slice", "window", "target"}
 
 
 def test_a_set_piece_needs_its_labels_and_takes_no_invented_figures():

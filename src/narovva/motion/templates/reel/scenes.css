@@ -174,8 +174,8 @@
 .rlab { font-family: "Archivo Black", sans-serif; font-size: 46px; line-height: 1.05; text-transform: uppercase; }
 .rnote { font-weight: 500; font-size: 36px; line-height: 1.25; color: #C9CFDD; }
 
-/* world: the 3D diorama (world.js), filling the scene window behind the title */
-.world { position: absolute; left: -72px; top: -70px; width: 1080px; z-index: 0; }
+/* world: the one continuous 3D world (world.js), behind the scene window (top set from JS) */
+.world { position: absolute; left: 0; top: 330px; width: 1080px; opacity: 0; }
 .world canvas { display: block; width: 1080px; height: 100%;
   -webkit-mask-image: linear-gradient(transparent 0%, #000 9%, #000 88%, transparent 100%);
   mask-image: linear-gradient(transparent 0%, #000 9%, #000 88%, transparent 100%); }

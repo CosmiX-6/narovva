@@ -463,17 +463,19 @@ window.CUScenes = function (K) {
     c.stampTarget = box; c.stampAt = lastT + 0.6;
   };
 
-  // -- world: a 3D diorama where characters and objects act the story out (world.js) --
+  // -- world: a station of the 3D world where characters and objects act the story out
+  // (world.js). The scene itself only carries the title; the world sits behind the window.
   const WORLD = window.CUWorld ? window.CUWorld({ tl, el, DECK, parts, partAt, latest, SH }) : null;
   S.world = (sc, s, c) => {
     const d = s.data || {};
     kick(sc, s);
-    if (d.title) heading(sc, d.title, 66, mh(150), d.mark);
-    c.a && introHead(sc, c.a, c.D);
-    if (!WORLD || !WORLD.build(sc, s, c)) { // no WebGL: the title alone still says it
+    if (d.title) heading(sc, d.title, c.i === 0 ? 84 : 66, mh(c.i === 0 ? 260 : 150), d.mark); // the first beat's title is the hook
+    c.a && introHead(sc, c.a, c.D, c.i === 0);
+    if (!WORLD || !WORLD.station(sc, s, c)) { // no WebGL: the title alone still says it
       if (!d.title) heading(sc, (s.screens && s.screens[0]) || "", 96, mh(500));
     }
   };
+  S._world = WORLD;
 
   // -- end card: logo, name, handle, the follow button ------------------------
   S.endcard = (sc, s, c) => {

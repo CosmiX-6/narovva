@@ -52,6 +52,9 @@ class GenreSetting(BaseModel):
     # "corporate", "inspiring"]). Falls back to a genre-keyed default in
     # narovva.music.jamendo if unset.
     music_tags: list[str] | None = None
+    # A lesson series (config/lessons/<series>.yaml) instead of news feeds: each post of
+    # this genre teaches the series' next unposted lesson, grounded in its reference page.
+    series: str | None = None
 
 
 class CredentialRefs(BaseModel):
@@ -284,7 +287,10 @@ class StoryConfig(BaseModel):
     # the voice (hook, context, what happened, fallout, verdict, follow). Falls back to
     # "slides" when its reply doesn't validate.
     # slides: re-animate poster-core's carousel slides, one spoken line each.
-    mode: Literal["storyboard", "slides"] = "storyboard"
+    # animated: the whole video is one continuous 3D animation -- every beat a moment of a
+    # small world where characters and objects act the story out, the camera flying from one
+    # to the next. Falls back to "slides" when its reply doesn't validate. Lessons always use it.
+    mode: Literal["animated", "storyboard", "slides"] = "animated"
     max_beats: int = Field(10, ge=5, le=14)
     # Length the writer aims for (Instagram accepts much longer Reels).
     target_seconds: int = Field(45, ge=20, le=90)

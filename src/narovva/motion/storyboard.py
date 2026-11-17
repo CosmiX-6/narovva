@@ -28,6 +28,44 @@ BEAT_MIN = 2.0
 _MAX_LINE_WORDS = 16
 _EXCERPT_CHARS = 6000
 
+_WORLD_PIECES = """\
+  Every world beat takes "title" (what the beat means on screen, max 6 words) and "mark" (1-2 of its words). Labels
+  are max 3 words and may use the metaphor's own words; any figure in them must be in the source. Items: money, goods,
+  data, people, oil, chips, documents, pills, tokens. Line 1 sets the piece up, line 2 is the turn.
+  {"piece": "gate", "gate": door sign, "crowd": who queues, "keeper": who decides, "allowed": label, "blocked": what the
+   turned-away hear, "count": 1-6} -- a keeper lets the first few in, then a barrier drops (access, bans, approvals, limits).
+  {"piece": "flow", "from": place, "to": place, "item": ..., "amount": optional figure, "change": "grows" | "stops" |
+   "reverses" | "none"} -- things travel from one place to another (money, exports, data, people moving).
+  {"piece": "pile", "item": ..., "label": what the pile is, "start": figure, "end": figure} -- a stock grows or drains.
+  {"piece": "race", "lanes": [2-3 rivals], "leader": index} -- rivals run; the leader pulls away (competition, a lead).
+  {"piece": "split", "crowd": who, "win": label, "lose": label, "share": 0.2-0.8 that win} -- one group splits into
+   winners and losers.
+  {"piece": "machine", "input": label, "machine": its sign, "output": label, "in_item": ..., "out_item": ...} -- inputs go
+   in, something else comes out (what a product, a law or a model does, seen as a black box).
+  {"piece": "wall", "left": place, "right": place, "wall": its sign, "item": ...} -- traffic crosses, then a wall goes up
+   (tariffs, sanctions, a ban on trade).
+  {"piece": "balance", "left": label, "right": label, "heavier": "left" | "right"} -- two sides weighed; the scale tips.
+  {"piece": "steps", "steps": [2-4 labels, in order], "item": ..., "result": optional label} -- a parcel passes through
+   stations that light up in turn (how something works, a process, a pipeline); one spoken line per step where you can.
+  {"piece": "sort", "sorter": label, "bins": [2-3 labels], "item": ...} -- a sorter sends each arriving item into a bin
+   (a filter, a classifier, triage, a router picking an expert).
+  {"piece": "cluster", "groups": [2-3 labels], "query": optional label} -- scattered things gather with their own kind,
+   then a newcomer lands beside the most similar (embeddings, similarity search, recommendations).
+  {"piece": "hill", "start": label, "goal": label} -- a walker steps down a valley, the steps shrinking near the bottom
+   (gradient descent, trial and error, homing in on the best answer).
+  {"piece": "fetch", "asker": label, "shelf": label, "answer": label} -- a helper runs to the shelves for the right page
+   before the answer is given (retrieval, search, looking something up first).
+  {"piece": "focus", "words": [3-6 words of one short phrase, in order], "focus": index of the word that looks back,
+   "strongest": index of the word it weighs most, "label": optional, "strong": optional label} -- beams from one word to
+   the others, as thick as the attention it pays (attention, context, what matters most).
+  {"piece": "slice", "whole": label, "parts": [2-6 short pieces, in order]} -- one thing is cut into pieces that slide
+   apart (a sentence into tokens, a document into chunks, a budget into its parts).
+  {"piece": "window", "window": label, "size": 2-6, "item": ..., "dropped": label} -- things pass under a frame that
+   holds only a few; the oldest fall off the end (a context window, memory, a queue).
+  {"piece": "target", "thrower": label, "target": label, "result": optional label} -- throws scatter at first, then land
+   closer once there is feedback (training, practice, learning from mistakes).
+"""
+
 _SCENE_GUIDE = """\
 SCENES -- for every beat pick the scene that best SHOWS what its lines say. Use at least 5 different
 scene types, never the same type twice in a row. Data shapes:
@@ -51,23 +89,8 @@ scene types, never the same type twice in a row. Data shapes:
 - "recap": {"title": "max 6 words", "rows": [{"label": "max 4 words", "note": "max 7 words"}, ...]} -- 2-4 rows: the
   short version (one row per option, player or takeaway), one spoken line per row where you can.
 - "world": a 3D scene where characters and objects ACT OUT the story -- the most memorable scene in a reel, so use
-  one or two whenever the story has one of these shapes. All take optional "title" (max 6 words) and "mark". Labels are
-  max 3 words and may use the analogy's words; any figure in them must be in the source. Items: money, goods, data,
-  people, oil, chips, documents. Line 1 sets it up, line 2 is the turn.
-  {"piece": "gate", "gate": door sign, "crowd": who queues, "keeper": who decides, "allowed": label, "blocked": what the
-   turned-away hear, "count": 1-6} -- a keeper lets the first few in, then a barrier drops (access, bans, approvals, limits).
-  {"piece": "flow", "from": place, "to": place, "item": ..., "amount": optional figure, "change": "grows" | "stops" |
-   "reverses" | "none"} -- things travel from one place to another (money, exports, data, people moving).
-  {"piece": "pile", "item": ..., "label": what the pile is, "start": figure, "end": figure} -- a stock grows or drains.
-  {"piece": "race", "lanes": [2-3 rivals], "leader": index} -- rivals run; the leader pulls away (competition, a lead).
-  {"piece": "split", "crowd": who, "win": label, "lose": label, "share": 0.2-0.8 that win} -- one group splits into
-   winners and losers.
-  {"piece": "machine", "input": label, "machine": its sign, "output": label, "in_item": ..., "out_item": ...} -- inputs go
-   in, something else comes out (how a product, law or market works).
-  {"piece": "wall", "left": place, "right": place, "wall": its sign, "item": ...} -- traffic crosses, then a wall goes up
-   (tariffs, sanctions, a ban on trade).
-  {"piece": "balance", "left": label, "right": label, "heavier": "left" | "right"} -- two sides weighed; the scale tips.
-- "cta": {} -- the last beat only: the call to follow (or to save the video, when it is a how-to worth keeping).
+  one or two whenever the story has one of these shapes.
+{world_pieces}- "cta": {} -- the last beat only: the call to follow (or to save the video, when it is a how-to worth keeping).
 Scenes that build up (dates, chain, grid, cards, split, stats, recap) may also carry "title": a section heading of at most 6
 words that stays on screen while the scene builds ("Check the facts", "His track record"), and "mark": 1-2 of its words
 to colour.
@@ -85,6 +108,7 @@ def _system(brand: str, max_beats: int, target_seconds: int, max_stamps: int, ma
         "lecture: put them where the story turns.\n\n"
         if max_asks else ""
     )
+    guide = _SCENE_GUIDE.replace("{max_stamps}", str(max_stamps)).replace("{world_pieces}", _WORLD_PIECES)
     return (
         f"You are the head writer and motion-graphics director of {brand}, an Instagram channel that explains "
         "the news in short vertical videos. Turn the story below into a storyboard: a sequence of beats, each "
@@ -115,7 +139,7 @@ def _system(brand: str, max_beats: int, target_seconds: int, max_stamps: int, ma
         + "TRUTH: use only facts in the brief and the article excerpt. Never invent a number, date, name, quote "
         "or claim; every figure on screen must appear in the source. If the story has few numbers, explain it "
         "with diagrams (chain, grid, dates) instead of inventing data.\n\n"
-        + _SCENE_GUIDE.replace("{max_stamps}", str(max_stamps))
+        + guide
         + "\nIcons (use only these names): " + ", ".join(sorted(ICON_NAMES)) + "\n\n"
         'Respond as JSON: {"subject": "what the story is about in 1-3 words, for a case-file header", '
         '"beats": [{"scene": "...", "lines": ["spoken line", ...], "screen": ["each line as the caption reads '
@@ -134,6 +158,106 @@ def _user(brief, article, when: str, hook: str | None = None, audience: str = ""
         + f"Article: {title}\nSource: {source}\nDate: {when}\n\n"
         f"Brief:\n{brief.model_dump_json(exclude={'image_generation_prompt', 'image_search_query', 'visual_concepts'})}\n\n"
         f"Article excerpt:\n{text}"
+    )
+
+
+# -- the animated story ("animated" mode): every beat is a moment in one 3D world -----
+
+ANIMATED_SCENES = {"world", "ask", "source", "recap", "cta"}
+MIN_WORLD_BEATS = 3
+
+_ANIMATED_EXTRAS = """\
+Besides world beats, a video may use only these:
+- "ask": {"text": the question exactly as spoken} -- the VIEWER interrupts with the one question they would ask right
+  now ("Wait, so does it actually read words?"), 4-10 words ending in "?", as the beat's only line. The next beat answers it.
+- "source": {"text": one or two sentences copied WORD FOR WORD from the source text (8-40 words), "mark": 2-6
+  consecutive words of it to highlight} -- the receipt, shown over the blurred world. At most one, for the key claim.
+- "recap": {"title": "max 6 words", "rows": [{"label": "max 4 words", "note": "max 7 words"}, ...]} -- 2-4 rows: the
+  short version, one spoken line per row where you can. Only as the second-to-last beat.
+- "cta": {} -- the last beat only.
+Any beat may have "kicker": a chapter label, 1-3 words in capitals, shown in the chip at the top ("THE IDEA", "HOW IT
+WORKS", "THE CATCH"); give it on the first beat of each chapter."""
+
+
+def _system_animated(brand: str, max_beats: int, target_seconds: int, max_asks: int = 2, lesson: bool = False) -> str:
+    asks = (
+        f"VIEWER QUESTIONS: up to {max_asks} beats are \"ask\" beats: the viewer cuts in with the doubt they would have "
+        "right then, and the next beat answers it. Never in the first two beats or the last two, never two in a row.\n\n"
+        if max_asks else ""
+    )
+    if lesson:
+        what = "teaches how AI works, one small idea at a time,"
+        arc = (
+            f"LESSON ARC ({min(8, max_beats)}-{max_beats} beats, about {target_seconds} seconds):\n"
+            "1. Hook: the everyday puzzle this idea explains (already written: the first line, word for word).\n"
+            "2. The metaphor: ONE everyday picture of the idea (\"Think of the model as a reader who only sees "
+            "Lego bricks\"), introduced in one line and kept for the whole video -- the world IS this metaphor.\n"
+            "3. How it works: 2-4 beats, one step each, acted out in the world, in the metaphor's words.\n"
+            "4. A worked example: the idea on one concrete case the viewer knows.\n"
+            "5. The catch: a limit, a trade-off or the common misunderstanding.\n"
+            "6. The takeaway: one line the viewer could repeat to a friend (a \"recap\" when there are parts to list).\n"
+            f"7. The last beat, scene \"cta\": one line of at most 10 words asking them to save it and follow {brand}.\n"
+        )
+        truth = (
+            "TRUTH: the metaphor and the examples are yours; the FACTS are not. Every claim about how the technology "
+            "works must agree with the reference text, and every figure on screen must appear in it. Explain, never "
+            "exaggerate: no claims that AI \"thinks\", \"knows\" or \"understands\" unless the reference says so.\n\n"
+        )
+    else:
+        what = "explains the news"
+        arc = (
+            f"STORY ARC ({min(8, max_beats)}-{max_beats} beats, about {target_seconds} seconds):\n"
+            "1. Hook (first line, at most 9 words): open a loop the viewer needs closed -- a contradiction with the "
+            "named players in it, what is at stake for the viewer, or a startling number. Never the headline "
+            "restated, never \"did you know\", never a greeting.\n"
+            "2. Context: the one thing the viewer must know to follow it, through ONE everyday metaphor that the "
+            "world acts out (\"your API is a nightclub; every request is a guest\"), kept for the whole video.\n"
+            "3. What happened: the event step by step, with its actors, as the world changes.\n"
+            "4. Fallout: who wins and who pays, in numbers where the article has them.\n"
+            "5. Verdict: the second-to-last beat lands the takeaway or what to watch next.\n"
+            f"6. The last beat, scene \"cta\": one line of at most 8 words naming {brand}.\n"
+        )
+        truth = (
+            "TRUTH: use only facts in the brief and the article excerpt. Never invent a number, date, name, quote or "
+            "claim; every figure on screen must appear in the source.\n\n"
+        )
+    return (
+        f"You are the head writer and animation director of {brand}, an Instagram channel that {what} in short "
+        "vertical videos made as ONE continuous animation: a small 3D world of characters and objects, where the "
+        "camera flies from one scene of the world to the next as the voice tells the story. Turn the material "
+        "below into that animation: a sequence of beats, each one or two spoken lines plus the moment of the "
+        "world that SHOWS what those lines say, so the video is clear with the sound off. The viewer should "
+        "finish understanding ONE idea they could explain to a friend.\n\n"
+        + arc
+        + f"WORLD: at least {MIN_WORLD_BEATS} beats, and most of them, are scene \"world\" -- the first beat too (its "
+        "\"title\" is the hook, at most 9 words). Pick the set piece whose action IS what the lines say, use at least "
+        "3 different pieces, and name the characters and objects with the metaphor's words so the world tells one "
+        "story. Every world beat has a \"title\".\n"
+        "PACE: a new beat every 3-5 seconds. One or two spoken lines a beat (more only for steps), 5-12 words a "
+        "line, each line making the next one necessary. Write for the ear: short conversational sentences, present "
+        "tense, the way a sharp friend would explain it. Spell numbers as words in the spoken lines (\"sixty-seven "
+        "percent\") and abbreviations read letter by letter with spaces (\"A I\"). No emojis, hashtags or stage "
+        "directions.\n\n"
+        + asks + truth
+        + 'SCENES -- "world": {"piece": ..., "title": ..., the piece\'s fields}. The pieces:\n' + _WORLD_PIECES
+        + _ANIMATED_EXTRAS + "\n\n"
+        'Respond as JSON: {"subject": "what the video is about in 1-3 words", '
+        '"beats": [{"scene": "...", "lines": ["spoken line", ...], "screen": ["each line as the caption reads '
+        'it: digits for numbers, AI not A I", ...], "mark": ["1-3 words of each caption to highlight", ...], '
+        '"kicker": "...", "data": {...}}, ...]}'
+    )
+
+
+def _user_lesson(brief, article, lesson, audience: str = "") -> str:
+    text = (getattr(article, "text", "") or "")[:_EXCERPT_CHARS]
+    return (
+        (f"Audience: {audience}. Speak to them.\n" if audience else "")
+        + f"Lesson: {lesson.title}\nSeries: {lesson.series}\n"
+        + (f"Opening hook, already written -- the first beat's first line, word for word: {lesson.hook}\n" if lesson.hook else "")
+        + (f"A metaphor that works (use it, or a clearly better one): {lesson.metaphor}\n" if lesson.metaphor else "")
+        + f"Reference: {getattr(article, 'source_name', '') or 'reference'}\n\n"
+        f"Brief:\n{brief.model_dump_json(exclude={'image_generation_prompt', 'image_search_query', 'visual_concepts'})}\n\n"
+        f"Reference text:\n{text}"
     )
 
 
@@ -368,12 +492,25 @@ def _recap(d, src):
     return {"rows": rows} if len(rows) >= 2 else None
 
 
-_ITEMS = {"money", "goods", "data", "people", "oil", "chips", "documents"}
-_PIECES = {"gate", "flow", "pile", "race", "split", "machine", "wall", "balance"}
+_ITEMS = {"money", "goods", "data", "people", "oil", "chips", "documents", "pills", "tokens"}
+_PIECES = {"gate", "flow", "pile", "race", "split", "machine", "wall", "balance",
+           "steps", "sort", "cluster", "hill", "fetch", "focus", "slice", "window", "target"}
+
+
+def _index(value, n: int, default: int | None) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < n else default
+
+
+def _labels(values, lo: int, hi: int, words: int, chars: int = 24) -> list[str] | None:
+    """`lo`-`hi` short labels (each at most `words` words and `chars` characters), or None."""
+    if not isinstance(values, list):
+        return None
+    out = [x for x in (_words(v, words) for v in values[:hi]) if x and len(x) <= chars]
+    return out if len(out) >= lo else None
 
 
 def _world(d, src):
-    """A 3D set piece (templates/reel/world.js). Its labels may be the analogy's own
+    """A 3D set piece (templates/reel/world.js). Its labels may be the metaphor's own
     words, but any figure in them must come from the source."""
     piece = str(d.get("piece") or "").strip().lower()
     if piece not in _PIECES:
@@ -381,6 +518,7 @@ def _world(d, src):
     label = lambda k, n=3: _words(d.get(k), n)
     kind = lambda k, default: (str(d.get(k) or "").strip().lower() if str(d.get(k) or "").strip().lower() in _ITEMS else default)
     out: dict = {"piece": piece}
+    lists: list[str] = []
     if piece == "gate":
         out.update(gate=label("gate"), crowd=label("crowd"), keeper=label("keeper"), allowed=label("allowed", 2),
                    blocked=label("blocked"))
@@ -403,12 +541,11 @@ def _world(d, src):
         out["trend"] = trend if trend in ("up", "down") else "up"
         need = ("label",)
     elif piece == "race":
-        lanes = [x for x in (_words(v, 3) for v in (d.get("lanes") or [])[:3]) if x]
-        leader = d.get("leader")
-        out.update(lanes=lanes, leader=leader if isinstance(leader, int) and 0 <= leader < len(lanes) else 0)
-        if len(lanes) < 2 or not src.grounded(*lanes):
+        lanes = _labels(d.get("lanes"), 2, 3, 3)
+        if not lanes:
             return None
-        need = ()
+        out.update(lanes=lanes, leader=_index(d.get("leader"), len(lanes), 0))
+        lists, need = lanes, ()
     elif piece == "split":
         share = d.get("share")
         out.update(crowd=label("crowd"), win=label("win"), lose=label("lose"),
@@ -421,16 +558,65 @@ def _world(d, src):
     elif piece == "wall":
         out.update(left=label("left"), right=label("right"), wall=label("wall"), item=kind("item", "goods"))
         need = ("wall",)
-    else:  # balance
+    elif piece == "balance":
         heavier = str(d.get("heavier") or "").lower()
         out.update(left=label("left"), right=label("right"), heavier=heavier if heavier in ("left", "right") else "left")
         need = ("left", "right")
+    elif piece == "steps":
+        steps = _labels(d.get("steps"), 2, 4, 3)
+        if not steps:
+            return None
+        out.update(steps=steps, item=kind("item", "data"), result=label("result"))
+        lists, need = steps, ()
+    elif piece == "sort":
+        bins = _labels(d.get("bins"), 2, 3, 3)
+        if not bins:
+            return None
+        out.update(sorter=label("sorter"), bins=bins, item=kind("item", "documents"))
+        lists, need = bins, ()
+    elif piece == "cluster":
+        groups = _labels(d.get("groups"), 2, 3, 3)
+        if not groups:
+            return None
+        out.update(groups=groups, query=label("query"))
+        lists, need = groups, ()
+    elif piece == "hill":
+        out.update(start=label("start"), goal=label("goal"))
+        need = ("goal",)
+    elif piece == "fetch":
+        out.update(asker=label("asker"), shelf=label("shelf"), answer=label("answer"))
+        need = ("shelf", "answer")
+    elif piece == "focus":
+        words = _labels(d.get("words"), 3, 6, 2, 12)
+        if not words:
+            return None
+        n = len(words)
+        focus = _index(d.get("focus"), n, n - 1)
+        strongest = _index(d.get("strongest"), n, 0)
+        if strongest == focus:
+            strongest = 0 if focus else 1
+        out.update(words=words, focus=focus, strongest=strongest, label=label("label"), strong=label("strong"))
+        lists, need = words, ()
+    elif piece == "slice":
+        parts = _labels(d.get("parts"), 2, 6, 2, 14)
+        if not parts:
+            return None
+        out.update(whole=label("whole", 4), parts=parts)
+        lists, need = parts, ()
+    elif piece == "window":
+        size = d.get("size")
+        out.update(window=label("window"), size=size if isinstance(size, int) and 2 <= size <= 6 else 4,
+                   item=kind("item", "documents"), dropped=label("dropped"))
+        need = ("window",)
+    else:  # target
+        out.update(thrower=label("thrower"), target=label("target"), result=label("result"))
+        need = ("target",)
     if any(not out.get(k) for k in need):
         return None
-    texts = [v for v in out.values() if isinstance(v, str)]
+    texts = [v for v in out.values() if isinstance(v, str)] + lists
     if not src.grounded(*texts):
         return None
-    title = _text(d.get("title"), 6, 50)
+    title = _text(d.get("title"), 9, 70)
     if title and src.grounded(title):
         out["title"], out["mark"] = title, phrase_in(d.get("mark"), title, 2)
     return out
@@ -477,15 +663,17 @@ def _lines(beat: dict, src: _Source) -> tuple[list[str], list[str], list[str | N
     return lines, shown, cmarks
 
 
-def _cta_beat(brand: str) -> dict:
-    line = f"Follow {brand.title()} for the story behind the news."
+def _cta_beat(brand: str, line: str | None = None) -> dict:
+    line = line or f"Follow {brand.title()} for the story behind the news."
     return {"scene": "cta", "kicker": None, "data": {}, "stamp": None,
             "lines": [line], "screens": [line], "cmarks": [brand.title()]}
 
 
 def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_stamps: int,
-                     max_asks: int = 2) -> Storyboard | None:
-    """Validate a model reply into a Storyboard, or None if too little survives."""
+                     max_asks: int = 2, animated: bool = False, cta: str | None = None) -> Storyboard | None:
+    """Validate a model reply into a Storyboard, or None if too little survives.
+    `animated`: only world beats plus the few scenes allowed between them, and at
+    least MIN_WORLD_BEATS world beats. `cta`: the closing line if the model's is unusable."""
     if not isinstance(raw, dict) or not isinstance(raw.get("beats"), list):
         return None
     src = _Source(brief, article)
@@ -497,7 +685,7 @@ def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_sta
         builder = _SCENES.get(scene)
         data = b.get("data") if isinstance(b.get("data"), dict) else {}
         lines, screens, cmarks = _lines(b, src)
-        if builder is None or not lines:
+        if builder is None or not lines or (animated and scene not in ANIMATED_SCENES):
             continue
         if scene == "ask":  # the viewer's question is the beat's one line, on screen as said
             lines, screens, cmarks = lines[:1], screens[:1], cmarks[:1]
@@ -515,11 +703,13 @@ def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_sta
         })
     beats = [b for i, b in enumerate(beats) if b["scene"] != "cta" or i == len(beats) - 1]
     if not beats or beats[-1]["scene"] != "cta":
-        beats.append(_cta_beat(brand))
+        beats.append(_cta_beat(brand, cta))
     if len(beats) > max_beats:
         beats = beats[: max_beats - 1] + [beats[-1]]
     beats = _place_asks(beats, max_asks)
     if beats[0]["scene"] == "cta" or len(beats) < 5:
+        return None
+    if animated and sum(b["scene"] == "world" for b in beats) < MIN_WORLD_BEATS:
         return None
     _cap_stamps(beats, max_stamps)
     return Storyboard(subject=clean_subject(raw.get("subject")), beats=beats)
@@ -561,17 +751,27 @@ def _cap_stamps(beats: list[dict], max_stamps: int) -> None:
 
 def write_storyboard(llm, brief, article, *, brand: str, max_beats: int = 10, target_seconds: int = 45,
                      max_stamps: int = 3, when: str = "", hook: str | None = None, audience: str = "",
-                     max_asks: int = 2) -> Storyboard | None:
-    """Ask the model for the explainer storyboard. None (after logging why)
-    if the call fails or the reply does not validate."""
+                     max_asks: int = 2, mode: str = "storyboard", lesson=None) -> Storyboard | None:
+    """Ask the model for the storyboard: the explainer of motion-graphic scenes
+    (mode "storyboard") or one continuous 3D animation (mode "animated"). A
+    `lesson` (narovva.lessons.Lesson) makes it a teaching video grounded in the
+    lesson's reference text. None (after logging why) if the call fails or the
+    reply does not validate."""
+    animated = mode == "animated" or lesson is not None
+    cta = f"Save this, and follow {brand} to see how AI works." if lesson is not None else None
+    if animated:
+        system = _system_animated(brand, max_beats, target_seconds, max_asks, lesson=lesson is not None)
+        max_stamps = 0
+    else:
+        system = _system(brand, max_beats, target_seconds, max_stamps, max_asks)
+    user = _user_lesson(brief, article, lesson, audience) if lesson is not None else _user(brief, article, when, hook, audience)
     try:
-        raw = llm.complete_json(_system(brand, max_beats, target_seconds, max_stamps, max_asks),
-                                _user(brief, article, when, hook, audience))
+        raw = llm.complete_json(system, user)
     except Exception as exc:
         logger.warning("storyboard LLM call failed (%s)", exc)
         return None
     board = parse_storyboard(raw, brief, article, brand=brand, max_beats=max_beats, max_stamps=max_stamps,
-                             max_asks=max_asks)
+                             max_asks=max_asks, animated=animated, cta=cta)
     if board is None:
         logger.warning("storyboard reply did not validate; using the slide-based reel")
     return board
@@ -590,6 +790,8 @@ def hook_board(board: Storyboard, written: str | None, said: str | None, headlin
         first["kicker"] = "TRENDING NOW"
     if first["scene"] == "headline":
         first["data"].update(text=written, mark=None, sub=" ".join(str(headline or "").split()[:12]) or None)
+    elif first["scene"] == "world":  # an animated video opens on the world, the hook as its title
+        first["data"].update(title=written, mark=None)
     return board
 
 

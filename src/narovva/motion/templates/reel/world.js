@@ -4,12 +4,12 @@
  * and losers. Everything is built from primitives in code (no models, no
  * textures to license), lit like clay, seen from an isometric camera.
  *
- * Seek-safe by construction: each set piece is `render(t)`, a pure function of
- * the time into its scene. One WebGL context is shared; each world scene draws
- * into its own 2D canvas, so any number of them can be on screen in transitions.
+ * Seek-safe by construction: each set piece is `draw(t)`, a pure function of the
+ * time into its beat, and the world's frame is a pure function of reel time.
  *
- * window.CUWorld(K) -> { build(host, s, c) } where `host` is the scene's inner
- * element, `s` the slide spec (data.piece + its fields) and `c` the timing.
+ * window.CUWorld(K) -> { station(host, s, c), start(total) }: each world beat adds its set
+ * piece as a station of one continuous world (see "the world builder" at the end), and
+ * start() puts the world on screen once every scene is built.
  */
 window.CUWorld = function (K) {
   const { tl, el, DECK, parts, partAt, latest, SH } = K;
@@ -189,35 +189,33 @@ window.CUWorld = function (K) {
     return m;
   }
 
-  // -- the stage: a floating diorama tile, iso camera, clay light -------------------
-  function stage() {
-    const scene = new T3.Scene();
-    scene.add(new T3.HemisphereLight(0xdfe8ff, 0x1a2036, 0.75));
-    const key = new T3.DirectionalLight(0xfff1dc, 1.05); key.position.set(6, 11, 7); scene.add(key);
-    const rim = new T3.DirectionalLight(new T3.Color(DECK.accent || "#3B82F6"), 0.55); rim.position.set(-8, 5, -7); scene.add(rim);
-    const floor = mesh(new T3.PlaneGeometry(80, 80), C.ground, 0.95); floor.rotation.x = -Math.PI / 2; scene.add(floor);
-    const grid = new T3.GridHelper(80, 80, C.grid, C.grid); grid.position.y = 0.003; scene.add(grid);
-    const PPU = 88; // pixels per world unit at zoom 1: about 12 units across the frame
-    const cam = new T3.OrthographicCamera(-W / 2 / PPU, W / 2 / PPU, H / 2 / PPU, -H / 2 / PPU, 0.1, 200);
-    return { scene, cam };
-  }
-  // Isometric-ish camera looking at `target`; `zoom` > 1 moves in.
+  // -- one continuous world ---------------------------------------------------------
+  // Every world beat is a station in ONE world: its set piece is built at its own spot on a
+  // long floor, and the camera glides from station to station as the story moves on (the
+  // places already visited keep their final state, so the world remembers the story).
+  // While a piece is being built, stage() hands it its station: a group placed at the
+  // station's spot and a camera proxy that records where the piece wants to look.
+  let ST = null;
+  function stage() { return { scene: ST.group, cam: ST.cam }; }
+  // Records the camera the piece wants (`target` in the piece's own coordinates).
   function aim(cam, target, zoom, yaw) {
-    const r = 30, pitch = 0.6, a = yaw == null ? Math.PI / 4 : yaw;
-    cam.position.set(target.x + r * Math.cos(pitch) * Math.sin(a), target.y + r * Math.sin(pitch), target.z + r * Math.cos(pitch) * Math.cos(a));
-    cam.zoom = zoom; cam.lookAt(target.x, target.y, target.z); cam.updateProjectionMatrix();
+    cam.state = { x: target.x + cam.off.x, y: target.y, z: target.z + cam.off.z, zoom, yaw: yaw == null ? Math.PI / 4 : yaw };
   }
-
-  function paint(ctx, scene, cam) {
-    const r = gl();
-    r.render(scene, cam);
-    ctx.clearRect(0, 0, W, H);
-    ctx.drawImage(r.domElement, 0, 0);
+  // Isometric-ish camera looking at `s` (world coordinates); zoom > 1 moves in.
+  function point(cam, s) {
+    const r = 30, pitch = 0.6, a = s.yaw;
+    cam.position.set(s.x + r * Math.cos(pitch) * Math.sin(a), s.y + r * Math.sin(pitch), s.z + r * Math.cos(pitch) * Math.cos(a));
+    cam.zoom = s.zoom; cam.lookAt(s.x, s.y, s.z); cam.updateProjectionMatrix();
   }
+  function paint() {} // the world paints once a frame, for every station (see frame())
 
   // Labels drawn over the 3D frame, anchored to 3D points (tags like "83 / 100").
   function tag(ctx, cam, pos, text, o) {
-    o = o || {};
+    cam.labels.push([{ x: pos.x + cam.off.x, y: pos.y, z: pos.z + cam.off.z }, text, o || {}]);
+  }
+  function drawTag(ctx, cam, pos, text, o, fade) {
+    o = Object.assign({}, o, { alpha: (o.alpha == null ? 1 : o.alpha) * fade });
+    if (o.alpha <= 0.01) return;
     const v = new T3.Vector3(pos.x, pos.y, pos.z).project(cam);
     const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
     const size = o.size || 34;
@@ -598,44 +596,538 @@ window.CUWorld = function (K) {
         const tilt = 0.32 * back(prog(t, t2 + 0.5, 0.8)) * (heavyR ? -1 : 1);
         beam.rotation.z = tilt; pans.forEach((p) => { p.rotation.z = -tilt; });
         paint(ctx, scene, cam);
-        const pt = (s) => { const v = new T3.Vector3(); pans[s].getWorldPosition(v); return { x: v.x, y: v.y + 1.9, z: v.z }; };
+        const pt = (s) => { const v = new T3.Vector3(); pans[s].getWorldPosition(v); scene.worldToLocal(v); return { x: v.x, y: v.y + 1.9, z: v.z }; };
         if (d.left) tag(ctx, cam, pt(0), d.left, Object.assign({ alpha: out(prog(t, t1, 0.3)) }, !heavyR && t > t2 + 0.9 ? GREEN : {}));
         if (d.right) tag(ctx, cam, pt(1), d.right, Object.assign({ alpha: out(prog(t, t1 + 0.15, 0.3)) }, heavyR && t > t2 + 0.9 ? GREEN : {}));
       },
     };
   };
 
-  // -- the scene builder ---------------------------------------------------------------
-  function build(host, s, c) {
+  // -- layout in screen terms: `at(sx, sy)` is the ground point sx units to the right of the
+  // piece's centre and sy units down the screen (toward the viewer). Rows built with it read
+  // straight across the frame instead of along the isometric diagonal.
+  const at = (sx, sy) => ({ x: (sx + sy) * Math.SQRT1_2, z: (sy - sx) * Math.SQRT1_2 });
+  const put = (o, sx, sy, y) => { const p = at(sx, sy); o.position.set(p.x, y || 0, p.z); return o; };
+  const glow = (hex) => new T3.MeshBasicMaterial({ color: hex });
+  const LIT = glow(C.accent), UNLIT = mat(C.edge, 0.6);
+  const ACROSS = Math.PI / 4; // turns a box so its length runs across the screen
+  // When step i of n happens: on its own spoken line when the beat has one per step, else
+  // spread evenly from line 1 to most of the way through the beat.
+  const stepAt = (cue, end, i, n) => {
+    if (cue(i) != null && cue(n - 1) != null) return cue(i);
+    const t1 = cue(0) || 0.15;
+    return t1 + (i / Math.max(1, n - 1)) * Math.min(Math.max(0.6 * n, (end - t1) * 0.72), Math.max(0.5, end - t1 - 0.8));
+  };
+
+  Object.assign(KIT, {
+    pill() {
+      const g = new T3.Group();
+      const a = mesh(new T3.CapsuleGeometry(0.13, 0.32, 4, 12), C.white, 0.4); a.rotation.z = Math.PI / 2; a.position.y = 0.14; g.add(a);
+      const b = mesh(new T3.CylinderGeometry(0.135, 0.135, 0.2, 14), C.accent, 0.4); b.rotation.z = Math.PI / 2; b.position.set(0.1, 0.14, 0); g.add(b);
+      g.add(blob(0.22)); return g;
+    },
+    token() { // a word piece: a tile with a lit top
+      const g = new T3.Group();
+      const b = mesh(new T3.BoxGeometry(0.46, 0.2, 0.46), C.dark, 0.5); b.position.y = 0.1; g.add(b);
+      const top = mesh(new T3.BoxGeometry(0.38, 0.03, 0.38), C.accent, 0.4); top.position.y = 0.215; g.add(top);
+      g.add(blob(0.3)); return g;
+    },
+    booth() { // a little station with a lamp on its roof
+      const g = new T3.Group();
+      const b = mesh(new T3.BoxGeometry(1.5, 1.2, 1.3), C.white, 0.6); b.position.y = 0.6; g.add(b);
+      const roof = mesh(new T3.BoxGeometry(1.62, 0.12, 1.42), C.edge); roof.position.y = 1.26; g.add(roof);
+      const hole = mesh(new T3.PlaneGeometry(0.8, 0.7), 0x10141f); hole.position.set(0, 0.36, 0.66); g.add(hole);
+      const lamp = new T3.Mesh(new T3.SphereGeometry(0.17, 14, 10), UNLIT); lamp.position.y = 1.45; g.add(lamp);
+      g.userData.lamp = lamp; g.add(blob(1.0)); return g;
+    },
+    shelf() {
+      const g = new T3.Group();
+      const f = mesh(new T3.BoxGeometry(1.8, 2.2, 0.5), 0x3b3f55, 0.8); f.position.y = 1.1; g.add(f);
+      const cols = [C.accent, C.gold, 0x14b8a6, C.red, C.white];
+      for (let r = 0; r < 3; r++) for (let k = 0; k < 7; k++) {
+        const bk = mesh(new T3.BoxGeometry(0.16, 0.5, 0.36), cols[Math.floor(hash(r * 7 + k, 4) * cols.length)], 0.7);
+        bk.position.set(-0.66 + k * 0.22, 0.42 + r * 0.66, 0.1); g.add(bk);
+      }
+      g.add(blob(1.1)); return g;
+    },
+    desk() {
+      const g = new T3.Group();
+      const top = mesh(new T3.BoxGeometry(1.6, 0.1, 0.9), 0xb08060, 0.7); top.position.y = 0.8; g.add(top);
+      [[-0.7, -0.35], [0.7, -0.35], [-0.7, 0.35], [0.7, 0.35]].forEach(([x, z]) => { const l = mesh(new T3.BoxGeometry(0.08, 0.8, 0.08), 0x7a5a44); l.position.set(x, 0.4, z); g.add(l); });
+      g.add(blob(0.9)); return g;
+    },
+  });
+  Object.assign(ITEM, { pills: "pill", tokens: "token" });
+
+  // steps: how something works, step by step -- a parcel travels through 2-4 labelled
+  // stations, each lighting up (and changing the parcel) as the voice reaches it.
+  // data: {steps: [label, ...], item, result}
+  PIECES.steps = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const labels = (d.steps || []).slice(0, 4), n = labels.length, gap = n > 3 ? 3.0 : 3.5;
+    const sx = (i) => (i - (n - 1) / 2) * gap;
+    const x0 = sx(0) - 2.6, x1 = sx(n - 1) + 2.6;
+    const belt = mesh(new T3.BoxGeometry(x1 - x0 + 1, 0.08, 0.9), 0x1f2740, 0.8); put(belt, 0, 0.9, 0.04); belt.rotation.y = ACROSS; scene.add(belt);
+    const booths = labels.map((_, i) => { const b = put(KIT.booth(), sx(i), 0); b.rotation.y = FACE; scene.add(b); return b; });
+    const parcel = item(d.item || "data"); scene.add(parcel);
+    const T = labels.map((_, i) => stepAt(cue, end, i, n));
+    // the parcel rides to each station by that station's time, and waits there
+    const px = (t) => {
+      if (t < T[0]) return lerp(x0, sx(0), ease(prog(t, T[0] - 0.7, 0.7)));
+      for (let i = 0; i < n - 1; i++) if (t < T[i + 1]) return lerp(sx(i), sx(i + 1), ease(prog(t, T[i + 1] - 0.55, 0.55)));
+      return lerp(sx(n - 1), x1, ease(prog(t, T[n - 1] + 0.7, 0.6)));
+    };
+    return {
+      draw(t, ctx) {
+        const x = px(t);
+        aim(cam, Object.assign(at(clamp(x * 0.5, sx(0) * 0.45, sx(n - 1) * 0.45), 0.4), { y: 2.3 }), n > 3 ? 0.98 : 1.08);
+        put(parcel, x, 0.9, Math.abs(Math.sin(t * 8)) * 0.05);
+        const done = T.filter((ti) => t >= ti).length;
+        parcel.scale.setScalar(1.2 + 0.22 * done);
+        parcel.rotation.y = t * 1.6;
+        booths.forEach((b, i) => {
+          b.userData.lamp.material = t >= T[i] ? LIT : UNLIT;
+          b.scale.y = 1 + Math.max(0, Math.sin((t - T[i]) * 14)) * 0.07 * (t >= T[i] ? 1 - prog(t, T[i], 0.5) : 0);
+        });
+        labels.forEach((lab, i) => {
+          const live = t >= T[i] && (i === n - 1 || t < T[i + 1]);
+          const p = at(sx(i), 0);
+          tag(ctx, cam, { x: p.x, y: 2.3 + (i % 2) * 0.6, z: p.z }, lab,
+            Object.assign({ alpha: out(prog(t, 0.15 + i * 0.12, 0.3)) * (t >= T[i] ? 1 : 0.6), size: 30 }, live ? GREEN : t >= T[i] ? DARK : {}));
+        });
+        if (d.result) {
+          const ta = T[n - 1] + 1.2, p = at(x1 - 0.4, 0.9);
+          tag(ctx, cam, { x: p.x, y: 1.5, z: p.z }, d.result, Object.assign({ alpha: out(prog(t, ta, 0.2)), scale: lerp(0.6, 1, pop(t, ta)), size: 34 }, GREEN));
+        }
+      },
+    };
+  };
+
+  // sort: a sorter sends each arriving item into one of 2-3 labelled bins -- a filter, a
+  // classifier, triage, a router choosing an expert. data: {sorter, bins: [label, ...], item}
+  PIECES.sort = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const bins = (d.bins || []).slice(0, 3), nb = bins.length;
+    const S0 = { sx: -0.6, sy: 0.2 };
+    const sorter = put(KIT.person({ color: C.accent }), S0.sx, S0.sy); scene.add(sorter);
+    const binAt = (j) => ({ sx: 3.6, sy: (j - (nb - 1) / 2) * 2.7 + 0.2 });
+    bins.forEach((_, j) => { const b = binAt(j); scene.add(put(KIT.platform({ color: C.edge, r: 1.0 }), b.sx, b.sy)); });
+    const belt = mesh(new T3.BoxGeometry(5.2, 0.06, 0.8), 0x1f2740, 0.8); put(belt, -3.6, S0.sy, 0.03); belt.rotation.y = ACROSS; scene.add(belt);
+    const spawns = spawnTimes(t1 - 0.6, end - 1.6, 0.55, 18);
+    const where = (i) => Math.floor(hash(i, 13) * nb);
+    const its = spawns.map(() => { const it = item(d.item || "documents"); scene.add(it); return it; });
+    const IN = 1.1, OUT = 0.7;
+    return {
+      draw(t, ctx) {
+        aim(cam, Object.assign(at(0.9, 0.2), { y: 2.3 }), 1.1);
+        const counts = bins.map(() => 0);
+        let busy = -1;
+        its.forEach((it, i) => {
+          const s0 = spawns[i], j = where(i), b = binAt(j);
+          const fIn = prog(t, s0, IN), fOut = prog(t, s0 + IN + 0.1, OUT);
+          it.visible = t >= s0;
+          if (fOut <= 0) put(it, lerp(-6.2, S0.sx - 0.5, fIn), S0.sy);
+          else {
+            const k = fOut >= 1 ? counts[j]++ : counts[j];
+            const land = { sx: b.sx + ((k % 3) - 1) * 0.36, sy: b.sy + (Math.floor(k / 3) % 2) * 0.36 };
+            put(it, lerp(S0.sx + 0.4, land.sx, ease(fOut)), lerp(S0.sy, land.sy, ease(fOut)), Math.sin(fOut * Math.PI) * 0.9 + (fOut >= 1 ? Math.floor(k / 6) * 0.2 : 0));
+          }
+          if (fIn >= 1 && fOut < 1) busy = j;
+          it.rotation.y = i * 0.9;
+        });
+        if (busy >= 0) { const b = binAt(busy), p = at(b.sx - S0.sx, b.sy - S0.sy); sorter.rotation.y = Math.atan2(p.x, p.z); pose(sorter, "point", 1); }
+        else { sorter.rotation.y = FACE; pose(sorter, "idle"); }
+        if (d.sorter) { const p = at(S0.sx, S0.sy); tag(ctx, cam, { x: p.x, y: 2.15, z: p.z }, d.sorter, Object.assign({ alpha: out(prog(t, t1, 0.3)), size: 30 }, DARK)); }
+        bins.forEach((lab, j) => {
+          const b = binAt(j), p = at(b.sx, b.sy), hot = t > t2 && j === 0;
+          tag(ctx, cam, { x: p.x, y: 1.25, z: p.z }, lab, Object.assign({ alpha: out(prog(t, 0.2 + j * 0.12, 0.3)), size: 28 }, hot ? GREEN : {}));
+        });
+      },
+    };
+  };
+
+  // cluster: scattered things drift into groups of their own kind; then a newcomer drops in
+  // and lands next to the ones most like it -- embeddings, similarity search, recommendations.
+  // data: {groups: [label, ...], query}
+  PIECES.cluster = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const groups = (d.groups || []).slice(0, 3), ng = groups.length;
+    const cols = [C.accent, C.gold, 0x14b8a6];
+    const CENTRES = [{ sx: -2.7, sy: -1.0 }, { sx: 2.7, sy: -1.0 }, { sx: 0, sy: 2.0 }];
+    const centre = (g) => CENTRES[g];
+    const N = 7 * ng;
+    const orbs = Array.from({ length: N }, (_, i) => {
+      const m = new T3.Mesh(new T3.SphereGeometry(0.24, 16, 12), mat(cols[i % ng], 0.4)); m.position.y = 0.3;
+      const g = new T3.Group(); g.add(m); g.add(blob(0.2)); scene.add(g); return g;
+    });
+    const home = (i) => ({ sx: (hash(i, 21) - 0.5) * 8.4, sy: (hash(i, 22) - 0.5) * 6.0 });
+    const spot = (i) => { const c = centre(i % ng), k = Math.floor(i / ng), a = k * 2.4 + i; return { sx: c.sx + Math.cos(a) * 0.55 * Math.sqrt(k + 0.3), sy: c.sy + Math.sin(a) * 0.45 * Math.sqrt(k + 0.3) }; };
+    const q = new T3.Group(); const qm = new T3.Mesh(new T3.OctahedronGeometry(0.36), glow(0xffffff)); qm.position.y = 0.45; q.add(qm); q.add(blob(0.3)); scene.add(q);
+    const land = { sx: centre(0).sx + 1.05, sy: centre(0).sy + 0.35 };
+    const links = [0, 1, 2].map(() => { const l = new T3.Mesh(new T3.BoxGeometry(1, 0.05, 0.05), glow(0xffffff)); scene.add(l); return l; });
+    return {
+      draw(t, ctx) {
+        aim(cam, Object.assign(at(0, 0.3), { y: 2.2 }), lerp(1.0, 1.1, ease(prog(t, t2, 1.2))));
+        orbs.forEach((o, i) => {
+          const h = home(i), s = spot(i), k = ease(prog(t, t1 + hash(i, 5) * 0.5, 1.3));
+          put(o, lerp(h.sx, s.sx, k), lerp(h.sy, s.sy, k), Math.sin(k * Math.PI) * 0.4);
+          o.scale.setScalar(Math.max(0.001, out(prog(t, 0.05 + hash(i, 6) * 0.35, 0.3))));
+        });
+        const kq = prog(t, t2, 0.6), ks = ease(prog(t, t2 + 0.6, 0.8));
+        q.visible = t >= t2;
+        put(q, lerp(0, land.sx, ks), lerp(0.4, land.sy, ks), (1 - out(kq)) * 5 + Math.sin(ks * Math.PI) * 0.5);
+        qm.rotation.y = t * 2;
+        // the newcomer's nearest neighbours light up, joined to it
+        const lk = prog(t, t2 + 1.4, 0.4);
+        links.forEach((l, j) => {
+          const a = q.position, b = orbs[j * ng].position;
+          const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) * lk;
+          l.visible = lk > 0;
+          l.scale.x = Math.max(0.001, len);
+          l.position.set(a.x + dx * lk / 2, 0.42, a.z + dz * lk / 2);
+          l.rotation.y = -Math.atan2(dz, dx);
+        });
+        groups.forEach((lab, g) => {
+          const p = at(centre(g).sx, centre(g).sy);
+          tag(ctx, cam, { x: p.x, y: 1.5, z: p.z }, lab, Object.assign({ alpha: out(prog(t, t1 + 1.0 + g * 0.15, 0.3)), size: 30 }, g === 0 && t > t2 + 1.4 ? GREEN : {}));
+        });
+        if (d.query) { const p = at(land.sx, land.sy); tag(ctx, cam, { x: p.x, y: 1.4 + (1 - ks) * 2, z: p.z }, d.query, Object.assign({ alpha: out(prog(t, t2 + 0.2, 0.2)), size: 30 }, DARK)); }
+      },
+    };
+  };
+
+  // hill: a climber steps down a valley toward its lowest point, each step smaller as the
+  // slope flattens -- gradient descent, trial and error, getting closer. data: {start, goal}
+  PIECES.hill = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const MIN = 1.8, h = (u) => 0.15 * (u - MIN) * (u - MIN) + 0.02;
+    const geo = new T3.PlaneGeometry(11, 2.6, 60, 1); geo.rotateX(-Math.PI / 2);
+    const P = geo.attributes.position;
+    for (let i = 0; i < P.count; i++) P.setY(i, h(P.getX(i)));
+    geo.computeVertexNormals();
+    // the valley runs across the screen: in `holder`, x is screen-right and z screen-down
+    const holder = new T3.Group(); holder.rotation.y = ACROSS; scene.add(holder);
+    holder.add(mesh(geo, 0x2b3a5c, 0.85));
+    const flag = KIT.flag({ color: C.green }); flag.position.set(MIN, h(MIN), -0.6); holder.add(flag);
+    const ball = KIT.person({ color: C.accent }); holder.add(ball);
+    // each step moves against the slope, so the steps shrink near the bottom
+    const us = [-4.4];
+    while (us.length < 9) { const u = us[us.length - 1]; us.push(u - 0.62 * (0.32 * (u - MIN))); }
+    const n = us.length - 1, span = Math.max(1.6, Math.min(end - t1 - 0.6, Math.max(2.4, (t2 - t1) * 1.9)));
+    const stepT = (k) => t1 + 0.2 + span * (1 - Math.pow(1 - k / n, 1.6));
+    return {
+      draw(t, ctx) {
+        let k = 0; while (k < n && t >= stepT(k + 1)) k++;
+        const f = k < n ? ease(prog(t, stepT(k + 1) - 0.32, 0.32)) : 0;
+        const u = lerp(us[k], us[Math.min(k + 1, n)], f);
+        ball.position.set(u, h(u) + Math.sin(f * Math.PI) * 0.3, 0);
+        ball.rotation.y = k >= n ? FACE - ACROSS : Math.PI / 2; // walking along the valley; at the bottom, to the viewer
+        pose(ball, k >= n ? "cheer" : f > 0 ? "walk" : "idle", k >= n ? prog(t, stepT(n), 0.4) : 1, t * 8);
+        aim(cam, Object.assign(at(lerp(-1.2, 1.0, ease(prog(t, t1, span))), 0), { y: 2.0 }), 1.08);
+        const bp = at(u, 0), sp = at(us[0], 0), gp = at(MIN, -0.6);
+        if (d.start) tag(ctx, cam, { x: sp.x, y: h(us[0]) + 2.2, z: sp.z }, d.start, { alpha: out(prog(t, 0.2, 0.3)) * (1 - 0.5 * prog(t, t2 + 0.4, 0.3)), size: 30 });
+        if (d.goal) tag(ctx, cam, { x: gp.x, y: 2.7, z: gp.z }, d.goal, Object.assign({ alpha: out(prog(t, 0.4, 0.3)), size: 30 }, k >= n ? GREEN : DARK));
+        if (t > t1 + 0.2 && k < n) tag(ctx, cam, { x: bp.x, y: h(u) + 1.95, z: bp.z }, "STEP " + (k + 1), { alpha: out(prog(t, t1 + 0.2, 0.2)), size: 26, fill: "#0B0F1C", stroke: "#3A4566", color: "#FACC15" });
+      },
+    };
+  };
+
+  // fetch: a helper runs to the shelves, finds the right page, and brings it back before the
+  // answer is given -- retrieval, search, looking it up. data: {asker, shelf, answer}
+  PIECES.fetch = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const desk = put(KIT.desk(), -2.6, 1.3); desk.rotation.y = FACE; scene.add(desk);
+    const asker = put(KIT.person({ color: C.white }), -3.9, 1.7); asker.rotation.y = FACE; scene.add(asker);
+    const helper = KIT.person({ color: C.accent }); scene.add(helper);
+    [-0.2, 2.2, 4.6].forEach((sx) => { const s = put(KIT.shelf(), sx, -2.4); s.rotation.y = FACE; scene.add(s); });
+    const page = KIT.doc(); scene.add(page);
+    const leg = clamp((end - t1 - 1.2) / 2.6, 0.75, 1.3);
+    const home = at(-1.6, 1.0), shelfP = at(2.2, -1.4);
+    const go = t1 + 0.3, grab = go + leg, back = grab + 0.45, home2 = back + leg;
+    const ans = Math.max(home2 + 0.15, Math.min(t2, end - 0.8));
+    return {
+      draw(t, ctx) {
+        const away = ease(prog(t, go, leg)) - ease(prog(t, back, leg));
+        aim(cam, Object.assign(at(lerp(-0.8, 1.2, away), 0), { y: 2.3 }), 1.08);
+        if (t < back) walk(helper, [[home.x, home.z], [shelfP.x, shelfP.z]], t, go, leg, Math.PI + FACE);
+        else walk(helper, [[shelfP.x, shelfP.z], [home.x, home.z]], t, back, leg, FACE);
+        const dp = at(-2.6, 1.3), sp = at(2.2, -2.2);
+        if (t < grab + 0.2) page.position.set(sp.x, 1.48, sp.z);
+        else if (t < home2) page.position.set(helper.position.x, 1.0, helper.position.z);
+        else page.position.set(dp.x, 0.86, dp.z);
+        page.rotation.y = FACE;
+        pose(asker, t >= ans + 0.15 ? "cheer" : "idle", prog(t, ans + 0.15, 0.4), t * 6);
+        const ap = at(-3.9, 1.7), sh = at(2.2, -2.4);
+        if (d.asker) tag(ctx, cam, { x: ap.x, y: 2.15, z: ap.z }, d.asker, Object.assign({ alpha: out(prog(t, 0.2, 0.3)) * (1 - prog(t, ans - 0.1, 0.1)), size: 28 }, DARK));
+        if (d.shelf) tag(ctx, cam, { x: sh.x, y: 3.0, z: sh.z }, d.shelf, { alpha: out(prog(t, t1, 0.3)), size: 30 });
+        if (d.answer) tag(ctx, cam, { x: ap.x, y: 2.3, z: ap.z }, d.answer, Object.assign({ alpha: out(prog(t, ans, 0.2)), scale: lerp(0.6, 1, pop(t, ans)), size: 34 }, GREEN));
+      },
+    };
+  };
+
+  // focus: a row of words; one of them looks back at the others, with a beam to each as thick
+  // as the attention it pays -- attention, what a model weighs. data: {words, focus, strongest}
+  PIECES.focus = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const words = (d.words || []).slice(0, 6), n = words.length;
+    const f = clamp(d.focus == null ? n - 1 : d.focus, 0, n - 1);
+    let s = clamp(d.strongest == null ? 0 : d.strongest, 0, n - 1); if (s === f) s = f ? 0 : 1;
+    const gap = n > 5 ? 1.75 : n > 4 ? 1.95 : 2.2, sx = (i) => (i - (n - 1) / 2) * gap;
+    const tiles = words.map((w) => {
+      const g = new T3.Group(); g.rotation.y = FACE;
+      const face = sign(w, gap * 0.84, 0.8, 0.5); face.position.z = 0; g.add(face); g.add(blob(0.9)); scene.add(g); return g;
+    });
+    const weight = (i) => (i === s ? 1 : 0.1 + 0.32 * hash(i, 31));
+    const COOL = glow(0x8e9bb8), HOT = glow(C.gold);
+    const beams = words.map((_, i) => {
+      if (i === f) return null;
+      const a = at(sx(f), 0), b = at(sx(i), 0);
+      const mid = new T3.Vector3((a.x + b.x) / 2, 2.1 + Math.abs(i - f) * 0.42, (a.z + b.z) / 2);
+      // from the top of the (raised) looking word to the top of the other
+      const curve = new T3.QuadraticBezierCurve3(new T3.Vector3(a.x, 1.42, a.z), mid, new T3.Vector3(b.x, 0.98, b.z));
+      const m = new T3.Mesh(new T3.TubeGeometry(curve, 40, 0.025 + 0.11 * weight(i), 8, false), COOL); scene.add(m); return m;
+    });
+    return {
+      draw(t, ctx) {
+        aim(cam, Object.assign(at(0, 0.2), { y: 1.9 }), n > 4 ? 1.02 : 1.12);
+        tiles.forEach((g, i) => {
+          const k = out(prog(t, 0.1 + i * 0.08, 0.35));
+          const lift = i === f ? 0.35 * ease(prog(t, t1, 0.4)) : i === s ? 0.25 * back(prog(t, t2 + 0.3, 0.4)) : 0;
+          put(g, sx(i), 0, (1 - k) * 2 + lift); g.visible = k > 0;
+        });
+        beams.forEach((b, i) => {
+          if (!b) return;
+          const k = ease(prog(t, t1 + 0.35 + Math.abs(i - f) * 0.12, 0.6));
+          b.geometry.setDrawRange(0, Math.floor((b.geometry.index.count / 6) * k) * 6);
+          b.visible = k > 0;
+          b.material = t > t2 + 0.3 && i === s ? HOT : COOL;
+        });
+        const fp = at(sx(f), 0), sp = at(sx(s), 0);
+        if (d.label) tag(ctx, cam, { x: fp.x, y: 2.75, z: fp.z }, d.label, Object.assign({ alpha: out(prog(t, t1 + 0.2, 0.3)), size: 28 }, DARK));
+        if (d.strong) tag(ctx, cam, { x: sp.x, y: 2.35, z: sp.z }, d.strong, Object.assign({ alpha: out(prog(t, t2 + 0.5, 0.2)), scale: lerp(0.6, 1, pop(t, t2 + 0.5)), size: 26 }, GREEN));
+      },
+    };
+  };
+
+  // slice: one whole thing is cut into labelled pieces that slide apart -- a sentence into
+  // tokens, a document into chunks, a budget into its parts. data: {whole, parts: [label, ...]}
+  PIECES.slice = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const parts = (d.parts || []).slice(0, 6), n = parts.length;
+    const sizes = parts.map((p) => 0.8 + Math.min(10, p.length) * 0.12), raw = sizes.reduce((a, b) => a + b, 0);
+    const k0 = Math.min(1, 8.4 / raw), W = raw * k0;
+    const tones = [C.accent, 0x60a5fa, 0x93c5fd, 0x2563eb, 0x38bdf8, 0x1d4ed8];
+    let acc = -W / 2;
+    const blocks = parts.map((_, i) => {
+      const w = sizes[i] * k0, cx = acc + w / 2; acc += w;
+      const g = new T3.Group(); g.rotation.y = ACROSS;
+      const b = mesh(new T3.BoxGeometry(w - 0.02, 0.9, 1.3), tones[i % tones.length], 0.55); b.position.y = 0.45; g.add(b); scene.add(g);
+      return { g, cx, w };
+    });
+    const cuts = blocks.slice(1).map((bk) => { const c = new T3.Mesh(new T3.BoxGeometry(0.06, 1.05, 1.42), glow(0xffffff)); c.rotation.y = ACROSS; scene.add(c); return { c, x: bk.cx - bk.w / 2 }; });
+    const cutAt = (i) => lerp(t1 + 0.4, Math.max(t1 + 0.6, t2 - 0.15), n > 2 ? i / (n - 2) : 0);
+    const spread = (i) => (i - (n - 1) / 2) * 0.42;
+    return {
+      draw(t, ctx) {
+        aim(cam, Object.assign(at(0, 0.3), { y: 1.9 }), W > 7 ? 1.12 : 1.28);
+        const drop = out(prog(t, 0.05, 0.45)), apart = ease(prog(t, t2, 0.6));
+        blocks.forEach((bk, i) => {
+          const hop = Math.max(0, Math.sin(clamp((t - t2 - 0.1 - i * 0.08) / 0.4, 0, 1) * Math.PI)) * 0.4;
+          put(bk.g, bk.cx + spread(i) * apart, 0, (1 - drop) * 3 + hop);
+        });
+        cuts.forEach((c, i) => { const k = prog(t, cutAt(i), 0.25); c.c.visible = k > 0 && apart < 0.3; put(c.c, c.x, 0, 0.52 + (1 - out(k)) * 1.6); });
+        if (d.whole) { const p = at(0, 0); tag(ctx, cam, { x: p.x, y: 2.1, z: p.z }, d.whole, Object.assign({ alpha: out(prog(t, 0.3, 0.3)) * (1 - prog(t, t2, 0.25)), size: 32 }, DARK)); }
+        blocks.forEach((bk, i) => {
+          const p = at(bk.cx + spread(i), 0), a = t2 + 0.3 + i * 0.1;
+          tag(ctx, cam, { x: p.x, y: 1.55 + (i % 2) * 0.55, z: p.z }, parts[i], Object.assign({ alpha: out(prog(t, a, 0.2)), scale: lerp(0.6, 1, pop(t, a)), size: 30 }, DARK));
+        });
+      },
+    };
+  };
+
+  // window: things pass under a frame that only holds a few at a time; the oldest fall off the
+  // end and are gone -- a context window, short-term memory, a queue. data: {window, size, item, dropped}
+  PIECES.window = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const size = clamp(d.size || 4, 2, 6), slot = 1.05, fw = size * slot;
+    const a = -fw / 2, b = fw / 2, u0 = a - 3.4;
+    const belt = mesh(new T3.BoxGeometry(fw + 4.8, 0.12, 1.0), 0x1f2740, 0.8); put(belt, -1.7, 0, 0.06); belt.rotation.y = ACROSS; scene.add(belt);
+    const frame = new T3.Group(); frame.rotation.y = ACROSS; scene.add(frame);
+    const bar = (w, h, x, y) => [0.62, -0.62].forEach((z) => { const m = new T3.Mesh(new T3.BoxGeometry(w, h, 0.1), glow(C.accent)); m.position.set(x, y, z); frame.add(m); });
+    bar(fw + 0.2, 0.1, 0, 1.6); bar(0.1, 1.6, a - 0.05, 0.8); bar(0.1, 1.6, b + 0.05, 0.8);
+    // the first card reaches the far edge of the frame on the turn
+    const speed = (b + 0.7 - u0) / Math.max(0.8, t2 - t1);
+    const spawns = spawnTimes(t1, end, slot / speed, 30);
+    const cards = spawns.map(() => { const c = item(d.item || "documents"); scene.add(c); return c; });
+    return {
+      draw(t, ctx) {
+        aim(cam, Object.assign(at(0.3, 0.4), { y: 2.0 }), 1.08);
+        let gone = 0;
+        cards.forEach((c, i) => {
+          const u = u0 + (t - spawns[i]) * speed, over = u - (b + 0.7);
+          c.visible = t >= spawns[i];
+          if (over > 0) { gone++; put(c, b + 0.7 + over * 0.4, 0, 0.12 - over * over * 1.4); c.rotation.z = -over * 1.5; c.visible = c.visible && over < 1.6; }
+          else { put(c, u, 0, 0.12); c.rotation.z = 0; }
+          c.rotation.y = FACE;
+          c.scale.setScalar(u >= a && u <= b ? 1.2 : 0.95);
+        });
+        const p = at(0, 0);
+        if (d.window) tag(ctx, cam, { x: p.x, y: 2.3, z: p.z }, d.window, Object.assign({ alpha: out(prog(t, 0.2, 0.3)), size: 30 }, DARK));
+        if (d.dropped && gone > 0) { const q = at(b + 1.4, 0.2); tag(ctx, cam, { x: q.x, y: 1.3, z: q.z }, d.dropped, Object.assign({ alpha: out(prog(t, t2 + 0.2, 0.2)), scale: lerp(0.6, 1, pop(t, t2 + 0.2)), size: 30 }, RED)); }
+      },
+    };
+  };
+
+  // target: someone throws at a target; the first throws scatter, and after the feedback (the
+  // turn) each lands closer to the centre -- training, practice, learning from mistakes.
+  // data: {thrower, target, result}
+  PIECES.target = (d, cue, end) => {
+    const { scene, cam } = stage();
+    const { t1, t2 } = beats(cue, end);
+    const thrower = put(KIT.person({ color: C.accent }), -3.4, 1.6); scene.add(thrower);
+    const board = new T3.Group(); put(board, 2.9, -1.3); scene.add(board);
+    const face = new T3.Group(); face.position.y = 1.5; board.add(face);
+    [[1.1, C.white], [0.85, C.red], [0.6, C.white], [0.35, C.red], [0.13, C.gold]].forEach(([r, c], i) => {
+      const ring = mesh(new T3.CylinderGeometry(r, r, 0.08 + i * 0.02, 32), c, 0.6); ring.rotation.x = Math.PI / 2; face.add(ring);
+    });
+    const leg = mesh(new T3.BoxGeometry(0.14, 1.5, 0.14), C.dark); leg.position.y = 0.75; board.add(leg); board.add(blob(0.8));
+    const tp = thrower.position, bp = board.position;
+    board.rotation.y = Math.atan2(tp.x - bp.x, tp.z - bp.z);
+    thrower.rotation.y = Math.atan2(bp.x - tp.x, bp.z - tp.z);
+    scene.updateMatrixWorld(true);
+    const shots = spawnTimes(t1, end - 0.9, 0.48, 12);
+    const after = shots.filter((x) => x >= t2);
+    const err = (i) => (shots[i] < t2 ? 0.7 + 0.35 * hash(i, 41) : Math.max(0.04, 0.6 * Math.pow(0.55, after.indexOf(shots[i]) + 1)));
+    const landing = shots.map((_, i) => { const a = hash(i, 42) * Math.PI * 2, r = err(i); const v = new T3.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0.14); face.localToWorld(v); scene.worldToLocal(v); return v; });
+    const darts = shots.map(() => { const m = new T3.Mesh(new T3.SphereGeometry(0.09, 10, 8), glow(C.accent)); scene.add(m); return m; });
+    return {
+      draw(t, ctx) {
+        aim(cam, Object.assign(at(-0.1, 0.1), { y: 2.1 }), 1.1);
+        let last = -1;
+        darts.forEach((m, i) => {
+          const f = prog(t, shots[i], 0.4), L = landing[i];
+          m.visible = t >= shots[i];
+          m.position.set(lerp(tp.x, L.x, f), lerp(1.3, L.y, f) + Math.sin(f * Math.PI) * 0.8, lerp(tp.z, L.z, f));
+          if (t >= shots[i]) last = i;
+        });
+        const won = t > end - 0.8, throwing = last >= 0 && t - shots[last] < 0.25;
+        pose(thrower, won ? "cheer" : throwing ? "point" : "idle", won ? prog(t, end - 0.8, 0.3) : 1, t * 6);
+        if (d.thrower) { const p = at(-3.4, 1.6); tag(ctx, cam, { x: p.x, y: 2.15, z: p.z }, d.thrower, Object.assign({ alpha: out(prog(t, 0.2, 0.3)), size: 28 }, DARK)); }
+        if (d.target) { const p = at(2.9, -1.3); tag(ctx, cam, { x: p.x, y: 3.1, z: p.z }, d.target, { alpha: out(prog(t, 0.35, 0.3)), size: 30 }); }
+        if (d.result) { const p = at(2.9, -0.2); tag(ctx, cam, { x: p.x, y: 0.4, z: p.z }, d.result, Object.assign({ alpha: out(prog(t, t2 + 1.2, 0.2)), scale: lerp(0.6, 1, pop(t, t2 + 1.2)), size: 30 }, GREEN)); }
+      },
+    };
+  };
+
+  // -- the world builder ---------------------------------------------------------------
+  // Stations sit along a path that turns now and then, so the glides between them run across
+  // the screen and diagonally, never always the same way. In screen units (right, down).
+  const STEPS = [[16, 0], [12, 9], [16, 0], [12, -9]];
+  const spotFor = (k) => {
+    let sx = 0, sy = 0;
+    for (let j = 0; j < k; j++) { sx += STEPS[j % STEPS.length][0]; sy += STEPS[j % STEPS.length][1]; }
+    return at(sx, sy);
+  };
+  const GLIDE = 0.95; // seconds the camera takes to fly from one station to the next
+  const stations = [];
+  let world = null;
+
+  function master() {
+    if (world) return world;
+    const scene = new T3.Scene();
+    scene.add(new T3.HemisphereLight(0xdfe8ff, 0x1a2036, 0.75));
+    const key = new T3.DirectionalLight(0xfff1dc, 1.05); key.position.set(6, 11, 7); scene.add(key);
+    const rim = new T3.DirectionalLight(new T3.Color(DECK.accent || "#3B82F6"), 0.55); rim.position.set(-8, 5, -7); scene.add(rim);
+    // the floor's colour is lit up about fourfold by the clay light: this reads as brand navy
+    const floor = mesh(new T3.PlaneGeometry(900, 900), 0x080b15, 0.95); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+    const grid = new T3.GridHelper(900, 900, 0x1a2238, 0x1a2238); grid.position.y = 0.01; scene.add(grid);
+    const PPU = 88; // pixels per world unit at zoom 1: about 12 units across the frame
+    const cam = new T3.OrthographicCamera(-W / 2 / PPU, W / 2 / PPU, H / 2 / PPU, -H / 2 / PPU, 0.1, 200);
+    world = { scene, cam, ctx: null };
+    return world;
+  }
+
+  // Add a world beat's set piece as the next station. `host` is the scene's content element,
+  // `s` the slide spec (data.piece + its fields), `c` its timing. False if it can't be drawn.
+  function station(host, s, c) {
     const d = s.data || {};
     const make = PIECES[d.piece];
     if (!make) return false;
-    try { gl(); } catch (e) { // no WebGL in this browser: the scene falls back to its title
+    try { if (!renderer) H = document.getElementById("scenes").offsetHeight; gl(); } catch (e) { // no WebGL: the title alone says it
       console.warn("world: WebGL unavailable", e);
       return false;
     }
-    // The world fills the whole scene window behind the scene's title (a sibling of the
-    // content, so the content's punch-ins don't scale it; it has its own camera).
-    const win = document.getElementById("scenes");
-    if (!renderer) H = win.offsetHeight;
-    const box = el("div", "world", null);
-    host.parentElement.insertBefore(box, host);
-    host.parentElement.classList.add("has-world");
-    box.setAttribute("data-layout-allow-overflow", ""); box.setAttribute("data-layout-allow-overlap", "");
-    box.style.height = H + "px";
-    const cv = el("canvas", null, null, box); cv.width = W; cv.height = H;
-    const ctx = cv.getContext("2d");
+    const W0 = master();
+    const off = spotFor(stations.length);
+    const group = new T3.Group(); group.position.set(off.x, 0, off.z); W0.scene.add(group);
+    const cam = { off, state: null, labels: [] };
     const n = parts(s).length;
     const cue = (j) => (j < n ? partAt(s, c, j) - c.t0 : null);
     const end = latest(c) - c.t0;
-    const piece = make(d, cue, end);
-    console.log("world: " + d.piece + " scene built (WebGL " + gl().capabilities.isWebGL2 + ")");
-    const clock = { t: 0 };
-    piece.draw(0, ctx);
-    tl.fromTo(clock, { t: 0 }, { t: c.dur, duration: c.dur, ease: "none", onUpdate: () => piece.draw(clock.t, ctx) }, c.t0);
-    tl.fromTo(box, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, c.t0);
+    ST = { group, cam };
+    let piece;
+    try { piece = make(d, cue, end); } finally { ST = null; }
+    piece.draw(0, null);
+    stations.push({ piece, cam, t0: c.t0, dur: c.dur });
+    host.parentElement.classList.add("has-world");
+    console.log("world: " + d.piece + " station " + stations.length + " built");
     return true;
   }
 
-  return { build, pieces: Object.keys(PIECES) };
+  // One frame of the whole world at reel time T: every station in its state at T (clamped to
+  // its own beat, so places visited keep their ending), the camera on the current station --
+  // flying over from the last one as a beat begins -- and the current station's labels.
+  function frame(T) {
+    const W0 = world;
+    stations.forEach((st) => { st.cam.labels = []; st.piece.draw(clamp(T - st.t0, 0, st.dur), null); });
+    let i = 0;
+    while (i + 1 < stations.length && stations[i + 1].t0 - 0.1 <= T) i++;
+    const cur = stations[i], prev = i ? stations[i - 1] : null;
+    const w = prev ? ease(prog(T, cur.t0 - 0.1, GLIDE)) : 1;
+    const A = cur.cam.state;
+    let cs = Object.assign({}, A);
+    if (prev && w < 1) {
+      const P = prev.cam.state;
+      cs = { x: lerp(P.x, A.x, w), y: lerp(P.y, A.y, w), z: lerp(P.z, A.z, w), yaw: A.yaw,
+        zoom: lerp(P.zoom, A.zoom, w) * (1 - 0.22 * Math.sin(w * Math.PI)) }; // a lift as it flies
+    }
+    // past the last beat that is a station (a question, a receipt, the recap), drift back slowly
+    const over = T - (cur.t0 + cur.dur);
+    if (over > 0) cs.zoom *= lerp(1, 0.8, ease(clamp(over / 6, 0, 1)));
+    point(W0.cam, cs);
+    const r = gl();
+    r.render(W0.scene, W0.cam);
+    const ctx = W0.ctx;
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(r.domElement, 0, 0);
+    const show = (st, fade) => st.cam.labels.forEach(([pos, text, o]) => drawTag(ctx, W0.cam, pos, text, o, fade));
+    if (prev && w < 1) show(prev, 1 - prog(T, cur.t0 - 0.1, 0.25));
+    show(cur, (prev ? out(prog(T, cur.t0 + 0.3, 0.3)) : 1) * (1 - prog(T, cur.t0 + cur.dur - 0.05, 0.25)));
+  }
+
+  // After every scene is built: the world's canvas goes in behind the scene window (outside the
+  // scenes, so their transitions and punch-ins never move it) and runs on the reel's clock.
+  function start(total) {
+    if (!stations.length) return null;
+    const win = document.getElementById("scenes");
+    const box = el("div", "world", null);
+    win.parentElement.insertBefore(box, win);
+    box.setAttribute("data-layout-allow-overflow", ""); box.setAttribute("data-layout-allow-overlap", "");
+    box.style.top = win.offsetTop + "px"; box.style.height = H + "px";
+    const cv = el("canvas", null, null, box); cv.width = W; cv.height = H;
+    world.ctx = cv.getContext("2d");
+    const clock = { t: 0 };
+    frame(0);
+    tl.fromTo(clock, { t: 0 }, { t: total, duration: total, ease: "none", onUpdate: () => frame(clock.t) }, 0);
+    return box;
+  }
+
+  return { station, start, pieces: Object.keys(PIECES) };
 };
