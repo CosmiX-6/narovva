@@ -1,0 +1,68 @@
+name: Story writer trial
+
+# Runs the real story writer on live material -- one lesson of the channel's series and the
+# freshest story of one news genre -- and renders both as animated reels, so a change to the
+# writer can be judged on what the model actually writes. Nothing is posted, uploaded or
+# marked as seen. Costs about four text-model calls (free-tier Gemini first, per llm_chain).
+on:
+  workflow_dispatch:
+    inputs:
+      lesson:
+        description: "Lesson id from config/lessons/<series>.yaml (blank = the first)"
+        required: false
+        default: ""
+      genre:
+        description: "News genre to try (or 'none')"
+        required: false
+        default: "health"
+  push:
+    branches: ["claude/**"]
+    paths:
+      - "src/narovva/motion/storyboard.py"
+      - "src/narovva/motion/trial.py"
+      - "src/narovva/lessons.py"
+      - "config/lessons/**"
+      - ".github/workflows/story-trial.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install .
+          npm ci --no-audit --no-fund
+          npx hyperframes telemetry disable
+          npx hyperframes browser ensure
+
+      - name: Write and render
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          LESSON: ${{ inputs.lesson }}
+          GENRE: ${{ inputs.genre || 'health' }}
+        run: python -m narovva.motion.trial trial-out ${LESSON:+--lesson "$LESSON"} --genre "$GENRE"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: story-trial
+          path: trial-out/
+          retention-days: 7

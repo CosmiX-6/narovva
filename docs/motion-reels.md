@@ -8,15 +8,60 @@ the plain `reel` format (a slideshow of the still images), so nothing is skipped
 - Needs Node 22+, FFmpeg, `npm ci` at the repository root (pins `hyperframes` in
   `package.json`), and once `npx hyperframes browser ensure` (Chrome Headless Shell).
   `HYPERFRAMES_BIN` overrides the CLI location.
-- `python -m narovva.motion out.mp4` renders a sample Reel covering every scene.
+- `python -m narovva.motion out.mp4` renders the sample Reel (`--lesson`: the sample lesson,
+  `--worlds`: every 3D set piece in turn).
 - Templates live in `src/narovva/motion/templates/reel/`. GSAP, the Lucide icons and
   the Archivo Black / Inter / JetBrains Mono fonts are vendored, so renders need no CDN.
 - Everything on screen is a pure function of timeline time (no clocks, no unseeded
   randomness), because HyperFrames renders by seeking to frames in any order.
 
+## The animated story
+
+By default (`motion.story.mode: animated`) the whole Reel is one continuous 3D
+animation. One LLM call (`narovva.motion.storyboard`) picks ONE everyday metaphor for
+the story and writes it as beats, nearly all of them moments of a small world where
+characters and objects act out what the voice says (the set pieces below). Every world
+beat is a station of the same world: the camera flies from one station to the next as
+the story moves on, and the places already visited keep their final state. Figures
+appear as labels in the world, and only figures the source states.
+
+Between world beats the writer may use only a viewer question (`ask`), one receipt
+(`source`, over the blurred world), a `recap` before the end, and the end card. A reply
+with fewer than three world beats does not validate, and the Reel falls back to
+`slides`. Lessons (below) are always animated.
+
+## Lessons
+
+A genre with `series:` set teaches a lesson series instead of posting news:
+
+```yaml
+genres:
+  - genre: lessons
+    series: how-ai-works      # config/lessons/how-ai-works.yaml
+```
+
+Each time the genre comes up in the rotation it posts the series' next lesson not yet
+posted (the dedup store remembers them, as it remembers articles). A lesson has a
+title, the hook it opens on (the everyday puzzle it answers), an optional metaphor the
+writer may use, and a reference page. A Wikipedia reference is read as plain text
+through Wikipedia's API (a `#Section` anchor puts that section first), and every claim
+and figure is checked against it the way a news post is checked against its article.
+The caption credits the page (CC BY-SA). The lesson arc: hook, the metaphor, how it
+works step by step, a worked example, the catch, the takeaway, then "save this and
+follow".
+
+`config/lessons/how-ai-works.yaml` has 60 lessons, from tokens and attention to RAG,
+fine-tuning and diffusion. Check new references with
+`python -m narovva.lessons check how-ai-works`.
+
+To see what the model actually writes, run the **Story writer trial** workflow (or
+`python -m narovva.motion.trial out/` with the text-model keys set). It writes and
+renders one lesson and the freshest story of a news genre, keeping the model's raw
+reply and what survived validation. Nothing is posted.
+
 ## The explainer storyboard
 
-By default (`motion.story.mode: storyboard`) one LLM call
+With `motion.story.mode: storyboard` one LLM call
 (`narovva.motion.storyboard`) writes an explainer for video from the brief and the
 article text, as 5–14 beats: hook, context, what happened, fallout, verdict, call to
 follow. Each beat is one or two spoken lines plus the scene that shows them,
@@ -60,8 +105,8 @@ The scenes:
 
 ### The story world
 
-`world` scenes (`templates/reel/world.js`, three.js) are small 3D dioramas on the
-reel's navy ground, seen from an isometric camera. Characters (with arms that swing,
+`world` scenes (`templates/reel/world.js`, three.js) are stations of one 3D world on the
+reel's navy ground, seen from an isometric camera that glides between them. Characters (with arms that swing,
 cheer and slump) and objects are built from primitives in code, so there is nothing
 to license, and every frame is a pure function of time. Line 1 of the beat sets the
 scene up and line 2 is the turn. The writer picks a set piece and writes its labels
@@ -77,10 +122,23 @@ scene up and line 2 is the turn. The writer picks a set piece and writes its lab
 | `machine` | inputs ride a belt into a machine and come out as something else |
 | `wall` | traffic crosses between two places, then a wall goes up and stops it |
 | `balance` | two sides on a scale; it tips to the heavier one |
+| `steps` | a parcel passes through 2-4 labelled stations that light up in turn (how something works, a pipeline) |
+| `sort` | a sorter sends each arriving item into one of 2-3 bins (a filter, a classifier, triage, a router) |
+| `cluster` | scattered things gather with their own kind; a newcomer lands beside the most similar (embeddings, search) |
+| `hill` | a walker steps down a valley, the steps shrinking near the bottom (gradient descent, trial and error) |
+| `fetch` | a helper runs to the shelves for the right page before the answer (retrieval, RAG, looking it up) |
+| `focus` | a row of words; one looks back at the others, a beam to each as thick as its attention (attention) |
+| `slice` | one thing is cut into pieces that slide apart (tokens, chunks, a budget's parts) |
+| `window` | things pass under a frame that holds only a few; the oldest fall off (a context window, memory) |
+| `target` | throws scatter, then land closer once there is feedback (training, practice) |
 
-One WebGL context serves every world scene. Without WebGL a world scene shows its
-title alone. Preview them all with
-`python -m narovva.motion.preview out/ --story worlds`.
+Items that travel, pile up or get sorted: money, goods, data, people, oil, chips,
+documents, pills, tokens.
+
+The world is drawn once a frame into one canvas behind the scene window: full strength
+on world beats, faint and blurred behind a question or a receipt, faint behind the recap
+and the end card, hidden behind other scene types. Without WebGL a world beat shows its
+title alone. Preview every piece with `python -m narovva.motion.preview out/ --story worlds`.
 | `cta` | the end card: logo, handle, follow button |
 
 The reply is checked before use: unknown scenes and malformed data are dropped,
@@ -132,8 +190,8 @@ survive, the Reel falls back to `slides` mode (the carousel slides, re-animated)
 `motion:` in the channel YAML (schema `MotionStyleConfig`; every option is commented
 in `config/channels/example-tech-ig.yaml`) sets:
 
-- `story`: mode (`storyboard` | `slides`), `max_beats`, `target_seconds`, `flood`,
-  `viewer_questions`
+- `story`: mode (`animated` | `storyboard` | `slides`), `max_beats`, `target_seconds`,
+  `flood`, `viewer_questions`
 - `hud`: header style (`chapter`: the current chapter in a chip at the top over one
   dash per chapter; `case_file`, `breakdown`, `brand`, `none`), a custom `label`
   (`{subject}`, `{category}`, `{brand}`, `{date}`), timecode or date, the rec dot
