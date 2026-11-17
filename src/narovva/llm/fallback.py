@@ -178,6 +178,20 @@ def _split(spec: str) -> tuple[str, str | None]:
     return provider.strip().lower(), (model.strip() or None)
 
 
+def _beta_for_aliases(client, key: str) -> None:
+    """Google serves the moving model aliases ("gemini-flash-latest") only on its v1beta API,
+    while newer google-genai SDKs call v1, where the alias answers 404 and the chain skipped
+    its best model. Point an alias's client at v1beta (pinned model ids stay as they are)."""
+    if not str(getattr(client, "model", "")).endswith("-latest"):
+        return
+    try:
+        from google import genai
+
+        client._client = genai.Client(api_key=key, http_options={"api_version": "v1beta"})
+    except Exception as exc:  # an older SDK without http_options: leave the default
+        logger.warning("llm chain: could not select v1beta for %s (%s)", client.model, exc)
+
+
 def build_llm_chain(specs: list[str], keys: dict[str, str | None]) -> FallbackLLM:
     """Build the chain from "provider[:model]" strings. Entries whose provider
     has no API key are left out (logged), so a missing OPENROUTER_API_KEY just
@@ -192,6 +206,7 @@ def build_llm_chain(specs: list[str], keys: dict[str, str | None]) -> FallbackLL
         try:
             if provider == "gemini":
                 client = GeminiChat(model=model, api_key=key) if model else GeminiChat(api_key=key)
+                _beta_for_aliases(client, key)
             elif provider == "openai":
                 client = OpenAIChat(model=model, api_key=key) if model else OpenAIChat(api_key=key)
             elif provider == "openrouter":

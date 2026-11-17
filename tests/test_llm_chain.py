@@ -158,3 +158,19 @@ def test_run_stops_without_burning_attempts_when_no_text_model_is_left(monkeypat
                             genres=[GenreSetting(genre="tech", limit=5)], brand=BrandKitConfig(name="T"))
     result = rc.run_channel(channel)
     assert len(calls) == 1 and result.failed == 1 and result.posted == 0
+
+
+def test_a_moving_gemini_alias_is_called_on_v1beta():
+    pytest.importorskip("google.genai")
+    from narovva.llm.fallback import _beta_for_aliases
+
+    class _Client:
+        model, _client = "gemini-flash-latest", None
+
+    alias = _Client()
+    _beta_for_aliases(alias, "dummy-key")
+    assert alias._client._api_client._http_options.api_version == "v1beta"
+    pinned = _Client()
+    pinned.model = "gemini-3.5-flash-lite"
+    _beta_for_aliases(pinned, "dummy-key")
+    assert pinned._client is None  # pinned ids keep the SDK's default

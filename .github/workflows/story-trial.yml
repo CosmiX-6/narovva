@@ -22,6 +22,7 @@ on:
       - "src/narovva/motion/storyboard.py"
       - "src/narovva/motion/trial.py"
       - "src/narovva/lessons.py"
+      - "src/narovva/llm/**"
       - "config/lessons/**"
       - ".github/workflows/story-trial.yml"
 
