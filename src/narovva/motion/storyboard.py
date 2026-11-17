@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 from ..narration.script import auto_mark, caption_text, clean_stamp, clean_subject, numbers_in, phrase_in, speakable
@@ -241,10 +242,21 @@ def _system_animated(brand: str, max_beats: int, target_seconds: int, max_asks: 
         + asks + truth
         + 'SCENES -- "world": {"piece": ..., "title": ..., the piece\'s fields}. The pieces:\n' + _WORLD_PIECES
         + _ANIMATED_EXTRAS + "\n\n"
+        "RESPECT: never act out deaths, injuries, victims or other harm to people in the world -- no piles, "
+        "counts, races or crowds of people who were hurt, nothing anyone could read as celebrating. Say those "
+        "facts in the spoken lines over a calm world beat about the system, the cause or the response, or with "
+        "the \"source\" receipt.\n"
+        "FIELDS: every scene's fields go INSIDE \"data\". Write figures as strings, exactly as the source writes "
+        "them (\"2.6 million\", \"$5\", \"67%\"), never as bare numbers. An item is one of the listed items.\n\n"
         'Respond as JSON: {"subject": "what the video is about in 1-3 words", '
         '"beats": [{"scene": "...", "lines": ["spoken line", ...], "screen": ["each line as the caption reads '
         'it: digits for numbers, AI not A I", ...], "mark": ["1-3 words of each caption to highlight", ...], '
-        '"kicker": "...", "data": {...}}, ...]}'
+        '"kicker": "...", "data": {...}}, ...]}\n'
+        'For example: {"scene": "world", "kicker": "THE IDEA", "lines": ["Think of the model as a reader of '
+        'Lego bricks.", "It never sees the letters."], "screen": [...], "mark": ["Lego bricks", "letters"], '
+        '"data": {"piece": "slice", "title": "It reads in bricks", "mark": "bricks", "whole": "strawberry", '
+        '"parts": ["str", "aw", "berry"]}} and {"scene": "ask", "lines": ["Wait, so it never sees letters?"], '
+        '"screen": ["Wait, so it never sees letters?"], "data": {"text": "Wait, so it never sees letters?"}}'
     )
 
 
@@ -669,6 +681,32 @@ def _cta_beat(brand: str, line: str | None = None) -> dict:
             "lines": [line], "screens": [line], "cmarks": [brand.title()]}
 
 
+# The fields every beat has; anything else at the top level of a beat belongs to its scene.
+_BEAT_KEYS = {"scene", "lines", "screen", "mark", "kicker", "data", "stamp", "voice"}
+
+
+def _beat_data(beat: dict) -> dict:
+    """The scene's data: the beat's "data" object, or -- as models often write it -- the
+    scene's fields placed beside lines/screen at the top level of the beat."""
+    data = beat.get("data")
+    if isinstance(data, dict) and data:
+        return data
+    return {k: v for k, v in beat.items() if k not in _BEAT_KEYS}
+
+
+_GRIM = re.compile(
+    r"\b(deaths?|dead|died|dies|dying|kill(s|ed|ing)?|fatal(ity|ities)?|victims?|casualt(y|ies)|murder\w*|"
+    r"suicides?|wounded|injur(y|ies|ed)|massacre|shooting|overdoses?)\b", re.I)
+
+
+def _grim(lines: list[str], data: dict) -> bool:
+    """The beat is about people harmed or killed. The world's figures cheer, slump, race and
+    pile up, so such a beat is never a world beat (the story tells it with words instead)."""
+    texts = list(lines) + [str(v) for v in data.values() if isinstance(v, str)]
+    texts += [str(x) for v in data.values() if isinstance(v, list) for x in v]
+    return any(_GRIM.search(t) for t in texts)
+
+
 def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_stamps: int,
                      max_asks: int = 2, animated: bool = False, cta: str | None = None) -> Storyboard | None:
     """Validate a model reply into a Storyboard, or None if too little survives.
@@ -683,10 +721,14 @@ def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_sta
             continue
         scene = str(b.get("scene") or "").strip().lower()
         builder = _SCENES.get(scene)
-        data = b.get("data") if isinstance(b.get("data"), dict) else {}
+        data = _beat_data(b)
+        if scene == "ask" and not b.get("lines") and isinstance(data.get("text"), str):
+            b = dict(b, lines=[data["text"]], screen=[data["text"]])  # the question given only as its text
         lines, screens, cmarks = _lines(b, src)
         if builder is None or not lines or (animated and scene not in ANIMATED_SCENES):
             continue
+        if scene == "world" and _grim(lines, data):
+            continue  # harm is never acted out by figures and objects
         if scene == "ask":  # the viewer's question is the beat's one line, on screen as said
             lines, screens, cmarks = lines[:1], screens[:1], cmarks[:1]
             data = {"text": screens[0]}

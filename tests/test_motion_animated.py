@@ -171,3 +171,27 @@ def test_every_teaching_piece_is_in_the_prompt_and_the_engine(piece):
     from narovva.motion.storyboard import _PIECES, _WORLD_PIECES
     engine = (Path(__file__).parents[1] / "src/narovva/motion/templates/reel/world.js").read_text(encoding="utf-8")
     assert piece in _PIECES and f'"piece": "{piece}"' in _WORLD_PIECES and f"PIECES.{piece} = " in engine
+
+
+def test_scene_fields_written_beside_the_lines_are_understood():
+    raw = copy.deepcopy(SAMPLE_ANIMATED)
+    flat = []
+    for b in raw["beats"]:
+        b = dict(b, **b.pop("data"))           # every field at the top level, as models often write it
+        if b["scene"] == "ask":
+            b.pop("lines"), b.pop("screen")    # and the question given only as its text
+            b["text"] = "Wait, why would a leader cut its own price?"
+        flat.append(b)
+    raw["beats"] = flat
+    board = _animated(raw)
+    assert board is not None and [b["scene"] for b in board.beats] == [b["scene"] for b in _animated(SAMPLE_ANIMATED).beats]
+    assert board.beats[0]["data"]["piece"] == "gate"
+
+
+def test_harm_to_people_is_never_acted_out():
+    for line in ("Two more children died this week.", "The death toll rose to five.", "Dozens were injured."):
+        raw = copy.deepcopy(SAMPLE_ANIMATED)
+        raw["beats"][1]["lines"] = [line, "Now it is five."]
+        board = _animated(raw)
+        assert board is None or all(line not in b["lines"] for b in board.beats)
+    assert _world(piece="pile", item="people", label="Victims", start="$15", end="$5") is None
