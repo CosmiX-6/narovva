@@ -356,8 +356,8 @@ def _process_one(
             if channel.publish_format == "motion_reel":
                 video_path, narration_voice = _try_motion_reel(
                     channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
-                    llm=llm, recent_voices=recent_voices, seed=article.content_id, hook=hook,
-                    when=article.published_at, article=article_full,
+                    llm=writer_llm(channel, llm, lesson, llm_cache), recent_voices=recent_voices,
+                    seed=article.content_id, hook=hook, when=article.published_at, article=article_full,
                     trending=genre_setting.genre == "viral", lesson=lesson,
                 )
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
@@ -675,14 +675,36 @@ def _pick_music_track(
     return JamendoMusicClient(client_id).pick_track(tags, exclude_ids=recent_music_ids)
 
 
+def _llm_keys(channel: ChannelConfig) -> dict:
+    creds = channel.credentials
+    return {
+        "gemini": resolve_env(creds.gemini_api_key_env),
+        "openai": resolve_env(creds.openai_api_key_env),
+        "openrouter": resolve_env(creds.openrouter_api_key_env),
+    }
+
+
+def writer_llm(channel: ChannelConfig, llm: LLMClient, lesson=None, llm_cache: dict | None = None) -> LLMClient:
+    """The model chain for the storyboard writer: channel.writer.chain first (for lessons, or
+    every post), then llm_chain as the fallback. Built once per run; `llm` when unset."""
+    w = channel.writer
+    if not w.chain or (w.use_for == "lessons" and lesson is None):
+        return llm
+    if llm_cache is not None and "writer" in llm_cache:
+        return llm_cache["writer"]
+    try:
+        writer = build_llm_chain(list(dict.fromkeys([*w.chain, *(channel.llm_chain or [])])), _llm_keys(channel))
+    except LLMUnavailable as exc:  # no key for any writer model: the normal chain writes
+        logger.warning("channel %s: writer chain unavailable (%s); using llm_chain", channel.id, exc)
+        writer = llm
+    if llm_cache is not None:
+        llm_cache["writer"] = writer
+    return writer
+
+
 def _build_llm(channel: ChannelConfig) -> LLMClient:
     if channel.llm_chain:
-        creds = channel.credentials
-        return build_llm_chain(channel.llm_chain, {
-            "gemini": resolve_env(creds.gemini_api_key_env),
-            "openai": resolve_env(creds.openai_api_key_env),
-            "openrouter": resolve_env(creds.openrouter_api_key_env),
-        })
+        return build_llm_chain(channel.llm_chain, _llm_keys(channel))
     if channel.text_provider == "gemini":
         return GeminiChat(api_key=resolve_env(channel.credentials.gemini_api_key_env))
     return OpenAIChat(api_key=resolve_env(channel.credentials.openai_api_key_env))

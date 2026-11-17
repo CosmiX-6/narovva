@@ -241,10 +241,20 @@ text_provider: gemini
 # misspelled model id (404) is skipped for the run; Google's 404 names the replacement.
 llm_chain:
   - gemini:gemini-flash-latest
+  - gemini:gemini-3.8-flash          # the newest Flash, its own free-tier pool
   - gemini:gemini-3.5-flash-lite
   - openrouter:meta-llama/llama-3.3-70b-instruct:free
   - openrouter:qwen/qwen3-235b-a22b:free
   - openai:gpt-4o-mini
+# A stronger model for the storyboard writer only -- the call that decides how good the video
+# is -- tried before llm_chain (which stays the fallback). Pro models are paid (they need billing
+# on the Google key; without it they are skipped and llm_chain writes):
+#   gemini:gemini-3.1-pro-preview  $2 / $12 per 1M tokens in / out, roughly $0.05-0.15 a storyboard
+# use_for: lessons (only the "How AI works" posts) or all (every post).
+writer:
+  chain: []
+  use_for: lessons
+
 # 'none': poster_core's Gemini image generation uses Imagen, which the Gemini
 # Developer API key can't call (every article lacking a usable image failed).
 # Posts use the article's own image, else the branded text layout.

@@ -174,3 +174,26 @@ def test_a_moving_gemini_alias_is_called_on_v1beta():
     pinned.model = "gemini-3.5-flash-lite"
     _beta_for_aliases(pinned, "dummy-key")
     assert pinned._client is None  # pinned ids keep the SDK's default
+
+
+def test_the_writer_chain_is_used_where_configured(monkeypatch):
+    import sys
+
+    import narovva.orchestration.run_channel  # noqa: F401
+    from narovva.config.schema import BrandKitConfig, ChannelConfig, GenreSetting
+
+    rc = sys.modules["narovva.orchestration.run_channel"]
+    built = []
+    monkeypatch.setattr(rc, "build_llm_chain", lambda specs, keys: built.append(specs) or "WRITER")
+    base = dict(id="c", genres=[GenreSetting(genre="ai")], brand=BrandKitConfig(name="X"),
+                llm_chain=["gemini:gemini-flash-latest"])
+    plain = ChannelConfig(**base)
+    assert rc.writer_llm(plain, "BASE", lesson=object()) == "BASE"                  # no writer chain
+    lessons_only = ChannelConfig(**base, writer={"chain": ["gemini:gemini-3.1-pro-preview"]})
+    assert rc.writer_llm(lessons_only, "BASE", lesson=None) == "BASE"              # a news post
+    cache = {}
+    assert rc.writer_llm(lessons_only, "BASE", lesson=object(), llm_cache=cache) == "WRITER"
+    assert rc.writer_llm(lessons_only, "BASE", lesson=object(), llm_cache=cache) == "WRITER"
+    assert built == [["gemini:gemini-3.1-pro-preview", "gemini:gemini-flash-latest"]]  # once, Pro first
+    every = ChannelConfig(**base, writer={"chain": ["gemini:gemini-3.1-pro-preview"], "use_for": "all"})
+    assert rc.writer_llm(every, "BASE", lesson=None) == "WRITER"

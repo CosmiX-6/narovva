@@ -105,13 +105,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
-    from ..orchestration.run_channel import _build_llm
+    from ..orchestration.run_channel import _build_llm, writer_llm
 
     channel = load_channel(args.channel)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    rec = _Recorder(_build_llm(channel))
+    base = _build_llm(channel)
+    rec = _Recorder(base)
     pipeline = _pipeline(channel, rec)
+    # the storyboard is written by the channel's writer chain where it applies, as in a real post
+    cache: dict = {}
+    lesson_writer = _Recorder(writer_llm(channel, base, lesson=True, llm_cache=cache))
+    news_writer = _Recorder(writer_llm(channel, base, lesson=None, llm_cache=cache))
+    print(f"writer chain: {channel.writer.chain or '(llm_chain)'} for {channel.writer.use_for}")
     brand = channel.brand.name.title() if channel.brand.name.isupper() else channel.brand.name
     story = channel.motion.story
     ok = True
@@ -127,11 +133,11 @@ def main(argv: list[str] | None = None) -> int:
             if lesson is None:
                 sys.exit(f"no lesson {lesson_id!r} in {series_key}")
             article, brief = pipeline.analyze(reference_source(lesson))
-            first = len(rec.replies)
-            board = write_storyboard(rec, brief, article, brand=brand, max_beats=lesson.max_beats,
+            first = len(lesson_writer.replies)
+            board = write_storyboard(lesson_writer, brief, article, brand=brand, max_beats=lesson.max_beats,
                                      target_seconds=lesson.target_seconds, hook=lesson.hook, audience=channel.audience,
                                      max_asks=story.viewer_questions, lesson=lesson)
-            ok &= _report(f"lesson-{lesson.id}", rec.replies[first:], board, out_dir)
+            ok &= _report(f"lesson-{lesson.id}", lesson_writer.replies[first:], board, out_dir)
             if board is not None:
                 print(f"   parts: {[b.get('part') for b in board.beats]}; missing: {lesson_gaps(board) or 'none'}")
                 print(f"   metaphor: {board.metaphor}")
@@ -151,12 +157,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"skipping {item.url}: {exc}")
                 continue
             print(f"\nnews ({args.genre}): {item.title} -- {item.url}")
-            first = len(rec.replies)
-            board = write_storyboard(rec, brief, article, brand=brand, max_beats=story.max_beats,
+            first = len(news_writer.replies)
+            board = write_storyboard(news_writer, brief, article, brand=brand, max_beats=story.max_beats,
                                      target_seconds=story.target_seconds, max_stamps=0, audience=channel.audience,
                                      max_asks=story.viewer_questions, mode="animated",
                                      when=(item.published_at.strftime("%d %b %Y") if item.published_at else ""))
-            ok &= _report(f"news-{args.genre}", rec.replies[first:], board, out_dir)
+            ok &= _report(f"news-{args.genre}", news_writer.replies[first:], board, out_dir)
             if board and not args.no_render:
                 _render(channel, board, brief, out_dir / f"news-{args.genre}.mp4")
             break

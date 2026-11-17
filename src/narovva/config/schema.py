@@ -328,6 +328,16 @@ class MotionStyleConfig(BaseModel):
         )
 
 
+class WriterConfig(BaseModel):
+    """The model(s) that write the video's storyboard -- the one call that decides how good the
+    video is -- tried before the channel's llm_chain, which stays the fallback (a model whose key
+    has no billing, or no quota left, is simply skipped). Everything else (article analysis,
+    caption, hooks) keeps using llm_chain."""
+
+    chain: list[str] = Field(default_factory=list)   # "provider:model", e.g. "gemini:gemini-3.1-pro-preview"
+    use_for: Literal["lessons", "all"] = "lessons"    # lessons only, or every post
+
+
 class ChannelConfig(BaseModel):
     id: str
     enabled: bool = True
@@ -347,6 +357,8 @@ class ChannelConfig(BaseModel):
     # gemini, openai, openrouter). Unset = just `text_provider`. Free-tier quotas
     # are per model, so listing several Gemini models gives several pools.
     llm_chain: list[str] | None = None
+    # A stronger model for the storyboard writer only (see WriterConfig). Empty = llm_chain.
+    writer: WriterConfig = Field(default_factory=WriterConfig)
     image_provider: Literal["openai", "gemini", "none"] = "openai"
     # "carousel" (default): post poster-core's rendered images directly.
     # "reel": assemble those same images into a short Ken-Burns video with
