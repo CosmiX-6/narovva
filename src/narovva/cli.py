@@ -9,6 +9,7 @@ from datetime import UTC
 
 from . import logsafe
 from .config import load_all_channels, load_channel
+from .language import LANGUAGES
 from .orchestration import due_channels_with_genres, run_channel
 
 
@@ -27,6 +28,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument(
         "--max-posts-per-genre", type=int, default=None,
         help="Cap successful publishes per genre in this run (default: unlimited)",
+    )
+    run_p.add_argument(
+        "--language", default=None, choices=sorted(LANGUAGES),
+        help="Content language for this run (default: the channel's / the genre's `language`)",
     )
 
     refresh_p = sub.add_parser(
@@ -64,6 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
     viral_p.add_argument("path", help="Path to a channel YAML config")
     viral_p.add_argument("--force", action="store_true", help="Post now, ignoring the slots")
     viral_p.add_argument("--dry-run", action="store_true", help="Pick and analyse, never publish")
+    viral_p.add_argument(
+        "--language", default=None, choices=sorted(LANGUAGES),
+        help="Content language for this run (default: the channel's `language`)",
+    )
 
     scan_p = sub.add_parser("viral-scan", help="List the stories going viral right now (read-only)")
     scan_p.add_argument("path", help="Path to a channel YAML config")
@@ -89,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         channel = load_channel(args.path)
         result = run_channel(
             channel, genres_filter=args.genre, dry_run=args.dry_run,
-            max_posts_per_genre=args.max_posts_per_genre,
+            max_posts_per_genre=args.max_posts_per_genre, language=args.language,
         )
         _print_result(result)
         # A run that posted is a success even if other articles failed (e.g. a site
@@ -147,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
         from .orchestration.viral import run_viral
 
         channel = load_channel(args.path)
-        result = run_viral(channel, dry_run=args.dry_run, force=args.force)
+        result = run_viral(channel, dry_run=args.dry_run, force=args.force, language=args.language)
         _print_result(result)
         return 1 if result.failed and not result.posted else 0
 

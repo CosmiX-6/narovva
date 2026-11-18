@@ -110,9 +110,11 @@ def _articles(story: Story) -> list[FeedArticle]:
     return out
 
 
-def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = False) -> ChannelRunResult:
+def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = False,
+              language: str | None = None) -> ChannelRunResult:
     """Post one viral story if a slot is open (or `force`). Never raises for a
-    bad story: a failed try moves on to the next copy or the next story."""
+    bad story: a failed try moves on to the next copy or the next story. `language`
+    overrides the channel's content language for this run."""
     settings = get_settings()
     result = ChannelRunResult(channel_id=channel.id)
     cfg = channel.viral
@@ -162,7 +164,7 @@ def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = Fa
                 outcome = _process_one(
                     article, genre, channel, dry_run=dry_run, recent_music_ids=recent_music,
                     recent_voices=recent_voices, llm_cache=llm_cache, hook_style=cfg.hook_style,
-                    hook_stats=hook_stats,
+                    hook_stats=hook_stats, language_override=language,
                 )
                 if outcome.status == "dry_run":
                     result.skipped += 1
@@ -175,6 +177,7 @@ def run_viral(channel: ChannelConfig, *, dry_run: bool = False, force: bool = Fa
                         asset_types=outcome.asset_types, caption=outcome.caption_text, hashtags=outcome.hashtags,
                         status=outcome.status, platform_post_id=outcome.platform_post_id, error=outcome.error,
                         music_track_id=outcome.music_track_id, narration_voice=outcome.narration_voice,
+                        language=outcome.language,
                         **hook_fields(outcome.hook),
                     )
                 if outcome.status == "success":

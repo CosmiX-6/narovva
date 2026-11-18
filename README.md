@@ -134,7 +134,7 @@ workflow does, scheduling, costs, and token rotation.
 | Command | What it does |
 |---|---|
 | `narovva run-due` | Post for every channel/genre that is due (what the hourly job runs) |
-| `narovva run-channel <cfg> [--genre G] [--dry-run]` | Run one channel now |
+| `narovva run-channel <cfg> [--genre G] [--language hi] [--dry-run]` | Run one channel now (`--language`: Hindi voice, English text, Hinglish caption) |
 | `narovva run-viral <cfg> [--force]` / `viral-scan <cfg> --editor` | Post / preview the story going viral right now |
 | `narovva refresh-token <cfg>` | Renew the Instagram token (weekly job) |
 | `narovva collect-metrics <cfg>` / `performance-report <cfg>` | Snapshot post insights / rank posts against the channel's median |
@@ -150,6 +150,7 @@ workflow does, scheduling, costs, and token rotation.
 - [Motion Reels](docs/motion-reels.md): the storyboard, the scene library, narration, captions, configuring the look
 - [Hooks and performance metrics](docs/hooks-and-metrics.md): hook formulas, scoring, the daily report, learning
 - [Viral posts and focus mode](docs/viral-and-focus.md)
+- [Content language](docs/languages.md): switch to a Hindi voice-over with English text and a Hinglish caption
 - [Text models](docs/text-models.md): the fallback chain across Gemini, OpenAI and OpenRouter
 - [`.claude/skills/context-unfiltered-storytelling.md`](.claude/skills/context-unfiltered-storytelling.md): the editorial guide the prompts follow
 

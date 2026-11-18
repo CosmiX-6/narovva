@@ -7,6 +7,8 @@ from typing import Literal
 from poster_core import BrandKit
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from ..language import LANGUAGES, Language, get_language
+
 
 class BrandKitConfig(BaseModel):
     """Mirrors poster_core.BrandKit, plus bold/regular font overrides so renders
@@ -55,6 +57,15 @@ class GenreSetting(BaseModel):
     # A lesson series (config/lessons/<series>.yaml) instead of news feeds: each post of
     # this genre teaches the series' next unposted lesson, grounded in its reference page.
     series: str | None = None
+    # Content language for this genre's posts (overrides the channel's `language`).
+    language: str | None = None
+
+    @field_validator("language")
+    @classmethod
+    def _known_language(cls, v: str | None) -> str | None:
+        if v is not None and v.lower() not in LANGUAGES:
+            raise ValueError(f"unknown language {v!r}; available: {sorted(LANGUAGES)}")
+        return v.lower() if v else v
 
 
 class CredentialRefs(BaseModel):
@@ -82,6 +93,10 @@ class NarrationConfig(BaseModel):
     model: str | None = None
     # OpenAI/Gemini voice names, or ElevenLabs voice_ids (required for elevenlabs).
     voices: list[str] | None = None
+    # Per content language: the voices to rotate through instead of `voices`, e.g.
+    # {hi: [hf_alpha, hm_omega]} (a language not listed uses `voices`, else the provider's
+    # defaults for that language). ElevenLabs needs its multilingual voice_ids listed here.
+    voices_by_language: dict[str, list[str]] = Field(default_factory=dict)
     # Tried in order if the primary provider fails (each uses its own default voices).
     fallback_providers: list[Literal["openai", "elevenlabs", "gemini", "kokoro"]] = Field(default_factory=list)
     # Voices never to use, whichever provider reads (e.g. a Kokoro fallback voice).
@@ -89,6 +104,17 @@ class NarrationConfig(BaseModel):
     # Burn the spoken line into the picture, word by word, so the reel still
     # reads with the sound off.
     captions: bool = True
+    # How the voice says the channel name, per content language. A Hindi voice garbles Latin
+    # names, so give the Devanagari spelling: {hi: "कॉन्टेक्स्ट अनफिल्टर्ड"}. Unset: the name as written.
+    spoken_names: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("voices_by_language", "spoken_names")
+    @classmethod
+    def _language_keys(cls, v: dict) -> dict:
+        unknown = sorted(set(v) - set(LANGUAGES))
+        if unknown:
+            raise ValueError(f"unknown language(s) {unknown}; available: {sorted(LANGUAGES)}")
+        return v
 
 
 _DEFAULT_VIRAL_EXCLUDE = [
@@ -348,6 +374,10 @@ class ChannelConfig(BaseModel):
     # posts at most one item every rotation_minutes, cycling through
     # `genres` in order so consecutive posts alternate genres.
     rotation_minutes: int | None = None
+    # Content language: "en" (default) or "hi". Hindi means a Hindi voice-over with the
+    # English transcript on screen and a Hinglish caption (see narovva/language.py).
+    # A genre's own `language` overrides it; `--language` / the workflow input override both.
+    language: str = "en"
     genres: list[GenreSetting]
     brand: BrandKitConfig
     caption: CaptionTone = Field(default_factory=CaptionTone)
@@ -418,6 +448,17 @@ class ChannelConfig(BaseModel):
                 self.caption = self.caption.model_copy(
                     update={"voice": f"{self.caption.voice}; " + "; ".join(rules)})
         return self
+
+    @field_validator("language")
+    @classmethod
+    def _known_channel_language(cls, v: str) -> str:
+        if v.lower() not in LANGUAGES:
+            raise ValueError(f"unknown language {v!r}; available: {sorted(LANGUAGES)}")
+        return v.lower()
+
+    def language_for(self, genre: GenreSetting | None = None, override: str | None = None) -> Language:
+        """The content language of a post: the run's override, else the genre's, else the channel's."""
+        return get_language(override or (genre.language if genre and genre.language else None) or self.language)
 
     @property
     def is_video(self) -> bool:

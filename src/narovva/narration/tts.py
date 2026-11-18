@@ -19,6 +19,7 @@ from pathlib import Path
 import httpx
 import imageio_ffmpeg
 
+from ..language import ENGLISH, Language
 from .errors import NarrationError
 
 logger = logging.getLogger(__name__)
@@ -63,12 +64,12 @@ def _post(url: str, *, retries: int = 3, **kwargs) -> httpx.Response:
 
 
 class OpenAITTS:
-    """gpt-4o-mini-tts: `instructions` steers the delivery."""
+    """gpt-4o-mini-tts: `instructions` steers the delivery (and names the language, for Hindi)."""
 
     def __init__(self, api_key: str, model: str = "gpt-4o-mini-tts"):
         self._key, self._model = api_key, model
 
-    def synthesize(self, text: str, *, voice: str, style: tuple[str, str]) -> bytes:
+    def synthesize(self, text: str, *, voice: str, style: tuple[str, str], lang: Language = ENGLISH) -> bytes:
         resp = _post(
             "https://api.openai.com/v1/audio/speech",
             headers={"Authorization": f"Bearer {self._key}"},
@@ -85,7 +86,8 @@ class ElevenLabsTTS:
     def __init__(self, api_key: str, model: str = "eleven_v3"):
         self._key, self._model = api_key, model
 
-    def synthesize(self, text: str, *, voice: str, style: tuple[str, str]) -> bytes:
+    def synthesize(self, text: str, *, voice: str, style: tuple[str, str], lang: Language = ENGLISH) -> bytes:
+        # eleven_v3 is multilingual and detects the language from the text.
         resp = _post(
             f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
             headers={"xi-api-key": self._key},
@@ -101,7 +103,8 @@ class GeminiTTS:
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash-preview-tts"):
         self._key, self._model = api_key, model
 
-    def synthesize(self, text: str, *, voice: str, style: tuple[str, str]) -> bytes:
+    def synthesize(self, text: str, *, voice: str, style: tuple[str, str], lang: Language = ENGLISH) -> bytes:
+        # The language is detected from the text; the direction in `style` names it too.
         resp = _post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent",
             headers={"x-goog-api-key": self._key},
@@ -173,13 +176,15 @@ class KokoroTTS:
         onnx, voices = ensure_kokoro_models()
         self._kokoro, self._speed = Kokoro(str(onnx), str(voices)), speed
 
-    def synthesize(self, text: str, *, voice: str, style: tuple[str, str]) -> bytes:
+    def synthesize(self, text: str, *, voice: str, style: tuple[str, str], lang: Language = ENGLISH) -> bytes:
         import soundfile as sf
 
+        if lang.translated:  # Hindi: espeak's Hindi phonemes and the Hindi voices (hf_*, hm_*)
+            code, speed = lang.kokoro_code, lang.kokoro_speed
+        else:
+            code, speed = ("en-gb" if voice.startswith("b") else "en-us"), self._speed
         with self._lock:  # one ONNX session; keep synthesis sequential
-            samples, rate = self._kokoro.create(
-                text, voice=voice, speed=self._speed, lang="en-gb" if voice.startswith("b") else "en-us",
-            )
+            samples, rate = self._kokoro.create(text, voice=voice, speed=speed, lang=code)
         buf = io.BytesIO()
         sf.write(buf, samples, rate, format="WAV")
         return buf.getvalue()
@@ -224,12 +229,16 @@ def to_clip(audio_bytes: bytes, trim_silence: bool = True, tempo: float = TEMPO)
     return Clip(wav=data, seconds=seconds)
 
 
-def synthesize_lines(provider, lines: list[str], *, voice: str, style: tuple[str, str]) -> list[Clip]:
+def synthesize_lines(provider, lines: list[str], *, voice: str, style: tuple[str, str],
+                     lang: Language = ENGLISH) -> list[Clip]:
     """One clip per line (3 requests at a time). Raises NarrationError if any line fails,
-    naming the line (a bare 'no audio' error was undiagnosable in the logs)."""
+    naming the line (a bare 'no audio' error was undiagnosable in the logs). `lang` is
+    handed to the engine only when the voice is not English."""
+    extra = {"lang": lang} if lang.translated else {}
+
     def one(line: str) -> Clip:
         try:
-            return to_clip(provider.synthesize(line, voice=voice, style=style))
+            return to_clip(provider.synthesize(line, voice=voice, style=style, **extra))
         except NarrationError as exc:
             raise NarrationError(f"{exc} (line: {line!r})") from exc
 

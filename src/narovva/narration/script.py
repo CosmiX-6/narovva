@@ -12,6 +12,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from ..language import ENGLISH, HINDI_SCRIPT_RULES, Language
+
 logger = logging.getLogger(__name__)
 
 _MAX_WORDS = 15
@@ -126,8 +128,14 @@ def speakable(text: str) -> bool:
     return bool(_HAS_WORDS.search(text or ""))
 
 
-def _fallback_line(spec: dict, brand: str, last: bool) -> str:
-    """A safe, speakable line derived from the slide itself; never empty."""
+def _fallback_line(spec: dict, brand: str, last: bool, language: Language = ENGLISH,
+                   spoken_brand: str | None = None) -> str:
+    """A safe, speakable line derived from the slide itself; never empty. With a Hindi
+    voice the slide's English text cannot be spoken, so the line is a generic Hindi one."""
+    if language.translated:
+        if last:
+            return language.cta(brand.title(), spoken_brand=spoken_brand)[0]
+        return language.generic_lines.get(spec.get("kind"), language.generic_lines.get("default", ""))
     if last:
         return f"Follow {brand.title()} for daily breakdowns."
     candidates = [spec.get("heading"), spec.get("body")]
@@ -202,10 +210,17 @@ def auto_mark(screen: str) -> str | None:
     return longest if len(longest) >= 7 else None
 
 
-def _screen_line(raw, line: str, source: str) -> str:
+def _screen_line(raw, line: str, source: str, language: Language = ENGLISH, fallback: str = "") -> str:
     """The caption: the model's digit version of the spoken line if it is the
     same line (similar length, no figure that the slide does not state), else
-    the spoken line itself with letter-by-letter spellings closed up."""
+    the spoken line itself with letter-by-letter spellings closed up. With a Hindi
+    voice the caption is the model's English version (no Devanagari, a figure only
+    if the slide states it); without a usable one, `fallback` (English, from the slide)."""
+    if language.translated:
+        text = " ".join(str(raw or "").split())
+        ok = text and speakable(text) and language.is_screen_text(text) and len(text.split()) <= 24 \
+            and grounded(text, source)
+        return text if ok else fallback
     spoken = caption_text(line)
     text = " ".join(str(raw or "").split())
     n, m = len(spoken.split()), len(text.split())
@@ -222,6 +237,7 @@ def _pick(raw: dict, key: str) -> list:
 def write_script(
     llm, brief, specs: list[dict], *, brand: str, max_stamps: int = 0,
     hook: str | None = None, hook_screen: str | None = None, audience: str = "",
+    language: Language = ENGLISH, spoken_brand: str | None = None,
 ) -> Script:
     """One line (and its direction) per spec. Any line the model fumbles is
     replaced by a safe fallback derived from the slide, so the result always
@@ -229,7 +245,8 @@ def write_script(
     `hook` (already written for the ear) is spoken as line 1 instead of the
     model's, and `hook_screen` (as written) is its caption."""
     payloads = [_slide_payload(i, s) for i, s in enumerate(specs)]
-    system = _SYSTEM + _DIRECTION + (_stamp_rules(max_stamps) if max_stamps else "") + _respond(max_stamps)
+    system = _SYSTEM + _DIRECTION + (_stamp_rules(max_stamps) if max_stamps else "") + (
+        HINDI_SCRIPT_RULES if language.translated else "") + _respond(max_stamps)
     user = (
         f"Channel: {brand}\n"
         + (f"Audience: {audience}. Speak to them: what this changes in how they build or work.\n" if audience else "")
@@ -250,11 +267,20 @@ def write_script(
     last = len(specs) - 1
     for i, spec in enumerate(specs):
         text = str(lines[i]).strip() if i < len(lines) and lines[i] else ""
-        if not speakable(text) or len(text.split()) > _MAX_WORDS:
-            text = _fallback_line(spec, brand, last=(i == last))
+        if language.translated:
+            text = language.say(text)
         # What a figure on screen may come from: the slide's own data (not its position number).
         source = json.dumps({k: v for k, v in payloads[i].items() if k != "slide"}, ensure_ascii=False)
-        screen = _screen_line(screens[i] if i < len(screens) else None, text, source)
+        usable = language.speakable(text) and len(text.split()) <= (
+            language.max_line_words if language.translated else _MAX_WORDS)
+        if language.translated:  # spoken Hindi, in Devanagari, with no figure the slide lacks
+            usable = usable and language.is_native(text) and grounded(text, source) and i != last
+        if not usable:  # (the closing call to follow is fixed text: the model's would name the brand in Latin)
+            text = _fallback_line(spec, brand, last=(i == last), language=language, spoken_brand=spoken_brand)
+        screen = _screen_line(
+            screens[i] if i < len(screens) else None, text, source, language,
+            fallback=_fallback_line(spec, brand, last=(i == last)) if language.translated else "",
+        )
         mark = marks[i] if i < len(marks) else None
         if not isinstance(mark, dict):
             mark = {"line": mark} if isinstance(mark, str) else {}
@@ -270,8 +296,12 @@ def write_script(
             kept += 1
             if kept > max_stamps:
                 out.stamps[i] = None
-    if hook and out.lines and speakable(hook):
+    if hook and out.lines and language.speakable(hook) and not (language.translated and not hook_screen):
         out.lines[0] = hook
         out.screen[0] = hook_screen or caption_text(hook)
         out.line_marks[0] = auto_mark(out.screen[0])
+    elif hook_screen and out.lines and language.translated:
+        # No Hindi version of the hook: the writer's own first line stays; its caption is the hook.
+        out.screen[0] = hook_screen
+        out.line_marks[0] = auto_mark(hook_screen)
     return out

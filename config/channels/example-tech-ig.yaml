@@ -27,6 +27,14 @@ rotation_minutes: 120
 # Ken-Burns reel if the motion render fails) with genre/mood-matched music.
 publish_format: motion_reel
 
+# Content language -- the one switch: `en` (default) or `hi`.
+#   hi = a HINDI voice-over, the ENGLISH transcript/graphics on screen, and a HINGLISH
+#        caption (Hindi in Roman letters mixed with English terms); hashtags stay English.
+# Per genre, set `language:` on a genre below to override this for just that genre.
+# For one manual run: Actions -> "Hourly publish" -> Run workflow -> language
+# (or `narovva run-channel ... --language hi`). Free Hindi voices (Kokoro) need no key.
+language: en
+
 # Voice-over for the motion reel. A different voice is picked for every video
 # (never one used in the last few posts), delivery follows the story's tone, and
 # the music ducks under the voice. Any failure posts the reel with music only.
@@ -38,6 +46,14 @@ narration:
   fallback_providers: [gemini, kokoro]
   # Never used, whichever provider reads (picked by ear from the voice samples).
   exclude_voices: [af_nicole]
+  # How the voice says the channel name when the language is Hindi (a Hindi voice garbles
+  # Latin names, so this is the Devanagari spelling).
+  spoken_names:
+    hi: "कॉन्टेक्स्ट अनफिल्टर्ड"
+  # Hindi voices to rotate through (Kokoro's: hf_alpha, hf_beta women; hm_omega, hm_psi men).
+  # Unset: Kokoro's Hindi voices as the fallback, and the provider's own voices for OpenAI/Gemini.
+  # voices_by_language:
+  #   hi: [hf_alpha, hm_omega]
 
 # Viral posts: on top of the rotation, at least one post per slot below of whatever
 # story the internet is talking about right now -- any genre, as long as it is

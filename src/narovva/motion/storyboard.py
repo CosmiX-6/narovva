@@ -17,6 +17,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from ..language import EAR_EN, ENGLISH, HINDI, Language
 from ..narration.script import auto_mark, caption_text, clean_stamp, clean_subject, numbers_in, phrase_in, speakable
 from .dataviz import comparison_viz, parse_metric, stats_viz
 from .icon_names import ICON_NAMES
@@ -101,7 +102,24 @@ slammed onto the scene. At most {max_stamps} beats may carry stamps (a grid's or
 first or the last beat."""
 
 
-def _system(brand: str, max_beats: int, target_seconds: int, max_stamps: int, max_asks: int = 2) -> str:
+def _localise(system: str, language: Language) -> str:
+    """The writer's prompt for `language`: Hindi swaps the spelling-for-the-ear sentence and
+    adds the language block just before the response format. English is returned unchanged."""
+    if not language.translated:
+        return system
+    system = system.replace(EAR_EN, language.ear_rules)
+    head, sep, tail = system.rpartition("Respond as JSON")
+    if not sep:
+        return system + "\n\n" + language.writer_rules
+    return head + language.writer_rules + "\n" + sep + tail
+
+
+def _system(brand: str, max_beats: int, target_seconds: int, max_stamps: int, max_asks: int = 2,
+            language: Language = ENGLISH) -> str:
+    return _localise(_system_en(brand, max_beats, target_seconds, max_stamps, max_asks), language)
+
+
+def _system_en(brand: str, max_beats: int, target_seconds: int, max_stamps: int, max_asks: int = 2) -> str:
     asks = (
         f"VIEWER QUESTIONS: up to {max_asks} beats use scene \"ask\": the viewer interrupts with the doubt they would "
         "have at that moment (\"Wait, so who pays for it?\"), and the next beat answers it. Never in the first two "
@@ -149,13 +167,28 @@ def _system(brand: str, max_beats: int, target_seconds: int, max_stamps: int, ma
     )
 
 
-def _user(brief, article, when: str, hook: str | None = None, audience: str = "") -> str:
+def _hook_line(hook: str | None, said: str | None, language: Language, label: str = "the first beat's first line") -> str:
+    """The prompt line for a hook that is already written. Hindi: the spoken Hindi line and its
+    English caption, or (no Hindi version yet) the English caption to say in Hindi."""
+    if not hook:
+        return ""
+    if not language.translated:
+        return f"Opening hook, already written -- {label}, word for word: {hook}\n"
+    if said:
+        return (f"Opening hook, already written -- {label}, word for word (spoken, Hindi): {said} "
+                f"-- its on-screen English caption, word for word: {hook}\n")
+    return (f"Opening hook, already written in English -- it is {label}'s on-screen caption, word for word; "
+            f"say it in Hindi as the spoken line: {hook}\n")
+
+
+def _user(brief, article, when: str, hook: str | None = None, audience: str = "",
+          said: str | None = None, language: Language = ENGLISH) -> str:
     title = getattr(article, "title", "") or brief.headline
     source = getattr(article, "source_name", "") or ""
     text = (getattr(article, "text", "") or "")[:_EXCERPT_CHARS]
     return (
         (f"Audience: {audience}. Speak to them: what this changes in how they build or work.\n" if audience else "")
-        + (f"Opening hook, already written -- the first beat's first line, word for word: {hook}\n" if hook else "")
+        + _hook_line(hook, said, language)
         + f"Article: {title}\nSource: {source}\nDate: {when}\n\n"
         f"Brief:\n{brief.model_dump_json(exclude={'image_generation_prompt', 'image_search_query', 'visual_concepts'})}\n\n"
         f"Article excerpt:\n{text}"
@@ -180,7 +213,13 @@ Any beat may have "kicker": a chapter label, 1-3 words in capitals, shown in the
 WORKS", "THE CATCH"); give it on the first beat of each chapter."""
 
 
-def _system_animated(brand: str, max_beats: int, target_seconds: int, max_asks: int = 2, lesson: bool = False) -> str:
+def _system_animated(brand: str, max_beats: int, target_seconds: int, max_asks: int = 2, lesson: bool = False,
+                     language: Language = ENGLISH) -> str:
+    return _localise(_system_animated_en(brand, max_beats, target_seconds, max_asks, lesson), language)
+
+
+def _system_animated_en(brand: str, max_beats: int, target_seconds: int, max_asks: int = 2,
+                        lesson: bool = False) -> str:
     asks = (
         f"VIEWER QUESTIONS: up to {max_asks} beats are \"ask\" beats: the viewer cuts in with the doubt they would have "
         "right then, and the next beat answers it. Never in the first two beats or the last two, never two in a row.\n\n"
@@ -281,12 +320,12 @@ def _system_animated(brand: str, max_beats: int, target_seconds: int, max_asks: 
     )
 
 
-def _user_lesson(brief, article, lesson, audience: str = "") -> str:
+def _user_lesson(brief, article, lesson, audience: str = "", language: Language = ENGLISH) -> str:
     text = (getattr(article, "text", "") or "")[:_EXCERPT_CHARS]
     return (
         (f"Audience: {audience}. Speak to them.\n" if audience else "")
         + f"Lesson: {lesson.title}\nSeries: {lesson.series}\n"
-        + (f"Opening hook, already written -- the first beat's first line, word for word: {lesson.hook}\n" if lesson.hook else "")
+        + _hook_line(lesson.hook, None, language)
         + (f"A metaphor that works (use it, or a clearly better one): {lesson.metaphor}\n" if lesson.metaphor else "")
         + f"Reference: {getattr(article, 'source_name', '') or 'reference'}\n\n"
         f"Brief:\n{brief.model_dump_json(exclude={'image_generation_prompt', 'image_search_query', 'visual_concepts'})}\n\n"
@@ -299,6 +338,7 @@ class Storyboard:
     subject: str | None
     beats: list[dict] = field(default_factory=list)   # validated: scene, kicker, data, stamp, lines, screens, cmarks, part
     metaphor: dict | None = None                       # lessons: {"picture": ..., "map": [{"everyday", "real"}, ...]}
+    translated: bool = False                           # lines are spoken in another language than `screens`
 
 
 # -- field cleaning ------------------------------------------------------------
@@ -675,7 +715,10 @@ _SCENES = {
 }
 
 
-def _lines(beat: dict, src: _Source) -> tuple[list[str], list[str], list[str | None]]:
+def _lines(beat: dict, src: _Source, language: Language = ENGLISH) -> tuple[list[str], list[str], list[str | None]]:
+    """The beat's spoken lines with the caption each shows and its highlighted words. When the
+    voice is not English the caption is the model's English version of the line (nothing else may
+    stand in for it: the Hindi must never reach the screen); a line without one is dropped."""
     raw_lines = beat.get("lines")
     if isinstance(raw_lines, str):
         raw_lines = [raw_lines]
@@ -684,23 +727,35 @@ def _lines(beat: dict, src: _Source) -> tuple[list[str], list[str], list[str | N
     lines, shown, cmarks = [], [], []
     for i, raw in enumerate((raw_lines or [])[:3]):
         line = " ".join(str(raw or "").split())
-        if not speakable(line) or len(line.split()) > _MAX_LINE_WORDS:
+        if language.translated:
+            line = language.say(line)  # English terms the voice would garble, in Devanagari
+        if not language.speakable(line) or len(line.split()) > (
+                language.max_line_words if language.translated else _MAX_LINE_WORDS):
             continue
-        spoken = caption_text(line)
-        screen = " ".join(str(screens[i] if i < len(screens) else "").split())
-        n, m = len(spoken.split()), len(screen.split())
-        if not screen or not speakable(screen) or not (0.5 * n <= m <= 1.25 * n + 1) or not src.grounded(screen):
-            screen = spoken
+        if language.translated:
+            screen = " ".join(str(screens[i] if i < len(screens) else "").split())
+            if not (language.is_native(line) and src.grounded(line) and screen and speakable(screen)
+                    and language.is_screen_text(screen) and len(screen.split()) <= 24 and src.grounded(screen)):
+                continue  # not Hindi, a figure the source lacks, or no usable English caption
+        else:
+            spoken = caption_text(line)
+            screen = " ".join(str(screens[i] if i < len(screens) else "").split())
+            n, m = len(spoken.split()), len(screen.split())
+            if not screen or not speakable(screen) or not (0.5 * n <= m <= 1.25 * n + 1) or not src.grounded(screen):
+                screen = spoken
         lines.append(line)
         shown.append(screen)
         cmarks.append(phrase_in(marks[i] if i < len(marks) else None, screen, 3) or auto_mark(screen))
     return lines, shown, cmarks
 
 
-def _cta_beat(brand: str, line: str | None = None) -> dict:
+def _cta_beat(brand: str, line: str | None = None, language: Language = ENGLISH, screen: str | None = None) -> dict:
+    """The closing call to follow. `line` is spoken; `screen` (default: the same text) is the caption."""
+    if line is None and language.translated:
+        line, screen = language.cta(brand.title())
     line = line or f"Follow {brand.title()} for the story behind the news."
     return {"scene": "cta", "kicker": None, "data": {}, "stamp": None,
-            "lines": [line], "screens": [line], "cmarks": [brand.title()]}
+            "lines": [line], "screens": [screen or line], "cmarks": [brand.title()]}
 
 
 # The fields every beat has; anything else at the top level of a beat belongs to its scene.
@@ -742,10 +797,12 @@ def _grim(lines: list[str], data: dict) -> bool:
 
 
 def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_stamps: int,
-                     max_asks: int = 2, animated: bool = False, cta: str | None = None) -> Storyboard | None:
+                     max_asks: int = 2, animated: bool = False, cta: str | tuple[str, str] | None = None,
+                     language: Language = ENGLISH, spoken_brand: str | None = None) -> Storyboard | None:
     """Validate a model reply into a Storyboard, or None if too little survives.
     `animated`: only world beats plus the few scenes allowed between them, and at
-    least MIN_WORLD_BEATS world beats. `cta`: the closing line if the model's is unusable."""
+    least MIN_WORLD_BEATS world beats. `cta`: the closing line if the model's is unusable
+    (a (spoken, caption) pair when the voice is not English). `language`: the voice's."""
     if not isinstance(raw, dict) or not isinstance(raw.get("beats"), list):
         return None
     src = _Source(brief, article)
@@ -761,10 +818,10 @@ def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_sta
         if scene == "recap" and not b.get("lines"):
             said = _rows_said(data.get("rows"))
             b = dict(b, lines=said, screen=said)  # a table with nothing said: read its rows
-        lines, screens, cmarks = _lines(b, src)
+        lines, screens, cmarks = _lines(b, src, language)
         if builder is None or not lines or (animated and scene not in ANIMATED_SCENES):
             continue
-        if scene == "world" and _grim(lines, data):
+        if scene == "world" and _grim(list(lines) + list(screens), data):
             continue  # harm is never acted out by figures and objects
         if scene == "ask":  # the viewer's question is the beat's one line, on screen as said
             lines, screens, cmarks = lines[:1], screens[:1], cmarks[:1]
@@ -783,8 +840,13 @@ def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_sta
             "part": part if part in LESSON_PARTS else None,
         })
     beats = [b for i, b in enumerate(beats) if b["scene"] != "cta" or i == len(beats) - 1]
+    if language.translated:  # the call to follow is fixed text: the model's would name the brand in Latin letters
+        cta = cta if isinstance(cta, tuple) else language.cta(brand.title(), spoken_brand=spoken_brand)
     if not beats or beats[-1]["scene"] != "cta":
-        beats.append(_cta_beat(brand, cta))
+        said, caption = cta if isinstance(cta, tuple) else (cta, None)
+        beats.append(_cta_beat(brand, said, language, caption))
+    elif language.translated:
+        beats[-1].update(lines=[cta[0]], screens=[cta[1]], cmarks=[brand.title()])
     beats = _fit(beats, max_beats)
     beats = _place_asks(beats, max_asks)
     if beats[0]["scene"] == "cta" or len(beats) < 5:
@@ -792,7 +854,8 @@ def parse_storyboard(raw, brief, article, *, brand: str, max_beats: int, max_sta
     if animated and sum(b["scene"] == "world" for b in beats) < MIN_WORLD_BEATS:
         return None
     _cap_stamps(beats, max_stamps)
-    return Storyboard(subject=clean_subject(raw.get("subject")), beats=beats, metaphor=_metaphor(raw.get("metaphor")))
+    return Storyboard(subject=clean_subject(raw.get("subject")), beats=beats, metaphor=_metaphor(raw.get("metaphor")),
+                      translated=language.translated)
 
 
 def _fit(beats: list[dict], max_beats: int) -> list[dict]:
@@ -838,7 +901,7 @@ def heavy_lines(board: Storyboard | None, topic: str = "") -> list[str]:
     topic = topic.lower()
     out = []
     for b in board.beats:
-        for line in b["lines"]:
+        for line in (b["screens"] if board.translated else b["lines"]):  # the English text
             hits = [m.group(0) for m in _HEAVY.finditer(line) if m.group(0).lower() not in topic]
             if hits:
                 out.append(line)
@@ -849,7 +912,7 @@ def _key_from_metaphor(board: Storyboard) -> bool:
     """Give a lesson without a takeaway its metaphor's key -- each everyday part and what it
     really is -- as the recap before the call to follow. False if there is no map to use."""
     pairs = (board.metaphor or {}).get("map") or []
-    if len(pairs) < 2:
+    if len(pairs) < 2 or board.translated:  # its rows are English lines: not for a Hindi voice
         return False
     rows = [{"label": p["everyday"].capitalize(), "note": p["real"]} for p in pairs[:4]]
     said = _rows_said(rows)
@@ -867,8 +930,9 @@ def _cut_lectures(board: Storyboard, topic: str) -> None:
     for beat in list(board.beats):
         if beat is board.beats[0] or beat["scene"] == "cta" or len(board.beats) <= 6:
             continue
-        if heavy_lines(Storyboard(None, [beat]), topic):
-            rest = Storyboard(board.subject, [b for b in board.beats if b is not beat], board.metaphor)
+        if heavy_lines(Storyboard(None, [beat], translated=board.translated), topic):
+            rest = Storyboard(board.subject, [b for b in board.beats if b is not beat], board.metaphor,
+                              board.translated)
             if not any(p in lesson_gaps(rest) for p in ("metaphor", "how", "takeaway")):
                 board.beats.remove(beat)
 
@@ -920,20 +984,26 @@ def _cap_stamps(beats: list[dict], max_stamps: int) -> None:
 
 def write_storyboard(llm, brief, article, *, brand: str, max_beats: int = 10, target_seconds: int = 45,
                      max_stamps: int = 3, when: str = "", hook: str | None = None, audience: str = "",
-                     max_asks: int = 2, mode: str = "storyboard", lesson=None) -> Storyboard | None:
+                     max_asks: int = 2, mode: str = "storyboard", lesson=None, said: str | None = None,
+                     language: Language = ENGLISH, spoken_brand: str | None = None) -> Storyboard | None:
     """Ask the model for the storyboard: the explainer of motion-graphic scenes
     (mode "storyboard") or one continuous 3D animation (mode "animated"). A
     `lesson` (narovva.lessons.Lesson) makes it a teaching video grounded in the
     lesson's reference text. None (after logging why) if the call fails or the
     reply does not validate."""
     animated = mode == "animated" or lesson is not None
-    cta = f"Save this, and follow {brand} to see how AI works." if lesson is not None else None
+    cta = None
+    if lesson is not None:
+        cta = language.cta(brand.title(), lesson=True, spoken_brand=spoken_brand) if language.translated else \
+            f"Save this, and follow {brand} to see how AI works."
     if animated:
-        system = _system_animated(brand, max_beats, target_seconds, max_asks, lesson=lesson is not None)
+        system = _system_animated(brand, max_beats, target_seconds, max_asks, lesson=lesson is not None,
+                                  language=language)
         max_stamps = 0
     else:
-        system = _system(brand, max_beats, target_seconds, max_stamps, max_asks)
-    user = _user_lesson(brief, article, lesson, audience) if lesson is not None else _user(brief, article, when, hook, audience)
+        system = _system(brand, max_beats, target_seconds, max_stamps, max_asks, language=language)
+    user = (_user_lesson(brief, article, lesson, audience, language) if lesson is not None
+            else _user(brief, article, when, hook, audience, said, language))
     best, best_gaps = None, None
     for attempt in range(2 if lesson is not None else 1):
         try:
@@ -942,7 +1012,8 @@ def write_storyboard(llm, brief, article, *, brand: str, max_beats: int = 10, ta
             logger.warning("storyboard LLM call failed (%s)", exc)
             break
         board = parse_storyboard(raw, brief, article, brand=brand, max_beats=max_beats, max_stamps=max_stamps,
-                                 max_asks=max_asks, animated=animated, cta=cta)
+                                 max_asks=max_asks, animated=animated, cta=cta, language=language,
+                                 spoken_brand=spoken_brand)
         if lesson is None:
             best = board
             break
@@ -987,11 +1058,18 @@ def hook_board(board: Storyboard, written: str | None, said: str | None, headlin
                trending: bool = True) -> Storyboard:
     """Open on a pre-written hook: it becomes the first line, as spoken (`said`)
     and on screen (`written`) -- under a TRENDING NOW label for viral posts
-    (`trending`); a headline opener shows it with the story's own headline underneath."""
-    if not written or not board.beats or not speakable(said or written):
+    (`trending`); a headline opener shows it with the story's own headline underneath.
+    With a Hindi voice and no Hindi version of the hook (`said` None) the voice keeps the
+    writer's own first line (it was told to say the hook) and only the caption is the hook."""
+    translated = getattr(board, "translated", False)
+    if not written or not board.beats or not speakable(written) or (
+            said and not (HINDI.speakable(said) if translated else speakable(said))):
         return board
     first = board.beats[0]
-    first["lines"][0], first["screens"][0], first["cmarks"][0] = said or written, written, auto_mark(written)
+    if translated and not said:
+        first["screens"][0], first["cmarks"][0] = written, auto_mark(written)
+    else:
+        first["lines"][0], first["screens"][0], first["cmarks"][0] = said or written, written, auto_mark(written)
     if trending:
         first["kicker"] = "TRENDING NOW"
     if first["scene"] == "headline":
@@ -1018,7 +1096,9 @@ def beat_specs(board: Storyboard, *, stamp_colors: dict[str, str], heading_marks
     Each spec's `parts` say when each line starts within its scene."""
     specs = []
     for i, beat in enumerate(board.beats):
-        durs = seconds[i] if seconds else [estimate_seconds(line) for line in beat["lines"]]
+        # Without a voice a scene lasts as long as its (English) caption takes to read.
+        durs = seconds[i] if seconds else [
+            estimate_seconds(line) for line in (beat["screens"] if board.translated else beat["lines"])]
         spec = {"kind": _KIND.get(beat["scene"], beat["scene"]), "kicker": beat["kicker"], "data": json.loads(json.dumps(beat["data"])),
                 "lines": list(beat["lines"]), "screens": list(beat["screens"]), "cmarks": list(beat["cmarks"])}
         if beat.get("voice") == "viewer":

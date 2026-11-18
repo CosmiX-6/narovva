@@ -27,6 +27,7 @@ from ..hooks.score import formulas_by_id
 from ..hooks.voice import drop_banned_sentences
 from ..hooks.writer import HookPackage, write_package
 from ..imagehost import ImageHostError, VercelBlobImageHost
+from ..language import ENGLISH, Language
 from ..llm import LLMUnavailable, build_llm_chain
 from ..logsafe import redact
 from ..metrics.learn import choose_formulas, formula_stats
@@ -43,6 +44,7 @@ from ..narration import (
     mix_voice_and_music,
     style_for_tone,
     synthesize_lines,
+    with_language,
     write_script,
 )
 from ..platforms import PublishPlatform, render_platform_for
@@ -77,6 +79,7 @@ class _Outcome:
     narration_voice: str | None = None
     fatal: bool = False  # no text model is left: stop the run rather than fail every article
     hook: HookPackage | None = None  # the hook package the post opened with
+    language: str | None = None      # content language of the post ("en", "hi")
 
 
 def run_channel(
@@ -86,8 +89,10 @@ def run_channel(
     dry_run: bool = False,
     max_posts_per_genre: int | None = None,
     max_posts_total: int | None = None,
+    language: str | None = None,
 ) -> ChannelRunResult:
-    """Run one channel's genres. `max_posts_per_genre` bounds how many
+    """Run one channel's genres. `language` ("en", "hi") overrides the content language for
+    this run (else each genre's `language`, else the channel's). `max_posts_per_genre` bounds how many
     successful publishes a single genre can produce in this call -- unset
     (the CLI default) processes every fetched article, which is what you
     want for a manual/testing run; a scheduled/cron run should pass 1 so
@@ -174,6 +179,7 @@ def run_channel(
                     article, genre_setting, channel, dry_run=dry_run, recent_music_ids=recent_music_ids,
                     recent_voices=recent_voices, llm_cache=llm_cache, hook_stats=hook_stats,
                     lesson=series.by_content_id(article.content_id) if series else None,
+                    language_override=language,
                 )
                 if outcome.fatal:
                     # Not the article's fault: leave it unrecorded (no burnt attempt) and stop.
@@ -211,6 +217,7 @@ def run_channel(
                         error=outcome.error,
                         music_track_id=outcome.music_track_id,
                         narration_voice=outcome.narration_voice,
+                        language=outcome.language,
                         **hook_fields(outcome.hook),
                     )
 
@@ -262,8 +269,11 @@ def _process_one(
     hook_style: str | None = None,
     hook_stats: dict | None = None,
     lesson: lesson_series.Lesson | None = None,
+    language_override: str | None = None,
 ) -> _Outcome:
-    """`hook_style` (viral posts, or every post when channel.hooks.enabled): write a
+    """`language_override` (run flag) beats the genre's and the channel's content language: with
+    Hindi the voice speaks Hindi, the on-screen text stays English and the caption is Hinglish.
+    `hook_style` (viral posts, or every post when channel.hooks.enabled): write a
     formula hook with its cover text and caption opener (narovva.hooks), open the
     reel with the hook, title the cover with the cover text, lead the caption with
     the opener. A `lesson` is written from its reference page instead of the
@@ -271,6 +281,7 @@ def _process_one(
     is_reel = channel.is_video
     hook: str | None = None
     package: HookPackage | None = None
+    lang = channel.language_for(genre_setting, language_override)
     if hook_style is None and channel.hooks.enabled and lesson is None:
         hook_style = "auto"
     try:
@@ -301,13 +312,15 @@ def _process_one(
         asset_type_values = [a.asset_type.value for a in assets]
         caption = generate_caption(
             brief, publish_platform=PublishPlatform(channel.platform), tone=channel.caption, llm=llm,
+            language=lang,
         )
         banned = channel.banned_words
         if banned:
             caption.text = drop_banned_sentences(caption.text, banned)
         if lesson is not None:  # its own hook leads; the reference page gets its credit
             hook = lesson.hook or None
-            caption.text = f"{hook}\n\n{caption.text}" if hook else caption.text
+            if hook and not lang.translated:  # (the Hinglish caption already opens in its own words)
+                caption.text = f"{hook}\n\n{caption.text}"
             caption.text = f"{caption.text}\n\n{lesson_series.caption_reference(lesson)}"
         elif hook_style:
             formulas = channel.hooks.formulas
@@ -317,9 +330,11 @@ def _process_one(
             package = write_package(
                 llm, brief, formulas=formulas, style=hook_style, audience=channel.audience,
                 banned=banned, min_score=channel.hooks.min_score, candidates=channel.hooks.candidates,
+                language=lang,
             )
             hook = package.hook if package else None
-            lead = (package.opener or package.hook) if package else None
+            # An English hook must not lead a Hinglish caption: without an opener, the caption stands alone.
+            lead = (package.opener or (None if lang.translated else package.hook)) if package else None
             if lead and not caption.text.startswith(lead):
                 caption.text = f"{lead}\n\n{caption.text}"  # the line shown before "more"
     except Exception as exc:
@@ -329,13 +344,13 @@ def _process_one(
         logger.warning("channel %s: failed to process %s: %s", channel.id, article.url, redact(str(exc)))
         return _Outcome(
             status="failed", caption_text="", hashtags=[], asset_types=[], error=redact(str(exc)),
-            fatal=isinstance(exc, LLMUnavailable),
+            fatal=isinstance(exc, LLMUnavailable), language=lang.code,
         )
 
     if dry_run:
         return _Outcome(
             status="dry_run", caption_text=caption.text, hashtags=caption.hashtags,
-            asset_types=asset_type_values, hook=package,
+            asset_types=asset_type_values, hook=package, language=lang.code,
         )
 
     host = VercelBlobImageHost()
@@ -358,7 +373,8 @@ def _process_one(
                     channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
                     llm=writer_llm(channel, llm, lesson, llm_cache), recent_voices=recent_voices,
                     seed=article.content_id, hook=hook, when=article.published_at, article=article_full,
-                    trending=genre_setting.genre == "viral", lesson=lesson,
+                    trending=genre_setting.genre == "viral", lesson=lesson, language=lang,
+                    hook_said=package.spoken if package else None,
                 )
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
                 video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
@@ -394,7 +410,7 @@ def _process_one(
         return _Outcome(
             status="failed", caption_text=caption_text, hashtags=caption.hashtags,
             asset_types=asset_type_values, error=redact(str(exc)), music_track_id=music_track_id,
-            narration_voice=narration_voice,
+            narration_voice=narration_voice, language=lang.code,
         )
     finally:
         for h in hosted:
@@ -410,6 +426,7 @@ def _process_one(
         music_track_id=music_track_id,
         narration_voice=narration_voice,
         hook=package,
+        language=lang.code,
     )
 
 
@@ -487,14 +504,15 @@ def _preflight_token(channel: ChannelConfig) -> None:
     check_token(get_valid_token(channel))
 
 
-def _narrate(channel, brief, specs, track, *, recent_voices, seed, **timing):
+def _narrate(channel, brief, specs, track, *, recent_voices, seed, language: Language = ENGLISH, **timing):
     """Voice-over for specs that carry `lines` (one to three spoken lines
     each): one TTS clip per scene in a voice not used recently (a scene's
     lines read as one passage, which sounds natural and keeps requests to
     one per scene) -> each line's share of the clip by length -> every scene
     timed to its speech (`time_parts`, so captions and builds follow the
     voice) -> music ducked under the voice. Tries the configured provider,
-    then each fallback. Returns (mixed_audio, voice)."""
+    then each fallback. Returns (mixed_audio, voice). `language`: the voice's (Hindi uses the
+    Hindi voices and tells the engine to speak Hindi)."""
     cfg = channel.narration
     env_names = {
         "openai": channel.credentials.openai_api_key_env,
@@ -503,15 +521,16 @@ def _narrate(channel, brief, specs, track, *, recent_voices, seed, **timing):
         "kokoro": None,  # local voice, no key
     }
     passages = [" ".join(spec["lines"]) for spec in specs]
-    style = style_for_tone(brief.tone)
+    style = style_for_tone(brief.tone, language)
     failures: list[str] = []
     for attempt, name in enumerate([cfg.provider, *cfg.fallback_providers]):
         try:
             provider = build_provider(name, resolve_env(env_names[name]) or "", cfg.model if attempt == 0 else None)
-            pool = (cfg.voices if attempt == 0 and cfg.voices else None) or default_voices(name)
+            own = cfg.voices_by_language.get(language.code) or (None if language.translated else cfg.voices)
+            pool = (own if attempt == 0 and own else None) or default_voices(name, language)
             pool = [v for v in pool if v not in cfg.exclude_voices]  # all excluded: skip to the next provider
             voice = choose_voice(pool, recent_voices, seed)
-            clips = _speak(provider, passages, specs, pool, voice, style, seed)
+            clips = _speak(provider, passages, specs, pool, voice, style, seed, language)
         except Exception as exc:
             failures.append(f"{name}: {exc}")
             logger.warning("channel %s: narration via %s failed (%s)", channel.id, name, exc)
@@ -532,7 +551,8 @@ def _narrate(channel, brief, specs, track, *, recent_voices, seed, **timing):
     raise RuntimeError("; ".join(failures) or "no narration provider configured")
 
 
-def _speak(provider, passages: list[str], specs: list[dict], pool: list[str], voice: str, style, seed: str) -> list:
+def _speak(provider, passages: list[str], specs: list[dict], pool: list[str], voice: str, style, seed: str,
+           language: Language = ENGLISH) -> list:
     """One clip per scene: the narrator's voice, except the viewer's questions
     (storyboard "ask" beats), which a second voice from the pool reads, curious."""
     asks = {i for i, spec in enumerate(specs) if spec.get("speaker") == "viewer"}
@@ -540,10 +560,11 @@ def _speak(provider, passages: list[str], specs: list[dict], pool: list[str], vo
     jobs = [([i for i in range(len(passages)) if i not in asks], voice, style)]
     if asks:
         other = choose_voice([v for v in pool if v != voice] or pool, frozenset(), seed + ":viewer")
-        jobs.append((sorted(asks), other, VIEWER_STYLE))
+        jobs.append((sorted(asks), other, with_language(VIEWER_STYLE, language)))
     for idx, v, st in jobs:
         if idx:
-            for i, clip in zip(idx, synthesize_lines(provider, [passages[i] for i in idx], voice=v, style=st)):
+            for i, clip in zip(idx, synthesize_lines(provider, [passages[i] for i in idx], voice=v, style=st,
+                                                     lang=language)):
                 clips[i] = clip
     return clips
 
@@ -552,6 +573,7 @@ def _try_motion_reel(
     channel, assets, brief, track: MusicTrack, output_path: str, *,
     llm=None, recent_voices=frozenset(), seed: str = "", hook: str | None = None,
     when: datetime | None = None, article=None, trending: bool = False, lesson=None,
+    language: Language = ENGLISH, hook_said: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Render the HyperFrames motion reel (optionally narrated). Returns
     (mp4 path, narration voice); path is None (after logging why) so the
@@ -567,7 +589,14 @@ def _try_motion_reel(
         look = channel.motion
         stamps = look.stamps.max_per_reel if look.stamps.enabled else 0
         brand = channel.brand.name.title() if channel.brand.name.isupper() else channel.brand.name
-        said = spoken(hook) if hook else None  # the hook as the voice reads it
+        # The hook as the voice says it: English is spelled for the ear; a Hindi voice says its own
+        # Hindi version (None when the model gave none: the writer then says the hook in Hindi itself).
+        said = (hook_said if language.translated else spoken(hook)) if hook else None
+        spoken_brand = channel.narration.spoken_names.get(language.code) if channel.narration else None
+        if language.translated and channel.narration and not spoken_brand:
+            logger.warning("channel %s: narration.spoken_names.%s is not set, so the voice reads the channel "
+                           "name in Latin letters (badly); give its %s spelling", channel.id, language.code,
+                           language.name)
         board = None
         if llm is not None and (look.story.mode in ("storyboard", "animated") or lesson is not None):
             board = write_storyboard(  # a lesson runs as long as its explanation needs (its own budget)
@@ -575,6 +604,7 @@ def _try_motion_reel(
                 target_seconds=lesson.target_seconds if lesson else look.story.target_seconds, max_stamps=stamps,
                 when=(when or datetime.now()).strftime("%d %b %Y"), hook=hook, audience=channel.audience,
                 max_asks=look.story.viewer_questions, mode=look.story.mode, lesson=lesson,
+                said=said, language=language, spoken_brand=spoken_brand,
             )
         if board is not None:
             hook_board(board, hook, said, brief.headline, trending=trending)
@@ -587,6 +617,7 @@ def _try_motion_reel(
                 script = write_script(
                     llm, brief, slides(), brand=channel.brand.name, max_stamps=stamps,
                     hook=said, hook_screen=hook, audience=channel.audience,
+                    language=language, spoken_brand=spoken_brand,
                 )
             build = lambda: direct_scenes(slides(), script, look) if script else slides()
             subject, timing = (script.subject if script else None), {}
@@ -594,7 +625,8 @@ def _try_motion_reel(
         audio, voice = track.audio_bytes, None
         if channel.narration and all(spec.get("lines") for spec in specs):
             try:
-                audio, voice = _narrate(channel, brief, specs, track, recent_voices=recent_voices, seed=seed, **timing)
+                audio, voice = _narrate(channel, brief, specs, track, recent_voices=recent_voices, seed=seed,
+                                        language=language, **timing)
             except Exception as exc:  # no voice is better than no post
                 logger.warning("channel %s: narration failed (%s); posting music-only", channel.id, exc)
                 specs = build()
