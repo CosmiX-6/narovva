@@ -13,6 +13,7 @@ from poster_core import ContentBrief
 from poster_core.analysis.llm import LLMClient
 
 from ..config.schema import CaptionTone
+from ..language import ENGLISH, Language
 from ..platforms import PublishPlatform
 from .hashtag_pools import pool_for
 from .rules import PLATFORM_CAPTION_RULES
@@ -51,11 +52,15 @@ def generate_caption(
     publish_platform: PublishPlatform,
     tone: CaptionTone,
     llm: LLMClient,
+    language: Language = ENGLISH,
 ) -> CaptionResult:
+    """`language`: with a Hindi voice the caption is written in Hinglish (see narovva.language)."""
     rules = PLATFORM_CAPTION_RULES[publish_platform]
     max_hashtags = min(tone.max_hashtags, rules.max_hashtags)
     user_prompt = _build_user_prompt(brief, tone, max_hashtags=max_hashtags)
-    raw = llm.complete_json(_SYSTEM_PROMPT, user_prompt)
+    system = _SYSTEM_PROMPT if not language.caption_note else (
+        _SYSTEM_PROMPT.replace("Respond as JSON", language.caption_note + " Respond as JSON"))
+    raw = llm.complete_json(system, user_prompt)
 
     caption_text = str(raw.get("caption") or brief.headline or "").strip()
     if not tone.emoji or not rules.allow_emoji:

@@ -8,6 +8,7 @@ import logging
 import re
 from dataclasses import dataclass
 
+from ..language import ENGLISH, Language
 from ..llm import LLMUnavailable
 from ..viral.detect import tokens
 from .score import formulas_by_id, library, score
@@ -27,10 +28,22 @@ class HookPackage:
     formula: str
     score: int
     cover: str | None = None   # 2-4 words on the reel's cover
-    opener: str | None = None  # the caption's first line
+    opener: str | None = None  # the caption's first line (Hinglish with a Hindi voice)
+    spoken: str | None = None  # the hook as the Hindi voice says it (Devanagari); None for English
 
 
-def _system(n: int, formulas: list[dict], style: str) -> str:
+_HI_PACKAGE = (
+    "LANGUAGE: this Reel is narrated in HINDI and its on-screen text is English. 'hook' and 'cover' stay English "
+    "(they are shown on screen). Each option also has hook_spoken: the same hook as the Hindi voice says it -- "
+    "natural, conversational Hindi in Devanagari, 4-14 words, English terms written in Devanagari (एआई, मॉडल, "
+    "डेवलपर), any number as ASCII digits exactly as in the facts, the same idea and the same open question or "
+    "stake, not a literal word-for-word translation. The 'opener' (the Instagram caption's first line) is written "
+    "in HINGLISH: Hindi in Roman letters mixed with English terms, the way young Indian professionals post "
+    "('Ye update aapke daily workflow ko badal sakta hai'), never in Devanagari. "
+)
+
+
+def _system(n: int, formulas: list[dict], style: str, language: Language = ENGLISH) -> str:
     shapes = "\n".join(f"- {f['id']}: {f['shape']} e.g. \"{f['example']}\" (fails when: {f['fails_when']})"
                        for f in formulas)
     rules = " ".join(library()["rules"])
@@ -45,7 +58,10 @@ def _system(n: int, formulas: list[dict], style: str) -> str:
         "mark); formula (its id); cover (2-4 words for the cover image -- what the story is about, NOT "
         "the hook's words); opener (the caption's first line, max 120 characters: what the viewer gets "
         "from this post, not a repeat of the hook or the cover). Use only facts given. "
-        'Respond as JSON: {"options": [{"hook": "...", "formula": "...", "cover": "...", "opener": "..."}]}'
+        + (_HI_PACKAGE if language.translated else "")
+        + 'Respond as JSON: {"options": [{"hook": "...", "formula": "...", "cover": "...", "opener": "..."'
+        + (', "hook_spoken": "..."' if language.translated else "")
+        + "}]}"
     )
 
 
@@ -119,13 +135,36 @@ def clean_cover(text, hook: str, *, banned: list[str] = ()) -> str | None:
     return cover.upper()
 
 
-def clean_opener(text, hook: str, cover: str | None, headline: str, *, banned: list[str] = ()) -> str | None:
+def clean_spoken(text, language: Language, *, story: str = "", banned: list[str] = ()) -> str | None:
+    """The hook as the voice says it, or None: real Hindi (Devanagari), 3-18 words, no clickbait
+    or banned phrase, and every number in it appears in the story."""
+    if not text or not isinstance(text, str):
+        return None
+    spoken = language.say(" ".join(text.strip().strip('"“”\'').split()))
+    spoken = re.sub(r"[!]{2,}|[?]{2,}", lambda m: m.group(0)[0], spoken)
+    if not 3 <= len(spoken.split()) <= 18 or not language.is_native(spoken):
+        return None
+    low = spoken.lower()
+    if any(b in low for b in _BANNED_ALWAYS) or find_banned(spoken, list(banned)):
+        return None
+    if story and any(n.strip(".,") not in story for n in _NUM.findall(spoken)):
+        return None
+    if spoken[-1] not in ".?!।":
+        spoken += "।"
+    return spoken
+
+
+def clean_opener(text, hook: str, cover: str | None, headline: str, *, banned: list[str] = (),
+                 language: Language = ENGLISH) -> str | None:
     """One line, at most 125 characters (what Instagram shows before 'more'), not a
-    repeat of the hook, the cover or the headline."""
+    repeat of the hook, the cover or the headline. With a Hindi voice it is Hinglish:
+    Roman letters, no Devanagari."""
     if not text or not isinstance(text, str):
         return None
     opener = " ".join(text.strip().strip('"“”\'').split())
     if not 15 <= len(opener) <= 125 or find_banned(opener, list(banned)):
+        return None
+    if language.translated and not language.is_screen_text(opener):
         return None
     o = tokens(opener)
     for other in (hook, headline):
@@ -154,8 +193,9 @@ def _options(raw) -> list[dict]:
 
 
 def pick(raw, brief, *, banned: list[str] = (), min_score: int = 45,
-         allowed: set[str] | None = None) -> tuple[HookPackage | None, list[str]]:
-    """Best option that passes the rules and the score; plus why the others failed."""
+         allowed: set[str] | None = None, language: Language = ENGLISH) -> tuple[HookPackage | None, list[str]]:
+    """Best option that passes the rules and the score; plus why the others failed. With a
+    Hindi voice an option also needs a valid Hindi spoken version of its hook."""
     story = _story_text(brief)
     known = formulas_by_id()
     best, why = None, []
@@ -171,9 +211,16 @@ def pick(raw, brief, *, banned: list[str] = (), min_score: int = 45,
         if s.verdict < min_score:
             why.append(f"{hook!r}: scored {s.verdict} ({s.weakest} weak)")
             continue
+        spoken = None
+        if language.translated:
+            spoken = clean_spoken(o.get("hook_spoken"), language, story=story, banned=banned)
+            if spoken is None:
+                why.append(f"{hook!r}: no valid Hindi hook_spoken (Devanagari, 3-18 words, digits from the facts)")
+                continue
         cover = clean_cover(o.get("cover"), hook, banned=banned)
-        opener = clean_opener(o.get("opener"), hook, cover, brief.headline, banned=banned)
-        cand = HookPackage(hook=hook, formula=s.formula, score=s.verdict, cover=cover, opener=opener)
+        opener = clean_opener(o.get("opener"), hook, cover, brief.headline, banned=banned, language=language)
+        cand = HookPackage(hook=hook, formula=s.formula, score=s.verdict, cover=cover, opener=opener,
+                           spoken=spoken)
         # A complete package beats a slightly higher-scoring bare hook.
         key = (cand.score + (6 if cover else 0) + (4 if opener else 0))
         if best is None or key > best[0]:
@@ -183,13 +230,13 @@ def pick(raw, brief, *, banned: list[str] = (), min_score: int = 45,
 
 def write_package(llm, brief, *, formulas: list[str] | None = None, style: str = "auto",
                   audience: str = "", banned: list[str] = (), min_score: int = 45,
-                  candidates: int = 5) -> HookPackage | None:
+                  candidates: int = 5, language: Language = ENGLISH) -> HookPackage | None:
     """Hook + cover + caption opener from the analysed story (so only real facts).
     Asks once more with the reasons if every option fails; then poster-core's own
     hook, if it passes the rules, as a bare hook."""
     lib = formulas_by_id()
     chosen = [lib[f] for f in (formulas or []) if f in lib] or list(lib.values())
-    system = _system(min(candidates, len(chosen)), chosen, style)
+    system = _system(min(candidates, len(chosen)), chosen, style, language)
     extra = ""
     for attempt in range(2):
         try:
@@ -199,10 +246,11 @@ def write_package(llm, brief, *, formulas: list[str] | None = None, style: str =
         except Exception as exc:
             logger.warning("hook: call failed (%s)", exc)
             break
-        pkg, why = pick(raw, brief, banned=banned, min_score=min_score, allowed={f["id"] for f in chosen})
+        pkg, why = pick(raw, brief, banned=banned, min_score=min_score, allowed={f["id"] for f in chosen},
+                        language=language)
         if pkg:
-            logger.info("hook: %r formula=%s score=%d cover=%r opener=%r",
-                        pkg.hook, pkg.formula, pkg.score, pkg.cover, pkg.opener)
+            logger.info("hook: %r formula=%s score=%d cover=%r opener=%r spoken=%r",
+                        pkg.hook, pkg.formula, pkg.score, pkg.cover, pkg.opener, pkg.spoken)
             return pkg
         logger.info("hook: every option failed (%s); asking again", "; ".join(why)[:400])
         extra = ("Your last options failed: " + "; ".join(why)[:600] +

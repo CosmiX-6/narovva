@@ -130,6 +130,7 @@ class Repo:
         hook_formula: str | None = None,
         hook_score: int | None = None,
         cover_text: str | None = None,
+        language: str | None = None,
     ) -> None:
         """Upsert one post_history row keyed on (channel_id, content_id).
 
@@ -143,14 +144,14 @@ class Repo:
                 channel_id, genre, content_id, article_url, article_title, platform,
                 asset_types, caption, hashtags, status, platform_post_id, attempt_count,
                 last_error, published_at, music_track_id, narration_voice,
-                hook_text, hook_formula, hook_score, cover_text
+                hook_text, hook_formula, hook_score, cover_text, language
             ) VALUES (
                 %(channel_id)s, %(genre)s, %(content_id)s, %(article_url)s, %(article_title)s,
                 %(platform)s, %(asset_types)s, %(caption)s, %(hashtags)s, %(status)s,
                 %(platform_post_id)s, 1, %(error)s,
                 CASE WHEN %(status)s = 'success' THEN now() ELSE NULL END,
                 %(music_track_id)s, %(narration_voice)s,
-                %(hook_text)s, %(hook_formula)s, %(hook_score)s, %(cover_text)s
+                %(hook_text)s, %(hook_formula)s, %(hook_score)s, %(cover_text)s, %(language)s
             )
             ON CONFLICT (channel_id, content_id) DO UPDATE SET
                 status = EXCLUDED.status,
@@ -166,6 +167,7 @@ class Repo:
                 hook_formula = COALESCE(EXCLUDED.hook_formula, post_history.hook_formula),
                 hook_score = COALESCE(EXCLUDED.hook_score, post_history.hook_score),
                 cover_text = COALESCE(EXCLUDED.cover_text, post_history.cover_text),
+                language = COALESCE(EXCLUDED.language, post_history.language),
                 updated_at = now(),
                 published_at = CASE
                     WHEN EXCLUDED.status = 'success' THEN now()
@@ -191,6 +193,7 @@ class Repo:
                 "hook_formula": hook_formula,
                 "hook_score": hook_score,
                 "cover_text": cover_text,
+                "language": language,
             },
         )
 
@@ -228,7 +231,7 @@ class Repo:
         rows = self.conn.execute(
             """
             SELECT platform_post_id, published_at, genre, article_title,
-                   hook_text, hook_formula, hook_score, cover_text
+                   hook_text, hook_formula, hook_score, cover_text, language
             FROM post_history
             WHERE channel_id = %s AND status = 'success' AND platform_post_id IS NOT NULL
               AND published_at >= %s
@@ -237,7 +240,7 @@ class Repo:
             (channel_id, since),
         ).fetchall()
         keys = ("platform_post_id", "published_at", "genre", "article_title",
-                "hook_text", "hook_formula", "hook_score", "cover_text")
+                "hook_text", "hook_formula", "hook_score", "cover_text", "language")
         return [dict(zip(keys, r)) for r in rows]
 
     def has_metrics_snapshot(self, channel_id: str, platform_post_id: str, day) -> bool:

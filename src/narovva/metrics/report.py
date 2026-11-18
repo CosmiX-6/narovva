@@ -127,6 +127,11 @@ def build_report(channel_id: str, posts: list[dict], snapshots: list[dict], *, n
     lines.append("")
     lines.append(f"## By topic (groups of {min_group}+)")
     lines += [f"- {k}: {v}x average over {n} posts" for k, n, v in by_topic] or ["- not enough posts per topic yet"]
+    by_language = _groups(judged, "language", min_group)
+    if len({p.get("language") for p in posts if p.get("language")}) > 1:  # only once both languages posted
+        lines += ["", f"## By language (groups of {min_group}+)"]
+        lines += [f"- {k}: {v}x average over {n} posts" for k, n, v in by_language] or \
+            ["- not enough posts per language yet"]
     watch = [m.avg_watch_ms for m in judged if m.avg_watch_ms]
     if watch:
         lines += ["", f"Average watch time: {statistics.mean(watch) / 1000:.1f} s per view "
