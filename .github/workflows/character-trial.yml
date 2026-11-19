@@ -18,6 +18,11 @@ on:
         description: "Optional: one article URL instead of the feed"
         required: false
         default: ""
+  push:
+    branches: ["feature/character-reels"]
+    paths:
+      - "src/narovva/characters/**"
+      - ".github/workflows/character-trial.yml"
 
 permissions:
   contents: read
