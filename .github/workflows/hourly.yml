@@ -67,7 +67,7 @@ jobs:
 
       - name: Install HyperFrames
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1
           npm ci --no-audit --no-fund
           npx hyperframes telemetry disable
           npx hyperframes browser ensure

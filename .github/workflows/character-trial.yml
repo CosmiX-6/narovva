@@ -39,7 +39,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install
-        run: pip install ".[characters]"
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libegl1 libgl1   # skia-python loads libEGL even on CPU
+          pip install ".[characters]"
 
       - name: Write and render
         env:
