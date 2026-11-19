@@ -80,6 +80,7 @@ class _Outcome:
     fatal: bool = False  # no text model is left: stop the run rather than fail every article
     hook: HookPackage | None = None  # the hook package the post opened with
     language: str | None = None      # content language of the post ("en", "hi")
+    reel_format: str | None = None   # which renderer made the reel: characters | motion | plain
 
 
 def run_channel(
@@ -218,6 +219,7 @@ def run_channel(
                         music_track_id=outcome.music_track_id,
                         narration_voice=outcome.narration_voice,
                         language=outcome.language,
+                        reel_format=outcome.reel_format,
                         **hook_fields(outcome.hook),
                     )
 
@@ -359,6 +361,7 @@ def _process_one(
     caption_text = caption.text
     music_track_id: str | None = None
     narration_voice: str | None = None
+    reel_format: str | None = None
     try:
         if is_reel:
             track = _pick_music_track(channel, genre_setting, brief, recent_music_ids)
@@ -368,7 +371,16 @@ def _process_one(
             durations = [slide_duration(c) for c in _slide_char_counts(assets)]
             reel_path = f"/tmp/narovva/{channel.id}/{article.content_id}_reel.mp4"
             video_path = None
-            if channel.publish_format == "motion_reel":
+            if use_characters(channel, article.content_id, lang):
+                from ..characters import build_character_reel
+
+                video_path, narration_voice = build_character_reel(
+                    channel, brief, article_full, track, reel_path.replace("_reel.mp4", "_chars.mp4"),
+                    llm=writer_llm(channel, llm, lesson, llm_cache), hook=hook,
+                    said=package.spoken if package else None, seed=article.content_id,
+                )
+                reel_format = "characters" if video_path else None
+            if video_path is None and channel.publish_format == "motion_reel":
                 video_path, narration_voice = _try_motion_reel(
                     channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
                     llm=writer_llm(channel, llm, lesson, llm_cache), recent_voices=recent_voices,
@@ -376,7 +388,10 @@ def _process_one(
                     trending=genre_setting.genre == "viral", lesson=lesson, language=lang,
                     hook_said=package.spoken if package else None,
                 )
+            if video_path is not None and reel_format is None:
+                reel_format = "motion"
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
+                reel_format = "plain"
                 video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
             h = host.upload(
                 Path(video_path).read_bytes(),
@@ -410,7 +425,7 @@ def _process_one(
         return _Outcome(
             status="failed", caption_text=caption_text, hashtags=caption.hashtags,
             asset_types=asset_type_values, error=redact(str(exc)), music_track_id=music_track_id,
-            narration_voice=narration_voice, language=lang.code,
+            narration_voice=narration_voice, language=lang.code, reel_format=reel_format,
         )
     finally:
         for h in hosted:
@@ -427,7 +442,19 @@ def _process_one(
         narration_voice=narration_voice,
         hook=package,
         language=lang.code,
+        reel_format=reel_format,
     )
+
+
+def use_characters(channel: ChannelConfig, content_id: str, lang) -> bool:
+    """Character reel for this story? Enabled, a cast is set, English only (the cast voices are English), and the
+    story falls in the A/B share (deterministic on content_id)."""
+    cfg = channel.characters
+    if not (cfg.enabled and cfg.cast and cfg.share > 0) or getattr(lang, "translated", False):
+        return False
+    from ..characters import chosen
+
+    return chosen(content_id, cfg.share)
 
 
 def _domain(url: str | None) -> str:

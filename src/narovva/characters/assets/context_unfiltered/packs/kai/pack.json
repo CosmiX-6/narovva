@@ -1,0 +1,119 @@
+{
+ "id": "kai",
+ "name": "Kai",
+ "kind": "human",
+ "style": "ContextUnfiltered",
+ "look": "soft3d",
+ "px_per_unit": 391.1111111111111,
+ "origin": [
+  750.0,
+  1368.888888888889
+ ],
+ "neck": [
+  750.0,
+  696.1777777777778
+ ],
+ "layers": {
+  "body": {
+   "offset": [
+    180,
+    423
+   ],
+   "size": [
+    1273,
+    1148
+   ]
+  },
+  "head": {
+   "offset": [
+    411,
+    84
+   ],
+   "size": [
+    678,
+    698
+   ]
+  }
+ },
+ "poses": [
+  "type",
+  "shrug",
+  "point",
+  "wave"
+ ],
+ "exprs": [
+  "neutral",
+  "happy",
+  "surprised",
+  "skeptical"
+ ],
+ "mouths": [
+  "closed",
+  "small",
+  "wide",
+  "o"
+ ],
+ "eyes": [
+  "open",
+  "half",
+  "closed"
+ ],
+ "files": {
+  "body_point": "body_point.webp",
+  "body_shrug": "body_shrug.webp",
+  "body_type": "body_type.webp",
+  "body_wave": "body_wave.webp",
+  "head_happy_closed_closed": "head_happy_closed_closed.webp",
+  "head_happy_closed_half": "head_happy_closed_half.webp",
+  "head_happy_closed_open": "head_happy_closed_open.webp",
+  "head_happy_o_closed": "head_happy_o_closed.webp",
+  "head_happy_o_half": "head_happy_o_half.webp",
+  "head_happy_o_open": "head_happy_o_open.webp",
+  "head_happy_small_closed": "head_happy_small_closed.webp",
+  "head_happy_small_half": "head_happy_small_half.webp",
+  "head_happy_small_open": "head_happy_small_open.webp",
+  "head_happy_wide_closed": "head_happy_wide_closed.webp",
+  "head_happy_wide_half": "head_happy_wide_half.webp",
+  "head_happy_wide_open": "head_happy_wide_open.webp",
+  "head_neutral_closed_closed": "head_neutral_closed_closed.webp",
+  "head_neutral_closed_half": "head_neutral_closed_half.webp",
+  "head_neutral_closed_open": "head_neutral_closed_open.webp",
+  "head_neutral_o_closed": "head_neutral_o_closed.webp",
+  "head_neutral_o_half": "head_neutral_o_half.webp",
+  "head_neutral_o_open": "head_neutral_o_open.webp",
+  "head_neutral_small_closed": "head_neutral_small_closed.webp",
+  "head_neutral_small_half": "head_neutral_small_half.webp",
+  "head_neutral_small_open": "head_neutral_small_open.webp",
+  "head_neutral_wide_closed": "head_neutral_wide_closed.webp",
+  "head_neutral_wide_half": "head_neutral_wide_half.webp",
+  "head_neutral_wide_open": "head_neutral_wide_open.webp",
+  "head_skeptical_closed_closed": "head_skeptical_closed_closed.webp",
+  "head_skeptical_closed_half": "head_skeptical_closed_half.webp",
+  "head_skeptical_closed_open": "head_skeptical_closed_open.webp",
+  "head_skeptical_o_closed": "head_skeptical_o_closed.webp",
+  "head_skeptical_o_half": "head_skeptical_o_half.webp",
+  "head_skeptical_o_open": "head_skeptical_o_open.webp",
+  "head_skeptical_small_closed": "head_skeptical_small_closed.webp",
+  "head_skeptical_small_half": "head_skeptical_small_half.webp",
+  "head_skeptical_small_open": "head_skeptical_small_open.webp",
+  "head_skeptical_wide_closed": "head_skeptical_wide_closed.webp",
+  "head_skeptical_wide_half": "head_skeptical_wide_half.webp",
+  "head_skeptical_wide_open": "head_skeptical_wide_open.webp",
+  "head_surprised_closed_closed": "head_surprised_closed_closed.webp",
+  "head_surprised_closed_half": "head_surprised_closed_half.webp",
+  "head_surprised_closed_open": "head_surprised_closed_open.webp",
+  "head_surprised_o_closed": "head_surprised_o_closed.webp",
+  "head_surprised_o_half": "head_surprised_o_half.webp",
+  "head_surprised_o_open": "head_surprised_o_open.webp",
+  "head_surprised_small_closed": "head_surprised_small_closed.webp",
+  "head_surprised_small_half": "head_surprised_small_half.webp",
+  "head_surprised_small_open": "head_surprised_small_open.webp",
+  "head_surprised_wide_closed": "head_surprised_wide_closed.webp",
+  "head_surprised_wide_half": "head_surprised_wide_half.webp",
+  "head_surprised_wide_open": "head_surprised_wide_open.webp"
+ },
+ "voice": {
+  "engine": "edge",
+  "name": "en-US-BrianMultilingualNeural"
+ }
+}

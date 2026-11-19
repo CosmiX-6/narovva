@@ -1,0 +1,57 @@
+{
+ "set": "cu_newsroom",
+ "style": "ContextUnfiltered",
+ "world": [
+  720,
+  1280
+ ],
+ "plate": "plate.webp",
+ "slots": {
+  "left": {
+   "pos": [
+    244.84,
+    803.41
+   ],
+   "ppu": 120.91
+  },
+  "right": {
+   "pos": [
+    469.09,
+    805.82
+   ],
+   "ppu": 120.9
+  },
+  "center": {
+   "pos": [
+    360.0,
+    803.41
+   ],
+   "ppu": 120.91
+  },
+  "far_left": {
+   "pos": [
+    81.2,
+    803.41
+   ],
+   "ppu": 120.91
+  },
+  "far_right": {
+   "pos": [
+    626.68,
+    803.41
+   ],
+   "ppu": 120.91
+  }
+ },
+ "marks": {
+  "screen": [
+   360.0,
+   446.59
+  ],
+  "lamp": [
+   -5.18,
+   569.9
+  ]
+ },
+ "particles": "dust"
+}

@@ -1,0 +1,31 @@
+{
+ "id": "cue",
+ "name": "Cue",
+ "kind": "blob",
+ "description": "Small glossy CU-blue gumdrop mascot with a glowing yellow antenna tip, big sparkly eyes and pink cheeks",
+ "personality": "The viewer's voice: curious, a bit skeptical, asks the question everyone is thinking",
+ "role_hint": "sidekick",
+ "voice": {
+  "engine": "edge",
+  "name": "en-US-AnaNeural"
+ },
+ "shape": "gumdrop",
+ "color": "#3B82F6",
+ "glow": 0.25,
+ "size": 0.9,
+ "eyes": {
+  "style": "sparkle",
+  "color": "#0B1020",
+  "size": 1.15
+ },
+ "cheeks": "#F472B6",
+ "brows": true,
+ "extras": [
+  "antenna"
+ ],
+ "antenna_color": "#FACC15",
+ "source": "prompt",
+ "styles": [
+  "ContextUnfiltered"
+ ]
+}

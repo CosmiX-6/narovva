@@ -1,0 +1,55 @@
+name: Character reel trial
+
+# Renders character reels (KAI + CUE on the CU newsroom set, narovva.characters) from the freshest stories of one
+# genre and uploads them as an artifact, so the format can be judged before `characters.enabled` is turned on.
+# Nothing is posted, uploaded to the host or marked as seen. Costs what a post's writing costs (2-3 text-model calls).
+on:
+  workflow_dispatch:
+    inputs:
+      genre:
+        description: "News genre"
+        required: false
+        default: "ai"
+      count:
+        description: "How many reels"
+        required: false
+        default: "1"
+      url:
+        description: "Optional: one article URL instead of the feed"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install ".[characters]"
+
+      - name: Write and render
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          JAMENDO_CLIENT_ID__example_tech_ig: ${{ secrets.JAMENDO_CLIENT_ID__EXAMPLE_TECH_IG }}
+          GENRE: ${{ inputs.genre || 'ai' }}
+          COUNT: ${{ inputs.count || '1' }}
+          URL: ${{ inputs.url }}
+        run: python -u -m narovva.characters.trial trial-out --genre "$GENRE" --count "$COUNT" ${URL:+--url "$URL"}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: character-trial
+          path: trial-out/
+          retention-days: 7

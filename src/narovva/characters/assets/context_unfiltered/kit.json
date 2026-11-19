@@ -1,0 +1,65 @@
+{
+ "style": "ContextUnfiltered",
+ "look": "soft3d",
+ "rig": {
+  "key": {
+   "color": "#F1F4FF",
+   "energy": 3.2,
+   "dir": [
+    0.5,
+    0.75,
+    -0.45
+   ]
+  },
+  "fill": {
+   "color": "#6E8CFF",
+   "energy": 1.4,
+   "dir": [
+    -0.6,
+    0.6,
+    -0.2
+   ]
+  },
+  "rim": {
+   "color": "#3B82F6",
+   "energy": 3.0,
+   "dir": [
+    -0.3,
+    -0.8,
+    -0.4
+   ]
+  },
+  "front": {
+   "color": "#FFE7D1",
+   "energy": 0.8,
+   "dir": [
+    0.1,
+    0.95,
+    -0.2
+   ]
+  },
+  "ambient": {
+   "color": "#141B33",
+   "strength": 0.6
+  },
+  "exposure": 0.35
+ },
+ "set": {
+  "id": "cu_newsroom",
+  "name": "CU night newsroom",
+  "description": "Dark navy broadcast studio: glossy floor, a big curved video wall glowing in CU blue, a city skyline at night through tall windows, a low presenter desk on the right where the mascot sits, subtle CU logo sign."
+ },
+ "cast": [
+  "kai",
+  "cue"
+ ],
+ "brand": {
+  "name": "CONTEXT UNFILTERED",
+  "handle": "@contextunfiltered",
+  "bg": "#0A0E1A",
+  "accent": "#3B82F6",
+  "highlight": "#FACC15",
+  "logo": "sets/cu_newsroom/assets/CU.png",
+  "follow": "Follow for the context behind the headline"
+ }
+}

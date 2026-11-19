@@ -1,0 +1,49 @@
+{
+ "id": "kai",
+ "name": "Kai",
+ "kind": "human",
+ "description": "Sharp, warm news explainer: short textured dark hair, navy blazer over a CU-blue tee, sits on the studio couch",
+ "personality": "Calm, precise, slightly wry; decodes the news with one clear analogy and never hypes",
+ "role_hint": "host",
+ "gender": "male",
+ "voice": {
+  "engine": "edge",
+  "name": "en-US-BrianMultilingualNeural"
+ },
+ "skin": "#C98D66",
+ "head": {
+  "size": 1.12,
+  "width": 1.0
+ },
+ "hair": {
+  "style": "messy",
+  "color": "#1E1612",
+  "volume": 0.95
+ },
+ "eyes": {
+  "iris": "#3A2416",
+  "size": 1.0
+ },
+ "brows": {
+  "color": "#1E1612",
+  "thickness": 1.1
+ },
+ "glasses": {
+  "style": "none"
+ },
+ "facial_hair": "none",
+ "outfit": {
+  "top": "jacket",
+  "top_color": "#1B2A4E",
+  "inner_color": "#3B82F6",
+  "bottom_color": "#151A2B",
+  "shoes_color": "#2A1E18"
+ },
+ "build": "average",
+ "seat": "log",
+ "props": [],
+ "source": "prompt",
+ "styles": [
+  "ContextUnfiltered"
+ ]
+}

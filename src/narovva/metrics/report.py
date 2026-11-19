@@ -132,6 +132,10 @@ def build_report(channel_id: str, posts: list[dict], snapshots: list[dict], *, n
         lines += ["", f"## By language (groups of {min_group}+)"]
         lines += [f"- {k}: {v}x average over {n} posts" for k, n, v in by_language] or \
             ["- not enough posts per language yet"]
+    by_format = _groups(judged, "reel_format", min_group)
+    if len({p.get("reel_format") for p in posts if p.get("reel_format")}) > 1:  # once an A/B is running
+        lines += ["", f"## By reel format (groups of {min_group}+)"]
+        lines += [f"- {k}: {v}x average over {n} posts" for k, n, v in by_format] or             ["- not enough posts per format yet"]
     watch = [m.avg_watch_ms for m in judged if m.avg_watch_ms]
     if watch:
         lines += ["", f"Average watch time: {statistics.mean(watch) / 1000:.1f} s per view "

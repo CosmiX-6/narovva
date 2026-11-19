@@ -49,7 +49,7 @@ jobs:
 
       - name: Install narovva
         # narration-local: the free Kokoro voice; trending: Google Trends hashtags
-        run: pip install ".[narration-local,trending]"
+        run: pip install ".[narration-local,trending,characters]"
 
       # HyperFrames (motion_reel format): Node 22 + pinned CLI + Chrome Headless
       # Shell. FFmpeg is installed explicitly. If any of this fails the run still

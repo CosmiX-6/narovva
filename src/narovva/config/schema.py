@@ -364,6 +364,33 @@ class WriterConfig(BaseModel):
     use_for: Literal["lessons", "all"] = "lessons"    # lessons only, or every post
 
 
+class CastMemberConfig(BaseModel):
+    name: str                       # the speaker name the writer uses ("KAI")
+    id: str                         # sprite pack id under characters/assets/<kit>/packs
+    role: str = ""                  # one line the writer gets ("host: calm, explains")
+    voice: str | None = None        # edge-tts voice; unset = the pack's own voice
+    slot: str | None = None         # set mark (left/right/...); unset = by order
+
+
+class CharactersConfig(BaseModel):
+    """Character reels (narovva.characters): the recurring cast acts the story out on the branded set, with animated
+    b-roll, captions, music and sound effects. Tried before the motion reel when publish_format is a reel; any failure
+    falls back to the motion reel, so a post is never lost. `share` splits stories deterministically for an A/B test."""
+
+    enabled: bool = False
+    kit: str = "context_unfiltered"
+    cast: list[CastMemberConfig] = Field(default_factory=list)
+    share: float = Field(default=0.0, ge=0.0, le=1.0)
+    target_seconds: int = 40
+    broll_share: float = Field(default=0.4, ge=0.0, le=0.6)
+    scale: float = Field(default=1.0, gt=0.2, le=1.0)   # 1.0 = 1080x1920
+    end_card_seconds: float = 2.8
+    music_gain: float = 0.22
+    procedural_music: bool = True   # no Jamendo track -> the built-in score
+    follow_line: str = ""
+    render_timeout_seconds: int = 1200
+
+
 class ChannelConfig(BaseModel):
     id: str
     enabled: bool = True
@@ -409,6 +436,8 @@ class ChannelConfig(BaseModel):
     hooks: HooksConfig = Field(default_factory=HooksConfig)
     # Look of "motion_reel": header, captions, stamps, evidence cards (ignored by other formats).
     motion: MotionStyleConfig = Field(default_factory=MotionStyleConfig)
+    # Character reels with the recurring cast (see CharactersConfig). Off by default.
+    characters: CharactersConfig = Field(default_factory=CharactersConfig)
 
     @property
     def focus_on(self) -> bool:

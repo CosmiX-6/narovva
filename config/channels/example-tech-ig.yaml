@@ -232,6 +232,21 @@ hooks:
   # Inactive until a formula has 20 measured posts; 20% of posts still try them all.
   learn: true
 
+# Character reels: KAI (host) and CUE (the mascot) act the story out on the CU newsroom set, with animated
+# b-roll that shows how it works, word-timed captions, the story's music and sound effects (narovva.characters).
+# OFF until the trial reels are approved. Then set enabled: true and a share (0.5 = half the stories, chosen
+# deterministically by story) and the daily report compares "By reel format". Any failure falls back to the
+# motion reel. English stories only (the cast voices are English).
+characters:
+  enabled: false
+  share: 0.0
+  kit: context_unfiltered
+  cast:
+    - {name: KAI, id: kai, role: "host: calm, sharp, explains with everyday analogies", voice: en-US-BrianMultilingualNeural}
+    - {name: CUE, id: cue, role: "mascot sidekick: curious, asks the viewer's question, reacts", voice: en-US-AnaNeural}
+  target_seconds: 40
+  broll_share: 0.4
+
 caption:
   voice: "sharp, informative, no clickbait, written for a tech-savvy audience"
   emoji: true

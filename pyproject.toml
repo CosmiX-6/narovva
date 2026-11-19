@@ -24,6 +24,8 @@ dev = ["pytest>=7.0", "ruff>=0.6"]
 narration-local = ["kokoro-onnx>=0.4", "soundfile>=0.12"]
 # Trending hashtag lookup via Google Trends (requires pandas).
 trending = ["pytrends>=4.9"]
+# Character reels (narovva.characters): 2D compositor, cast voices, score + sound effects.
+characters = ["skia-python>=87.6", "edge-tts>=7.0", "numpy>=1.26", "scipy>=1.11"]
 
 [project.scripts]
 narovva = "narovva.cli:main"
