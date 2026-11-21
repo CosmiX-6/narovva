@@ -53,6 +53,23 @@ window.CUScenes = function (K) {
   const parts = (s) => (s.parts && s.parts.length ? s.parts : [{ at: 0.15, voice: Math.max(0.8, s.duration - 0.8) }]);
   const partAt = (s, c, j) => c.t0 + parts(s)[Math.max(0, Math.min(j, parts(s).length - 1))].at;
   const latest = (c) => c.t0 + c.dur - OV - 0.55;
+  // When `phrase` starts being said in line j: its first word's share of the line's characters (the captions use the
+  // same clock). null when the line does not say it.
+  const spokenAt = (s, c, j, phrase) => {
+    const ps = parts(s), p = ps[Math.max(0, Math.min(j, ps.length - 1))];
+    const text = String(p.caption || (s.screens || [])[j] || "");
+    const nrm = (w) => w.toLowerCase().replace(/[’']s$/, "").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    const want = String(phrase || "").split(/\s+/).map(nrm).filter(Boolean);
+    const toks = text.split(/\s+/).filter(Boolean);
+    if (!want.length || !toks.length) return null;
+    const chars = toks.reduce((n, w) => n + w.length + 1, 0);
+    let done = 0;
+    for (let i = 0; i < toks.length; i++) {
+      if (want.every((w, k) => toks[i + k] && nrm(toks[i + k]) === w)) return c.t0 + p.at + (p.voice || 1) * (done / chars);
+      done += toks[i].length + 1;
+    }
+    return null;
+  };
   // When item i of n arrives: items are shared out over the lines from `from` on; items that
   // share a line arrive one after another across it.
   const itemAt = (s, c, i, n, from) => {
@@ -469,29 +486,45 @@ window.CUScenes = function (K) {
   // actor growing or shrinking (its figure counting to the new value), a red strike, a highlight, a count-up.
   const numParts = (v) => { const m = String(v || "").match(/^([^\d-]*)(-?[\d][\d,]*\.?\d*)(.*)$/); return m ? { pre: m[1], n: parseFloat(m[2].replace(/,/g, "")), dec: (m[2].split(".")[1] || "").length, post: m[3], comma: m[2].includes(",") } : null; };
   const fmtNum = (p, x) => { let s = x.toFixed(p.dec); if (p.comma) s = Number(s).toLocaleString("en-US", { minimumFractionDigits: p.dec, maximumFractionDigits: p.dec }); return p.pre + s + p.post; };
+  // The composed stage's height and its actors' centres, shared with the next beat (continuity needs both).
+  const composeH = (d, s) => Math.max(560, mh(860) - (d.title ? 190 : 0) - (s && s.kicker ? 90 : 0));
+  const composeAt = (L, n, W, H) => Array.from({ length: n }, (_, k) => {
+    if (L === "versus") return [W * (k ? 0.76 : 0.24), H * 0.46];
+    if (L === "stack") return [W / 2, H * (n > 1 ? 0.1 + (0.8 * k) / (n - 1) : 0.5)];
+    if (L === "flow") return [W * (n > 1 ? 0.15 + (0.7 * k) / (n - 1) : 0.5), H * (n > 3 ? (k % 2 ? 0.62 : 0.3) : 0.42)];
+    if (L === "hub") {
+      if (!k) return [W / 2, H / 2];
+      // an ellipse that uses the tall stage, turned half a step so no satellite sits right on the core's label
+      const ang = -Math.PI / 2 + ((k - 0.5) * 2 * Math.PI) / (n - 1);
+      return [W / 2 + Math.cos(ang) * W * 0.38, H / 2 + Math.sin(ang) * H * 0.42];
+    }
+    return [W * (n > 1 ? 0.13 + (0.74 * k) / (n - 1) : 0.5), H * 0.46];   // row
+  });
+
   S.compose = (sc, s, c) => {
     const d = s.data || {}, A = d.actors || [], n = A.length, L = d.layout || "row";
     kick(sc, s); title(sc, d, 70, mh(170));
     // the whole scene window below the kicker and title (about 880px with captions on)
-    const W = 858, H = Math.max(560, mh(860) - (d.title ? 190 : 0) - (s.kicker ? 90 : 0));
+    const W = 858, H = composeH(d, s);
     const stage = el("div", "comp comp-" + L, null, sc);
     stage.style.height = H + "px";
     const svg = document.createElementNS(NS, "svg");
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H);
     svg.classList.add("compsvg"); stage.appendChild(svg);
     // centres of the actors, by layout (stage pixels)
-    const P = A.map((_, k) => {
-      if (L === "versus") return [W * (k ? 0.76 : 0.24), H * 0.46];
-      if (L === "stack") return [W / 2, H * (n > 1 ? 0.1 + (0.8 * k) / (n - 1) : 0.5)];
-      if (L === "flow") return [W * (n > 1 ? 0.15 + (0.7 * k) / (n - 1) : 0.5), H * (n > 3 ? (k % 2 ? 0.62 : 0.3) : 0.42)];
-      if (L === "hub") {
-        if (!k) return [W / 2, H / 2];
-        // an ellipse that uses the tall stage, turned half a step so no satellite sits right on the core's label
-        const ang = -Math.PI / 2 + ((k - 0.5) * 2 * Math.PI) / (n - 1);
-        return [W / 2 + Math.cos(ang) * W * 0.38, H / 2 + Math.sin(ang) * H * 0.42];
-      }
-      return [W * (n > 1 ? 0.13 + (0.74 * k) / (n - 1) : 0.5), H * 0.46];   // row
-    });
+    const P = composeAt(L, n, W, H);
+    // Continuity (craft rule 1): actors the beat before also had (same label) are already on stage -- they glide from
+    // where they stood to their new place instead of popping in again.
+    const prevS = DECK.slides[c.i - 1], prevD = prevS && prevS.kind === "compose" ? prevS.data || {} : null;
+    const kept = {};
+    if (prevD) {
+      const pA = prevD.actors || [], pH = composeH(prevD, prevS), pP = composeAt(prevD.layout || "row", pA.length, W, pH);
+      const shift = (H - pH) / 2;   // the scene is centred vertically: a taller stage sits higher
+      pA.forEach((a, k) => {
+        const j = A.findIndex((b) => String(b.label).toLowerCase() === String(a.label).toLowerCase());
+        if (j >= 0) kept[j] = [pP[k][0] - P[j][0], pP[k][1] - shift - P[j][1]];
+      });
+    }
     // one actor fills the stage; more share it
     const size = L === "stack" ? 0 : L === "hub" ? 150 : ({ 1: 300, 2: 230, 3: 190, 4: 150, 5: 130 })[n] * (L === "flow" ? 0.9 : 1);
     const nodes = A.map((a, k) => {
@@ -524,6 +557,9 @@ window.CUScenes = function (K) {
     const steps = d.steps || [];
     const seen = {};
     const at = steps.map((st, i) => {
+      // an actor arrives on the word that names it (craft rule 3); other steps follow their line in order
+      const said = st.do === "appear" && st.line != null && A[st.who] ? spokenAt(s, c, st.line, A[st.who].label) : null;
+      if (said != null) return Math.min(Math.max(c.t0 + 0.05, said - 0.08), latest(c));
       const base = st.line != null ? partAt(s, c, st.line) + 0.1 : itemAt(s, c, i, steps.length);
       const key = String(st.line != null ? st.line : "auto" + i);
       const T = base + 0.45 * (seen[key] = (seen[key] || 0) + 1) - 0.45;
@@ -532,6 +568,12 @@ window.CUScenes = function (K) {
     // arrival: an actor with an "appear" step arrives then; the others come in at the start, one after another
     const firstAt = A.map((_, k) => { const i = steps.findIndex((st) => st.do === "appear" && st.who === k); return i >= 0 ? at[i] : null; });
     nodes.forEach((o, k) => {
+      if (kept[k]) {   // already on stage: visible from the first frame, gliding to its new place
+        tl.set(o.nd, { opacity: 1, xPercent: -50, yPercent: -50 }, c.t0);
+        tl.fromTo(o.nd, { x: kept[k][0], y: kept[k][1] }, { x: 0, y: 0, duration: 0.6, ease: "power3.inOut", immediateRender: false }, c.t0 + 0.05);
+        o.arrive = c.t0;
+        return;
+      }
       const T = firstAt[k] != null ? firstAt[k] : c.a(0.05) + k * 0.14;
       tl.fromTo(o.nd, { opacity: 0, scale: 0.4, xPercent: -50, yPercent: -50 }, { opacity: 1, scale: 1, xPercent: -50, yPercent: -50, duration: 0.34, ease: "back.out(2)" }, T);
       drawOn(o.ic, T + 0.06, 0.5);
