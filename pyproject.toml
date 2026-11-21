@@ -14,6 +14,7 @@ dependencies = [
     "cryptography>=42.0",
     "imageio-ffmpeg>=0.5",
     "pillow>=10.0",
+    "anthropic>=2.12",  # Claude, the primary text model (narovva.llm.fallback.AnthropicChat)
     "poster-core[all] @ git+https://github.com/CosmiX-6/poster-core.git@909ad505506c4b99e5458332daa974ee1eb6d9ef",
     "info-snipe[postgres] @ git+https://github.com/CosmiX-6/info-snipe.git@6e6e07a8626fcf5b1b0a120897e732b4d9ec700d",
 ]
