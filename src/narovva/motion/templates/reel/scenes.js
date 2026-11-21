@@ -463,6 +463,166 @@ window.CUScenes = function (K) {
     c.stampTarget = box; c.stampAt = lastT + 0.6;
   };
 
+  // -- compose: a picture built for this beat (story-first mode) ----------------------
+  // The beat's own actors, laid out by `layout`, and what the lines say happens to them, each step on the time
+  // its line is spoken: a link drawn with a pulse running down it, a token travelling between two actors, an
+  // actor growing or shrinking (its figure counting to the new value), a red strike, a highlight, a count-up.
+  const numParts = (v) => { const m = String(v || "").match(/^([^\d-]*)(-?[\d][\d,]*\.?\d*)(.*)$/); return m ? { pre: m[1], n: parseFloat(m[2].replace(/,/g, "")), dec: (m[2].split(".")[1] || "").length, post: m[3], comma: m[2].includes(",") } : null; };
+  const fmtNum = (p, x) => { let s = x.toFixed(p.dec); if (p.comma) s = Number(s).toLocaleString("en-US", { minimumFractionDigits: p.dec, maximumFractionDigits: p.dec }); return p.pre + s + p.post; };
+  S.compose = (sc, s, c) => {
+    const d = s.data || {}, A = d.actors || [], n = A.length, L = d.layout || "row";
+    kick(sc, s); title(sc, d, 70, mh(170));
+    // the whole scene window below the kicker and title (about 880px with captions on)
+    const W = 858, H = Math.max(560, mh(860) - (d.title ? 190 : 0) - (s.kicker ? 90 : 0));
+    const stage = el("div", "comp comp-" + L, null, sc);
+    stage.style.height = H + "px";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H);
+    svg.classList.add("compsvg"); stage.appendChild(svg);
+    // centres of the actors, by layout (stage pixels)
+    const P = A.map((_, k) => {
+      if (L === "versus") return [W * (k ? 0.76 : 0.24), H * 0.46];
+      if (L === "stack") return [W / 2, H * (n > 1 ? 0.1 + (0.8 * k) / (n - 1) : 0.5)];
+      if (L === "flow") return [W * (n > 1 ? 0.15 + (0.7 * k) / (n - 1) : 0.5), H * (n > 3 ? (k % 2 ? 0.62 : 0.3) : 0.42)];
+      if (L === "hub") {
+        if (!k) return [W / 2, H / 2];
+        // an ellipse that uses the tall stage, turned half a step so no satellite sits right on the core's label
+        const ang = -Math.PI / 2 + ((k - 0.5) * 2 * Math.PI) / (n - 1);
+        return [W / 2 + Math.cos(ang) * W * 0.38, H / 2 + Math.sin(ang) * H * 0.42];
+      }
+      return [W * (n > 1 ? 0.13 + (0.74 * k) / (n - 1) : 0.5), H * 0.46];   // row
+    });
+    // one actor fills the stage; more share it
+    const size = L === "stack" ? 0 : L === "hub" ? 150 : ({ 1: 300, 2: 230, 3: 190, 4: 150, 5: 130 })[n] * (L === "flow" ? 0.9 : 1);
+    const nodes = A.map((a, k) => {
+      const nd = el("div", "cnode2" + (L === "stack" ? " wide" : "") + (L === "hub" && !k ? " core" : ""), null, stage);
+      nd.style.left = P[k][0] + "px"; nd.style.top = P[k][1] + "px";
+      const disc = el("div", "cdisc", null, nd);
+      const sz = L === "stack" ? 104 : L === "hub" && !k ? 180 : size;
+      if (n === 1) nd.classList.add("solo");
+      disc.style.width = disc.style.height = sz + "px";
+      const ic = icon(a.icon || "sparkles",Math.round(sz * 0.5), disc);
+      const tx = el("div", "ctx", null, nd);
+      const lab = el("div", "clab", a.label, tx);
+      if (L !== "stack") {
+        // shrink to fit on one line; only a label that still does not fit wraps, and only between words
+        // the stage is not laid out yet here, so size from the text: about 0.72em per uppercase glyph
+        const maxW = Math.max(200, W / Math.max(2, n) - 20), em = 0.72, txt = String(a.label);
+        const longest = Math.max(...txt.split(/\s+/).map((w) => w.length), 1);
+        let fs = Math.min(n === 1 ? 66 : 46, maxW / (txt.length * em));
+        if (fs < 34 && /\s/.test(txt)) fs = Math.min(n === 1 ? 66 : 46, maxW / (longest * em));   // two lines, whole words
+        else lab.style.whiteSpace = "nowrap";
+        lab.style.fontSize = Math.max(24, Math.floor(fs)) + "px";
+        lab.style.maxWidth = maxW + "px";
+      }
+      const val = a.value ? el("div", "cval", a.value, tx) : null;
+      if (a.note) figures(el("div", "cnote", null, tx), a.note);
+      return { nd, disc, ic, val, a };
+    });
+    const R = (k) => (L === "stack" ? 64 : (L === "hub" && !k ? 180 : size) / 2 + 10);
+    // when each step happens: on its line if given, else spread over the lines; steps on one line follow each other
+    const steps = d.steps || [];
+    const seen = {};
+    const at = steps.map((st, i) => {
+      const base = st.line != null ? partAt(s, c, st.line) + 0.1 : itemAt(s, c, i, steps.length);
+      const key = String(st.line != null ? st.line : "auto" + i);
+      const T = base + 0.45 * (seen[key] = (seen[key] || 0) + 1) - 0.45;
+      return Math.min(T, latest(c));
+    });
+    // arrival: an actor with an "appear" step arrives then; the others come in at the start, one after another
+    const firstAt = A.map((_, k) => { const i = steps.findIndex((st) => st.do === "appear" && st.who === k); return i >= 0 ? at[i] : null; });
+    nodes.forEach((o, k) => {
+      const T = firstAt[k] != null ? firstAt[k] : c.a(0.05) + k * 0.14;
+      tl.fromTo(o.nd, { opacity: 0, scale: 0.4, xPercent: -50, yPercent: -50 }, { opacity: 1, scale: 1, xPercent: -50, yPercent: -50, duration: 0.34, ease: "back.out(2)" }, T);
+      drawOn(o.ic, T + 0.06, 0.5);
+      o.arrive = T;
+    });
+    if (L === "versus") {
+      const vs = el("div", "cvs", "VS", stage);
+      tl.fromTo(vs, { opacity: 0, scale: 0.3, xPercent: -50, yPercent: -50 }, { opacity: 1, scale: 1, xPercent: -50, yPercent: -50, duration: 0.3, ease: "back.out(3)" }, c.a(0.3));
+    }
+    const links = {};
+    function link(i, j, T, red) {
+      const key = i + ">" + j;
+      if (links[key]) return links[key];
+      const [x1, y1] = P[i], [x2, y2] = P[j], dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+      const ax = x1 + (dx / len) * R(i), ay = y1 + (dy / len) * R(i), bx = x2 - (dx / len) * R(j), by = y2 - (dy / len) * R(j);
+      const ln = document.createElementNS(NS, "line");
+      for (const [k2, v] of Object.entries({ x1: ax, y1: ay, x2: bx, y2: by })) ln.setAttribute(k2, v);
+      ln.classList.add("clink2"); if (red) ln.classList.add("red"); svg.appendChild(ln);
+      const L2 = Math.hypot(bx - ax, by - ay);
+      ln.style.strokeDasharray = L2;
+      tl.fromTo(ln, { strokeDashoffset: L2 }, { strokeDashoffset: 0, duration: 0.4, ease: "power2.inOut" }, T);
+      return (links[key] = { ln, ax, ay, bx, by });
+    }
+    const dim = (except, T) => nodes.forEach((o, k) => { if (k !== except) tl.fromTo(o.nd, { opacity: 1 }, { opacity: 0.35, duration: 0.25, immediateRender: false }, T); });
+    steps.forEach((st, i) => {
+      const T = Math.max(at[i], nodes[st.who].arrive + 0.2), o = nodes[st.who];
+      if (st.do === "connect" || st.do === "move") {
+        const lk = link(st.who, st.to, T, false);
+        if (st.do === "connect") {
+          const pulse = document.createElementNS(NS, "circle"); pulse.setAttribute("r", 12); pulse.classList.add("cpulse2"); svg.appendChild(pulse);
+          tl.fromTo(pulse, { attr: { cx: lk.ax, cy: lk.ay }, opacity: 1 }, { attr: { cx: lk.bx, cy: lk.by }, opacity: 1, duration: 0.6, ease: "power1.inOut" }, T + 0.35);
+          tl.fromTo(pulse, { opacity: 1 }, { opacity: 0, duration: 0.2, immediateRender: false }, T + 0.95);
+          tl.set(pulse, { opacity: 0 }, 0);
+          if (st.label) {
+            const tag = el("div", "ctag", st.label, stage);
+            // beside the link, not on it (perpendicular offset), so it never covers a label
+            const ux = lk.bx - lk.ax, uy = lk.by - lk.ay, ul = Math.hypot(ux, uy) || 1;
+            tag.style.left = (lk.ax + lk.bx) / 2 + (-uy / ul) * 46 + "px"; tag.style.top = (lk.ay + lk.by) / 2 + (ux / ul) * 46 - (Math.abs(uy) < 1 ? 46 : 0) + "px";
+            tl.fromTo(tag, { opacity: 0, scale: 0.6, xPercent: -50, yPercent: -50 }, { opacity: 1, scale: 1, xPercent: -50, yPercent: -50, duration: 0.25, ease: "back.out(2)" }, T + 0.3);
+          }
+        } else {
+          const tok = el("div", "ctok", st.label || st.value || "", stage);
+          if (!st.label && !st.value) tok.classList.add("dot");
+          tok.style.left = lk.ax + "px"; tok.style.top = lk.ay + "px";
+          tl.set(tok, { opacity: 0 }, 0);
+          tl.fromTo(tok, { opacity: 0, x: 0, y: 0, xPercent: -50, yPercent: -50, scale: 0.5 }, { opacity: 1, scale: 1, x: 0, y: 0, xPercent: -50, yPercent: -50, duration: 0.2, immediateRender: false }, T + 0.3);
+          tl.fromTo(tok, { x: 0, y: 0 }, { x: lk.bx - lk.ax, y: lk.by - lk.ay, duration: 0.9, ease: "power2.inOut", immediateRender: false }, T + 0.45);
+          tl.fromTo(tok, { opacity: 1 }, { opacity: 0, scale: 0.4, duration: 0.25, ease: "power2.in", immediateRender: false }, T + 1.3);   // delivered
+          tl.fromTo(nodes[st.to].disc, { scale: 1 }, { scale: 1.12, duration: 0.15, yoyo: true, repeat: 1, immediateRender: false }, T + 1.3);
+        }
+      } else if (st.do === "grow" || st.do === "shrink") {
+        tl.fromTo(o.disc, { scale: 1 }, { scale: st.do === "grow" ? 1.22 : 0.72, duration: 0.6, ease: "power3.inOut", immediateRender: false }, T);
+        if (st.value) {
+          const val = o.val || (o.val = el("div", "cval", "", o.nd.querySelector(".ctx")));
+          const p1 = numParts(o.a.value), p2 = numParts(st.value);
+          if (p1 && p2 && p1.pre === p2.pre) {
+            const box = { v: p1.n };
+            tl.fromTo(box, { v: p1.n }, { v: p2.n, duration: 0.8, ease: "power2.out", immediateRender: false, onUpdate: () => { val.textContent = fmtNum(p2, box.v); } }, T);
+          } else {
+            tl.set(val, { textContent: st.value }, T + 0.3);
+          }
+          val.classList.add(st.do === "grow" ? "up" : "down");
+        }
+      } else if (st.do === "block") {
+        if (st.to != null) {
+          const lk = link(st.who, st.to, T - 0.3, false);
+          tl.set(lk.ln, { attr: { class: "clink2 red" } }, T);
+          const x = el("div", "cblock", null, stage); icon("x", 46, x);
+          x.style.left = (lk.ax + lk.bx) / 2 + "px"; x.style.top = (lk.ay + lk.by) / 2 + "px";
+          tl.fromTo(x, { opacity: 0, scale: 2.2, xPercent: -50, yPercent: -50 }, { opacity: 1, scale: 1, xPercent: -50, yPercent: -50, duration: 0.2, ease: "power4.in" }, T);
+        } else {
+          const bar = el("div", "cstrike", null, o.nd);
+          tl.fromTo(bar, { scaleX: 0 }, { scaleX: 1, duration: 0.22, ease: "power4.out" }, T);
+          tl.fromTo(o.nd, { x: 10 }, { x: 0, duration: 0.35, ease: "elastic.out(1, 0.3)", immediateRender: false }, T + 0.2);
+        }
+        if (st.label) { const st2 = el("div", "stamp mini", st.label, o.nd); tl.fromTo(st2, { opacity: 0, scale: 2.2, rotation: -16 }, { opacity: 1, scale: 1, rotation: -8, duration: 0.16, ease: "power4.in" }, T + 0.15); }
+      } else if (st.do === "highlight") {
+        tl.fromTo(o.disc, { "--glow": 0 }, { "--glow": 1, duration: 0.3, ease: "power2.out", immediateRender: false }, T);
+        tl.fromTo(o.nd, { scale: 1 }, { scale: 1.08, duration: 0.3, ease: "back.out(2)", immediateRender: false }, T);
+        dim(st.who, T);
+        if (st.label) { const t2 = el("div", "ctag hl", st.label, o.nd); tl.fromTo(t2, { opacity: 0, y: -14 }, { opacity: 1, y: 0, duration: 0.25 }, T + 0.1); }
+      } else if (st.do === "count") {
+        const target = st.value || o.a.value, p = numParts(target);
+        const val = o.val || (o.val = el("div", "cval", target || "", o.nd.querySelector(".ctx")));
+        if (p) { const box = { v: 0 }; tl.fromTo(box, { v: 0 }, { v: p.n, duration: 1.0, ease: "power3.out", immediateRender: false, onUpdate: () => { val.textContent = fmtNum(p, box.v); } }, T); }
+        tl.fromTo(val, { scale: 0.6 }, { scale: 1, duration: 0.4, ease: "back.out(2)", immediateRender: false }, T);
+      }
+    });
+    c.stampTarget = stage; c.stampAt = Math.min(latest(c), (at.length ? Math.max(...at) : c.a(0.4)) + 0.6);
+  };
+
   // -- world: a station of the 3D world where characters and objects act the story out
   // (world.js). The scene itself only carries the title; the world sits behind the window.
   const WORLD = window.CUWorld ? window.CUWorld({ tl, el, DECK, parts, partAt, latest, SH }) : null;

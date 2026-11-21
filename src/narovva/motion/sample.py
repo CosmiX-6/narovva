@@ -478,3 +478,113 @@ def sample_lesson(captions: bool = True, look=None) -> tuple[list[dict], str]:
     """The lesson sample, prepared like a real one. Returns (specs, subject)."""
     brief, article, _ = sample_lesson_inputs()
     return _prepared(SAMPLE_LESSON, brief, article, look, captions)
+
+
+# -- story first: the writer's complete story, then the director's pictures ---------------------------------------
+# python -m narovva.motion.preview out/ --story story_first
+
+SAMPLE_STORY_FIRST: dict = {
+    "subject": "AI pricing",
+    "coverage": {"who": 0, "what": 0, "when": 3, "why": 3, "numbers": 1, "impact": 4, "next": 6},
+    "beats": [
+        {"part": "hook", "lines": ["OpenAI just cut its prices by two thirds."],
+         "screen": ["OpenAI just cut its prices by two-thirds."], "mark": ["two-thirds"],
+         "facts": ["Prices fall 67% per token"], "show": "OpenAI's price tag drops from $15 to $5"},
+        {"part": "context", "lines": ["A million tokens used to cost fifteen dollars.", "Now they cost five."],
+         "screen": ["A million tokens used to cost $15.", "Now they cost $5."], "mark": ["$15", "$5"],
+         "facts": ["$15 per million tokens before", "$5 after"], "show": "the price before against the price after"},
+        {"part": "event", "lines": ["Fourteen models were updated at once.",
+                                    "And responses are now three point two times faster."],
+         "screen": ["14 models were updated at once.", "And responses are now 3.2x faster."],
+         "mark": ["14 models", "3.2x faster"], "facts": ["14 models updated at once", "Responses are 3.2x faster"],
+         "show": "OpenAI pushes the update to its 14 models, then the response speed jumps to 3.2x"},
+        {"part": "context", "kicker": "THE BACKSTORY",
+         "lines": ["The price war began in March twenty twenty four.", "Open models caught up in January twenty twenty five."],
+         "screen": ["The price war began in March 2024.", "Open models caught up in January 2025."],
+         "mark": ["March 2024", "January 2025"],
+         "facts": ["Mar 2024: a rival lab halves its prices", "Jan 2025: open models match the flagship"],
+         "show": "a timeline: Mar 2024 a rival halves prices, Jan 2025 open models catch up"},
+        {"part": "impact", "kicker": "THE FALLOUT",
+         "lines": ["Developers and startups gain the most.", "Smaller labs that competed on price feel the squeeze."],
+         "screen": ["Developers and startups gain the most.", "Smaller labs that competed on price feel the squeeze."],
+         "mark": ["gain the most", "squeeze"],
+         "facts": ["Developers and startups stand to benefit most", "Smaller labs face pressure"],
+         "show": "developers grow while smaller labs shrink"},
+        {"part": "reaction", "lines": ["The company says intelligence should be too cheap to meter."],
+         "screen": ["The company says intelligence should be too cheap to meter."], "mark": ["too cheap to meter"],
+         "facts": ["Intelligence should be too cheap to meter"], "show": "the spokesperson's quote"},
+        {"part": "next", "kicker": "WHAT NEXT", "lines": ["Anthropic, Google, Meta and Mistral now face pressure to follow."],
+         "screen": ["Anthropic, Google, Meta and Mistral now face pressure to follow."], "mark": ["pressure to follow"],
+         "facts": ["Anthropic, Google, Meta and Mistral sell competing models"],
+         "show": "OpenAI at the centre, its four rivals around it feeling the pull"},
+        {"part": "verdict", "lines": ["Customers could save one point two billion dollars this year."],
+         "screen": ["Customers could save $1.2B this year."], "mark": ["$1.2B"], "facts": ["Customers save $1.2B this year"],
+         "show": "$1.2B counting up"},
+        {"part": "cta", "lines": ["Follow Context Unfiltered for the story behind it."],
+         "screen": ["Follow Context Unfiltered for the story behind it."], "mark": ["Context Unfiltered"]},
+    ],
+}
+
+SAMPLE_DIRECTION: dict = {
+    "beats": [
+        {"i": 0, "scene": "compose", "data": {
+            "layout": "row", "actors": [{"id": "o", "label": "OpenAI", "icon": "building-2", "value": "$15"}],
+            "steps": [{"line": 0, "do": "shrink", "who": "o", "value": "$5"}]}},
+        {"i": 1, "scene": "compare", "data": {"title": "Per million tokens", "a": {"label": "Before", "value": "$15"},
+                                              "b": {"label": "After", "value": "$5"}}},
+        {"i": 2, "scene": "compose", "data": {
+            "layout": "flow", "title": "One update, 14 models",
+            "actors": [{"id": "o", "label": "OpenAI", "icon": "building-2"},
+                       {"id": "m", "label": "14 models", "icon": "cpu", "value": "14"},
+                       {"id": "r", "label": "Responses", "icon": "zap", "value": "3.2x"}],
+            "steps": [{"line": 0, "do": "connect", "who": "o", "to": "m", "label": "update"},
+                      {"line": 1, "do": "connect", "who": "m", "to": "r"},
+                      {"line": 1, "do": "count", "who": "r", "value": "3.2x"}]}},
+        {"i": 3, "scene": "dates", "data": {"events": [{"when": "Mar 2024", "what": "A rival lab halves its prices"},
+                                                       {"when": "Jan 2025", "what": "Open models match the flagship"}]}},
+        {"i": 4, "scene": "compose", "data": {
+            "layout": "versus",
+            "actors": [{"id": "d", "label": "Developers", "icon": "code", "note": "and startups"},
+                       {"id": "s", "label": "Smaller labs", "icon": "flask-conical"}],
+            "steps": [{"line": 0, "do": "grow", "who": "d"}, {"line": 1, "do": "shrink", "who": "s"},
+                      {"line": 1, "do": "block", "who": "s", "label": "SQUEEZED"}]}},
+        {"i": 5, "scene": "quote", "data": {"text": "Intelligence should be too cheap to meter.",
+                                            "who": "Company spokesperson", "mark": "too cheap to meter"}},
+        {"i": 6, "scene": "compose", "data": {
+            "layout": "hub",
+            "actors": [{"id": "o", "label": "OpenAI", "icon": "building-2"},
+                       {"id": "a", "label": "Anthropic", "icon": "landmark"}, {"id": "g", "label": "Google", "icon": "globe"},
+                       {"id": "me", "label": "Meta", "icon": "users"}, {"id": "mi", "label": "Mistral", "icon": "rocket"}],
+            "steps": [{"line": 0, "do": "highlight", "who": "o"},
+                      {"line": 0, "do": "move", "who": "o", "to": "a", "label": "$5"},
+                      {"line": 0, "do": "move", "who": "o", "to": "g", "label": "$5"}]}},
+        {"i": 7, "scene": "number", "data": {"value": "$1.2B", "label": "customers save this year"}},
+        {"i": 8, "scene": "cta", "data": {}},
+    ],
+}
+
+
+def sample_story_first(captions: bool = True, look=None) -> tuple[list[dict], str]:
+    """The story-first sample: the writer's complete story and the director's pictures, validated and timed the way
+    the pipeline does it. Returns (specs, subject)."""
+    from ..config.schema import MotionStyleConfig
+    from .story_first import FullSource, direct_story, parse_story
+    from .storyboard import Storyboard, beat_specs
+    from .style import stamp_colors
+
+    look = look or MotionStyleConfig()
+    brief, article = sample_brief_and_article()
+    src = FullSource(brief, article)
+    beats, gaps = parse_story(SAMPLE_STORY_FIRST, src, brand="Context Unfiltered")
+    if gaps:
+        raise RuntimeError(f"the story-first sample is incomplete: {gaps}")
+    board_beats, stats = direct_story(SAMPLE_DIRECTION, beats, src)
+    if stats["fallbacks"]:
+        raise RuntimeError(f"the story-first sample's direction no longer validates: {stats}")
+    board = Storyboard(subject="AI pricing", beats=board_beats)
+    specs = beat_specs(board, stamp_colors=stamp_colors(look), heading_marks=look.heading_marks)
+    if not captions:
+        for spec in specs:
+            for part in spec["parts"]:
+                part.pop("caption", None)
+    return specs, board.subject

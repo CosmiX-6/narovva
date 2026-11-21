@@ -197,3 +197,165 @@ def test_the_writer_chain_is_used_where_configured(monkeypatch):
     assert built == [["gemini:gemini-3.1-pro-preview", "gemini:gemini-flash-latest"]]  # once, Pro first
     every = ChannelConfig(**base, writer={"chain": ["gemini:gemini-3.1-pro-preview"], "use_for": "all"})
     assert rc.writer_llm(every, "BASE", lesson=None) == "WRITER"
+
+
+# -- Claude (anthropic:) ---------------------------------------------------------------------------------------------
+
+class _Block:
+    def __init__(self, type_, text=""):
+        self.type, self.text = type_, text
+
+
+class _Msg:
+    def __init__(self, text, stop="end_turn"):
+        self.content = [_Block("thinking"), _Block("text", text)]
+        self.stop_reason, self.stop_details = stop, None
+
+
+class _Stream:
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get_final_message(self):
+        return self.msg
+
+
+class _Claude:
+    def __init__(self, msg):
+        self.msg, self.kwargs = msg, None
+        self.messages = self
+
+    def stream(self, **kwargs):
+        self.kwargs = kwargs
+        return _Stream(self.msg)
+
+
+def test_claude_returns_the_json_and_caches_the_system_prompt():
+    from narovva.llm.fallback import AnthropicChat
+
+    fake = _Claude(_Msg('{"beats": [1, 2]}'))
+    chat = AnthropicChat("claude-sonnet-5-5", "k", client=fake)
+    assert chat.complete_json("SYSTEM", "USER") == {"beats": [1, 2]}
+    assert fake.kwargs["model"] == "claude-sonnet-5-5"
+    assert fake.kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert fake.kwargs["system"][0]["text"].startswith("SYSTEM")
+    assert fake.kwargs["messages"] == [{"role": "user", "content": "USER"}]
+    assert fake.kwargs["output_config"] == {"effort": "medium"}
+
+
+@pytest.mark.parametrize("stop", ["refusal", "max_tokens"])
+def test_claude_refusal_or_cut_off_reply_goes_to_the_next_model(stop):
+    from narovva.llm.fallback import AnthropicChat
+
+    claude = AnthropicChat("claude-sonnet-5-5", "k", client=_Claude(_Msg('{"a": 1', stop)))
+    backup = _Fake({"ok": True})
+    chain = FallbackLLM([_Entry("claude", claude), _Entry("free", backup)], sleep=lambda s: None)
+    assert chain.complete_json("s", "u") == {"ok": True}
+
+
+def test_claude_overload_and_empty_balance_are_classified():
+    assert classify_error(_Err("Overloaded", 529)) == "overload"
+    assert classify_error(_Err("Your credit balance is too low to access the Anthropic API.", 400)) == "quota"
+
+
+def test_claude_goes_first_when_its_key_is_set():
+    chain = build_llm_chain(["anthropic:claude-sonnet-5-5", "openai:gpt-4o-mini"], {"anthropic": "k", "openai": "k"})
+    assert [e.name for e in chain.entries] == ["anthropic:claude-sonnet-5-5", "openai:gpt-4o-mini"]
+    assert chain.entries[0].client.model == "claude-sonnet-5-5"
+    no_key = build_llm_chain(["anthropic:claude-sonnet-5-5", "openai:gpt-4o-mini"], {"openai": "k"})
+    assert [e.name for e in no_key.entries] == ["openai:gpt-4o-mini"]
+
+
+def test_channel_passes_the_anthropic_key(monkeypatch):
+    from narovva.config.loader import load_channel
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    channel = load_channel("config/channels/example-tech-ig.yaml")
+    assert "anthropic:claude-sonnet-5-5" in channel.llm_chain[:2]
+    assert rc._llm_keys(channel)["anthropic"] == "sk-test"
+
+
+# -- Claude on a claude.ai plan (claude-code:) -----------------------------------------------------------------------
+
+class _Proc:
+    def __init__(self, out, code=0, err=""):
+        self.stdout, self.returncode, self.stderr = out, code, err
+
+
+def _cli(reply: dict | str, code=0):
+    import json as _json
+
+    calls = []
+
+    def run(cmd, **kw):
+        sys_file = cmd[cmd.index("--system-prompt-file") + 1]
+        with open(sys_file, encoding="utf-8") as f:
+            calls.append({"cmd": cmd, "system": f.read(), **kw})
+        return _Proc(reply if isinstance(reply, str) else _json.dumps(reply), code)
+
+    return run, calls
+
+
+def _cc(run):
+    from narovva.llm.fallback import ClaudeCodeChat
+
+    return ClaudeCodeChat("claude-sonnet-5-5", "oauth-token", binary="claude", run=run)
+
+
+def test_claude_code_runs_headless_with_no_tools_on_the_plan(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "would-bill-the-api")
+    run, calls = _cli({"type": "result", "is_error": False, "stop_reason": "end_turn", "result": '{"ok": 1}'})
+    assert _cc(run).complete_json("SYSTEM", "USER") == {"ok": 1}
+    call = calls[0]
+    cmd = call["cmd"]
+    assert cmd[:4] == ["claude", "-p", "--output-format", "json"]
+    assert cmd[cmd.index("--model") + 1] == "claude-sonnet-5-5"
+    assert cmd[cmd.index("--tools") + 1] == ""
+    assert {"--no-session-persistence", "--strict-mcp-config", "--disable-slash-commands"} <= set(cmd)
+    assert call["system"].startswith("SYSTEM") and call["input"] == "USER"
+    assert call["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "oauth-token"
+    assert "ANTHROPIC_API_KEY" not in call["env"]        # it would win over the token and bill the API
+
+
+def test_claude_code_usage_limit_hands_over_to_the_next_model():
+    run, _ = _cli({"type": "result", "is_error": True, "api_error_status": 429,
+                   "result": "Claude AI usage limit reached|1764000000"}, code=1)
+    plan, backup = _cc(run), _Fake({"ok": True})
+    chain = FallbackLLM([_Entry("plan", plan), _Entry("free", backup)], sleep=lambda s: None)
+    assert chain.complete_json("s", "u") == {"ok": True}
+    assert chain.entries[0].dead_reason.startswith("quota")   # not asked again this run
+    assert classify_error(_Err("claude CLI: You've hit your limit · resets 3pm")) == "quota"
+
+
+def test_claude_code_expired_token_and_broken_output():
+    run, _ = _cli({"type": "result", "is_error": True, "api_error_status": 401,
+                   "result": "OAuth token has expired. Please run /login"}, code=1)
+    with pytest.raises(Exception) as exc:
+        _cc(run).complete_json("s", "u")
+    assert classify_error(exc.value) == "auth"
+    run, _ = _cli("Segmentation fault", code=139)
+    with pytest.raises(Exception, match="exit 139"):
+        _cc(run).complete_json("s", "u")
+
+
+def test_claude_code_without_the_cli_is_left_out(monkeypatch):
+    monkeypatch.delenv("CLAUDE_BIN", raising=False)
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    chain = build_llm_chain(["claude-code:claude-sonnet-5-5", "openai:gpt-4o-mini"],
+                            {"claude-code": "t", "openai": "k"})
+    assert [e.name for e in chain.entries] == ["openai:gpt-4o-mini"]
+
+
+def test_channel_puts_the_plan_first(monkeypatch):
+    from narovva.config.loader import load_channel
+
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "t")
+    channel = load_channel("config/channels/example-tech-ig.yaml")
+    assert channel.llm_chain[:2] == ["claude-code:claude-sonnet-5-5", "anthropic:claude-sonnet-5-5"]
+    assert rc._llm_keys(channel)["claude-code"] == "t"

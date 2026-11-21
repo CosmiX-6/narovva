@@ -30,6 +30,8 @@ secret**. Names must match exactly; values are never printed in logs.
 | `DATABASE_URL` | post history, dedup, metrics, refreshed token | yes for scheduled runs |
 | `TOKEN_ENCRYPTION_KEY` | encrypting the refreshed token in Postgres | yes with `DATABASE_URL` |
 | `BLOB_READ_WRITE_TOKEN` | hosting media while Instagram fetches it | yes |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude on a claude.ai plan (`claude setup-token`; one year), via the Claude Code CLI | optional |
+| `ANTHROPIC_API_KEY` | Claude, the primary text model (paid; Console billing, not a claude.ai plan) | recommended |
 | `GOOGLE_API_KEY` | Gemini text models and Gemini voices | one text-model key is required |
 | `OPENAI_API_KEY` | OpenAI text models and voices (paid) | optional |
 | `OPENROUTER_API_KEY` | OpenRouter `:free` text models | optional |
