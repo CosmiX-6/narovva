@@ -281,8 +281,12 @@ llm_chain:
 #   gemini:gemini-3.1-pro-preview  $2 / $12 per 1M tokens in / out, roughly $0.05-0.15 a storyboard
 # use_for: lessons (only the "How AI works" posts) or all (every post).
 writer:
-  chain: []
-  use_for: lessons
+  # Claude Opus 5.5 writes and directs every story (story-first's two calls, the ones that decide the video);
+  # the plan's token first, then an API key, then llm_chain. Everything else stays on llm_chain (Sonnet).
+  chain:
+    - claude-code:claude-opus-5-5
+    - anthropic:claude-opus-5-5
+  use_for: all
 
 # 'none': poster_core's Gemini image generation uses Imagen, which the Gemini
 # Developer API key can't call (every article lacking a usable image failed).

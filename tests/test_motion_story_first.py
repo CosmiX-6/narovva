@@ -264,3 +264,123 @@ def test_board_signature_and_specs():
     specs, subject = sample_story_first(captions=False, look=MotionStyleConfig())
     assert subject == "AI pricing" and len(specs) == 9
     assert all("caption" not in p for s in specs for p in s["parts"])
+
+
+# -- craft: takeaways, hero, titles ----------------------------------------------------------------------------------
+
+def test_takeaways_and_hero_are_parsed_and_grounded():
+    from narovva.motion.story_first import parse_hero
+
+    beats, _ = _beats()
+    assert beats[0]["takeaway"] == ("Prices cut", "by two-thirds.")
+    assert parse_hero(SAMPLE_STORY_FIRST, SRC) == {"label": "OpenAI", "icon": "building-2"}
+    raw = copy.deepcopy(SAMPLE_STORY_FIRST)
+    raw["beats"][1]["takeaway"] = {"setup": "$99", "turn": "is now $1."}          # figures not in the article
+    raw["beats"][2]["takeaway"] = {"setup": "this is far too long", "turn": "for the screen to hold"}
+    raw["hero"] = {"label": "Quantum Pandas Inc"}
+    beats, _ = _beats(raw)
+    assert beats[1]["takeaway"] is None and beats[2]["takeaway"] is None
+    assert parse_hero(raw, SRC) is None
+
+
+def test_a_long_hook_is_a_gap():
+    raw = copy.deepcopy(SAMPLE_STORY_FIRST)
+    raw["beats"][0]["lines"] = ["OpenAI just cut the price of every model it sells by two thirds today, and here is why"]
+    raw["beats"][0]["screen"] = raw["beats"][0]["lines"]
+    _, gaps = _beats(raw)
+    assert any("hook" in g for g in gaps)
+
+
+def test_takeaway_becomes_the_title_and_the_fallback_headline():
+    beats, _ = _beats()
+    d = copy.deepcopy(SAMPLE_DIRECTION)
+    out, _ = direct_story(d, beats, SRC)
+    assert out[2]["data"]["title"] == "One update, 14 models"            # the director's own title stays
+    assert out[4]["data"]["title"] == "Builders win. Small labs squeezed."  # none given: the takeaway
+    assert out[4]["data"]["mark"] == "Small labs squeezed."
+    d["beats"][0]["data"]["actors"] = [{"label": "Quantum Pandas"}]
+    out, _ = direct_story(d, beats, SRC)
+    assert out[0]["scene"] == "headline" and out[0]["data"]["text"] == "Prices cut by two-thirds."
+
+
+def test_director_hears_the_hero_takeaways_and_the_review():
+    from narovva.motion.story_first import _director_user
+
+    beats, _ = _beats()
+    user = _director_user(beats, BRIEF, ARTICLE, {"label": "OpenAI", "icon": "building-2"}, ["only 2 different pictures"])
+    assert "HERO: OpenAI" in user and '"turn": "by two-thirds."' in user and "only 2 different pictures" in user
+
+
+# -- quality gates ---------------------------------------------------------------------------------------------------
+
+def test_the_sample_passes_every_review():
+    from narovva.motion import quality
+
+    beats, gaps = _beats()
+    hero = {"label": "OpenAI", "icon": "building-2"}
+    assert quality.story_review(beats, gaps, hero, story_seconds(beats))["ok"]
+    out, stats = direct_story(copy.deepcopy(SAMPLE_DIRECTION), beats, SRC)
+    review = quality.direction_review(out, stats, hero)
+    assert review["ok"], review
+    assert review["metrics"]["distinct"] == 8 and review["notes"] == []      # the hero recurs
+
+
+def test_a_headline_wall_fails_review_and_goes_back_to_the_director():
+    lazy = {"beats": [{"i": i, "scene": "headline", "data": {"text": "OpenAI cut prices"}} for i in range(8)]}
+
+    class _TwoDirections(_LLM):
+        def __init__(self):
+            super().__init__([SAMPLE_STORY_FIRST])
+            self.directions = [lazy, SAMPLE_DIRECTION]
+            self.director_prompts = []
+
+        def complete_json(self, system, user):
+            if system.startswith("You are the animation director"):
+                self.director_prompts.append(user)
+                return copy.deepcopy(self.directions.pop(0))
+            return super().complete_json(system, user)
+
+    llm = _TwoDirections()
+    board = _write(llm)
+    assert len(llm.director_prompts) == 2
+    assert "FAILED REVIEW" in llm.director_prompts[1] and "only a headline" in llm.director_prompts[1]
+    assert board.quality["direction"]["ok"] and board.signature[0] == "compose:row"
+    assert board.hero == {"label": "OpenAI", "icon": "building-2"}
+
+
+def test_story_without_a_verdict_fails_review():
+    from narovva.motion import quality
+
+    raw = copy.deepcopy(SAMPLE_STORY_FIRST)
+    raw["beats"] = [b for b in raw["beats"] if b["part"] != "verdict"]
+    beats, gaps = _beats(raw)
+    r = quality.story_review(beats, gaps, None, story_seconds(beats))
+    assert not r["ok"] and any("verdict" in i for i in r["issues"]) and "no hero object" in r["notes"]
+
+
+def test_layout_heal_swaps_a_failing_scene_for_its_words():
+    import sys
+
+    import narovva.orchestration.run_channel  # noqa: F401
+
+    rc = sys.modules["narovva.orchestration.run_channel"]
+    board = _write(_LLM([SAMPLE_STORY_FIRST]))
+    slides = [{"kind": b["scene"], "data": b["data"], "parts": [], "duration": 3.0} for b in board.beats]
+    healed = rc._layout_heal(board)(slides, {2: ["overlap: a / b"], 8: ["clipped: x"]})
+    assert healed[2]["kind"] == "headline" and healed[2]["data"]["text"] == "14 models. 3.2x faster."
+    assert healed[8] == slides[8]                       # the end card is never replaced
+    assert healed[0] == slides[0]
+
+
+def test_loudness_review_measures_a_file(tmp_path):
+    import subprocess
+
+    import imageio_ffmpeg
+
+    from narovva.motion import quality
+
+    wav = tmp_path / "tone.wav"
+    subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-f", "lavfi", "-i",
+                    "sine=frequency=440:duration=3", "-af", "volume=-30dB", str(wav)], check=True)
+    r = quality.loudness_review(str(wav))
+    assert r["metrics"]["lufs"] < -30 and not r["ok"] and "loudness" in r["issues"][0]

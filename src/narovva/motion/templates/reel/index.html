@@ -41,6 +41,8 @@
       .grid { inset: 0; background-image: linear-gradient(rgba(255,255,255,.035) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,.035) 2px, transparent 2px); background-size: 90px 90px; }
       .vignette { inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(10,14,26,0) 38%, rgba(10,14,26,.88) 100%); }
       /* A full-frame accent wash behind headline numbers (DECK.ui.flood), for rhythm between dark scenes. */
+      /* story-first: a wash whose colour follows the part of the story (setting, problem, proof, cost, next) */
+      .tone { inset: 0; opacity: 0; background: radial-gradient(ellipse at 50% 38%, var(--tone, transparent) 0%, rgba(10,14,26,0) 72%); }
       .flood { inset: 0; opacity: 0; background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--accent) 100%, white 12%) 0%, var(--accent) 45%, color-mix(in srgb, var(--accent) 70%, black) 100%); }
 
       .brand { position: absolute; left: 72px; top: 230px; display: flex; align-items: center; gap: 22px; }
@@ -221,6 +223,7 @@
         <canvas id="field" width="540" height="960" data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion></canvas>
         <div class="grid" id="grid"></div>
         <div class="vignette"></div>
+        <div class="tone" id="tone" data-layout-allow-overlap></div>
         <div class="flood" id="flood" data-layout-allow-overlap></div>
         <div class="dim" id="dim" data-layout-allow-overlap></div>
         <div class="hudshade" id="hudshade" data-layout-allow-overlap></div>
@@ -727,6 +730,21 @@
           }
           return sc;
         });
+        // Mood lives in the background: the tone changes only when the story's part does (craft rule 5).
+        const TONES = { context: "#1E3A8A", event: null, evidence: "#0F5E63", impact: "#7F1D3A", reaction: "#4C1D95",
+                        next: "#14532D", verdict: "#92400E", hook: null };
+        let toneWas = null;
+        slides.forEach((s, i) => {
+          const c = s.tone ? TONES[s.tone] : null;
+          if (c === toneWas) return;
+          const T = starts[i];
+          if (toneWas) tl.fromTo("#tone", { opacity: 0.85 }, { opacity: 0, duration: OV + 0.1, ease: "power2.inOut", immediateRender: false }, T);
+          if (c) {
+            tl.set("#tone", { "--tone": c }, T + (toneWas ? OV + 0.1 : 0));
+            tl.fromTo("#tone", { opacity: 0 }, { opacity: 0.85, duration: 0.6, ease: "power2.out", immediateRender: false }, T + (toneWas ? OV + 0.1 : 0));
+          }
+          toneWas = c;
+        });
         let floodWas = 0;
         slides.forEach((s, i) => {
           const v = flooded[i] ? 0.95 : 0;
@@ -918,6 +936,8 @@
           if (kind !== "push" && TRANS[TRANS.length - 1] === kind) kind = "push";
           // The viewer cutting in is a hard interruption; a receipt arrives over the dimmed world.
           if (slides[i].kind === "ask" || slides[i].kind === "source") kind = "blur";
+          // Two composed beats in a row are one stage: the shared actors stay, only what changed moves (craft rule 1).
+          if (slides[i].kind === "compose" && slides[i - 1].kind === "compose") kind = "hold";
           // From one world beat to the next the camera flies across the world; the titles just swap.
           if (worldBox && slides[i].kind === "world" && slides[i - 1].kind === "world") kind = "blur";
           TRANS.push(kind);
@@ -932,6 +952,9 @@
           } else if (kind === "whip") {
             tl.fromTo(sc, { xPercent: 100, opacity: 1 }, { xPercent: 0, duration: OV, ease: "expo.out", immediateRender: false }, T);
             tl.to(prev, { xPercent: -100, duration: OV, ease: "expo.out" }, T);
+          } else if (kind === "hold") { // continuity: no move at all; the incoming scene restages the same actors
+            tl.fromTo(prev, { opacity: 1 }, { opacity: 0, duration: 0.12, ease: "none", immediateRender: false }, T + 0.05);
+            tl.fromTo(sc, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "none", immediateRender: false }, T + 0.05);
           } else if (kind === "blur") { // blur swap on one stage: the ground never cuts
             tl.fromTo(prev, { opacity: 1, filter: "blur(0px)" }, { opacity: 0, filter: "blur(10px)", duration: 0.18, ease: "power2.in", immediateRender: false }, T);
             tl.fromTo(sc, { opacity: 0, scale: 1.04, filter: "blur(10px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.24, ease: "power3.out", immediateRender: false }, T + 0.08);

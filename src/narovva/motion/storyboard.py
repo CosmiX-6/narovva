@@ -1103,6 +1103,8 @@ def beat_specs(board: Storyboard, *, stamp_colors: dict[str, str], heading_marks
                 "lines": list(beat["lines"]), "screens": list(beat["screens"]), "cmarks": list(beat["cmarks"])}
         if beat.get("voice") == "viewer":
             spec["speaker"] = "viewer"  # read in the second voice; the captions show it as the viewer's
+        if beat.get("story_part"):
+            spec["tone"] = beat["story_part"]  # story-first: the background tone follows the part of the story
         _colour_stamps(spec, beat.get("stamp"), stamp_colors)
         if not heading_marks:
             spec["data"].pop("mark", None)
