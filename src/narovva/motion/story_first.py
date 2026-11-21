@@ -23,6 +23,7 @@ import re
 
 from ..language import ENGLISH, Language
 from ..narration.script import numbers_in, phrase_in
+from . import quality
 from .local_director import local_direction
 from .storyboard import (
     _SCENE_GUIDE,
@@ -119,13 +120,20 @@ def _story_system_en(brand: str, target_seconds: int, max_asks: int) -> str:
         "what happens to them as the lines are said (\"OpenAI's price tag drops from $15 to $5 while three rival "
         "labs watch\"; \"a judge's gavel blocks the merger between X and Y\"). Concrete and specific to THIS beat -- "
         "never generic (\"an animation of AI\").\n"
-        "- \"kicker\": optional chapter label, 1-3 words in capitals, on the first beat of a chapter.\n\n"
+        "- \"kicker\": optional chapter label, 1-3 words in capitals, on the first beat of a chapter.\n"
+        "- \"takeaway\": what the screen says for this beat -- its conclusion in at most 5 words, split into a "
+        "\"setup\" and a \"turn\" (\"Same news.\" / \"Different spin.\"; \"Prices fell.\" / \"Two thirds.\"). Not the "
+        "spoken sentence: the point the viewer keeps. Figures as the source writes them.\n\n"
+        "HERO: also return \"hero\": the one object at the centre of this story (the rate, the chip, the border, the "
+        "company), {\"label\": max 3 words from the article, \"icon\": a Lucide icon name}. The pictures keep coming "
+        "back to it.\n\n"
         "TRUTH: use only facts in the brief and the article. Never invent a number, date, name, quote or claim.\n\n"
         "COVERAGE: also return \"coverage\": for each of who, what, when, why, numbers, impact, next, the index of "
         "the beat that covers it (0-based), or \"n/a\" when the article has nothing for it.\n\n"
         'Respond as JSON: {"subject": "what the video is about in 1-3 words", "coverage": {"who": 0, ...}, '
+        '"hero": {"label": "...", "icon": "..."}, '
         '"beats": [{"part": "...", "lines": ["spoken line", ...], "screen": [...], "mark": [...], "facts": [...], '
-        '"show": "...", "kicker": "..."}, ...]}'
+        '"show": "...", "kicker": "...", "takeaway": {"setup": "...", "turn": "..."}}, ...]}'
     )
 
 
@@ -167,7 +175,8 @@ def parse_story(raw, src: FullSource, *, brand: str, language: Language = ENGLIS
             show = ""
         kicker = _words(b.get("kicker"), 3)
         beats.append({"part": part, "lines": lines, "screens": screens, "cmarks": cmarks, "facts": facts,
-                      "show": show, "kicker": kicker.upper() if kicker and src.grounded(kicker) else None})
+                      "show": show, "kicker": kicker.upper() if kicker and src.grounded(kicker) else None,
+                      "takeaway": _takeaway(b.get("takeaway"), src)})
     beats = [b for i, b in enumerate(beats) if b["part"] != "cta" or i == len(beats) - 1]
     if language.translated:
         cta = cta if isinstance(cta, tuple) else language.cta(brand.title(), spoken_brand=spoken_brand)
@@ -175,8 +184,38 @@ def parse_story(raw, src: FullSource, *, brand: str, language: Language = ENGLIS
         said, caption = cta if isinstance(cta, tuple) else (cta, None)
         end = _cta_beat(brand, said, language, caption)
         beats.append({"part": "cta", "lines": end["lines"], "screens": end["screens"], "cmarks": end["cmarks"],
-                      "facts": [], "show": "", "kicker": None})
+                      "facts": [], "show": "", "kicker": None, "takeaway": None})
     return beats, story_gaps(raw, beats)
+
+
+def _takeaway(raw, src: FullSource) -> tuple[str, str] | None:
+    """(setup, turn): the beat's on-screen point, at most 6 words in all, grounded. A bare string is all turn."""
+    if isinstance(raw, str):
+        raw = {"setup": "", "turn": raw}
+    if not isinstance(raw, dict):
+        return None
+    setup = " ".join(str(raw.get("setup") or "").split())
+    turn = " ".join(str(raw.get("turn") or "").split())
+    if not turn and setup:
+        setup, turn = "", setup
+    if not turn or len(setup.split()) + len(turn.split()) > 6 or len(setup + turn) > 48 \
+            or not src.grounded(setup, turn):
+        return None
+    return setup, turn
+
+
+def parse_hero(raw, src: FullSource) -> dict | None:
+    """The story's central object, {"label", "icon"} with a label the article uses, or None."""
+    h = raw.get("hero") if isinstance(raw, dict) else None
+    if not isinstance(h, dict):
+        return None
+    label = _words(h.get("label"), 3)
+    if not label or len(label) > 26 or not src.grounded(label):
+        return None
+    words = content_words(label)
+    if words and not any(w in src.flat for w in words):
+        return None
+    return {"label": label, "icon": _icon(h.get("icon")) or "sparkles"}
 
 
 def story_gaps(raw, beats: list[dict]) -> list[str]:
@@ -197,6 +236,8 @@ def story_gaps(raw, beats: list[dict]) -> list[str]:
     for need in ("hook", "event", "impact"):
         if need not in kept_parts:
             gaps.append(f"a {need} beat")
+    if beats and beats[0]["part"] == "hook" and len(beats[0]["lines"][0].split()) > 12:
+        gaps.append("a hook whose first line is at most 9 words")
     return gaps
 
 
@@ -224,6 +265,25 @@ _COMPOSE_GUIDE = """\
   \"people\") unless the beat is literally about that. The steps follow the order things happen in the lines."""
 
 
+# How to design from the story (distilled from studied reels; principles, never a look to copy -- see
+# docs/motion-craft.md). The renderer does its part: it keeps actors on stage between composed beats, times each label to
+# the word that names it, and tints the background by story part.
+CRAFT_CARD = """\
+CRAFT (design from the story, not from a template):
+1. Continuity: when a beat is about the same subject as the beat before, keep its actors -- use the SAME labels in a
+   new compose layout or new steps (they stay on stage; only what changed moves). Start a new picture only when the
+   subject changes.
+2. Re-arrange the story's own objects to answer each beat's question (grouped, sorted, set against each other,
+   connected, counted) instead of adding decoration.
+3. Name things in place: an actor appears on the line that names it, labelled on itself -- never before it is said.
+4. Time is an object: a beat that answers "when" is a "dates" scene with its real dates, not a sentence.
+5. Animate the beat's verb -- moves, grows, shrinks, splits, joins, blocks, arrives -- not an icon standing for it.
+6. HERO: the story's central object (given below) is in the hook's picture, returns in the middle, and resolves in
+   the verdict. Use its label exactly.
+7. Titles: a beat's "takeaway" (setup / turn) is its on-screen line; use it as the scene title, the turn as "mark".
+8. One idea per frame; at most 5 actors; nothing on screen the voice does not say."""
+
+
 def _director_system_en(max_stamps: int) -> str:
     guide = _SCENE_GUIDE.replace("{world_pieces}", "").replace("{max_stamps}", str(max_stamps))
     guide = re.sub(r'- "world": .*?(?=- "cta")', "", guide, flags=re.S)
@@ -239,6 +299,7 @@ def _director_system_en(max_stamps: int) -> str:
         "with nothing to show. Keep the beat's \"ask\" part as scene \"ask\" and its \"cta\" part as \"cta\".\n\n"
         "VARIETY COMES FROM THE STORY: two beats only look alike when they say alike things. Never the same scene "
         "twice in a row; two compose scenes in a row need different layouts.\n\n"
+        + CRAFT_CARD + "\n\n"
         "TRUTH: every label, title, figure and name must come from the beat's lines, facts or the source; every "
         "figure exactly as the source writes it. Quotes and source cards word for word.\n\n"
         + guide + "\n" + _COMPOSE_GUIDE + "\n\n"
@@ -247,14 +308,19 @@ def _director_system_en(max_stamps: int) -> str:
     )
 
 
-def _director_user(beats: list[dict], brief, article) -> str:
+def _director_user(beats: list[dict], brief, article, hero: dict | None = None, notes: list[str] | None = None) -> str:
     rows = []
     for i, b in enumerate(beats):
-        rows.append({"i": i, "part": b["part"], "lines": b["screens"], "facts": b["facts"], "show": b["show"]})
+        row = {"i": i, "part": b["part"], "lines": b["screens"], "facts": b["facts"], "show": b["show"]}
+        if b.get("takeaway"):
+            row["takeaway"] = {"setup": b["takeaway"][0], "turn": b["takeaway"][1]}
+        rows.append(row)
     import json
     title = getattr(article, "title", "") or brief.headline
     return (f"Story: {title}\n\nBrief:\n{brief.model_dump_json(exclude={'image_generation_prompt', 'image_search_query', 'visual_concepts'})}\n\n"
-            f"Beats:\n{json.dumps(rows, ensure_ascii=False, indent=1)}")
+            + (f"HERO: {hero['label']} (icon {hero['icon']})\n\n" if hero else "")
+            + (f"YOUR LAST DIRECTION FAILED REVIEW: {'; '.join(notes)}. Direct the whole story again.\n\n" if notes else "")
+            + f"Beats:\n{json.dumps(rows, ensure_ascii=False, indent=1)}")
 
 
 def _compose(d: dict, src: _Source, beat_words: set[str], n_lines: int) -> dict | None:
@@ -320,10 +386,24 @@ def _compose(d: dict, src: _Source, beat_words: set[str], n_lines: int) -> dict 
     return out
 
 
-def _plain_beat(b: dict) -> tuple[str, dict]:
-    """A beat whose picture did not validate keeps its words, on a headline."""
+def plain_beat(b: dict) -> tuple[str, dict]:
+    """A beat whose picture did not validate keeps its words, on a headline: its takeaway when it has one."""
+    if b.get("takeaway"):
+        setup, turn = b["takeaway"]
+        return "headline", {"text": f"{setup} {turn}".strip(), "mark": turn, "icon": None, "sub": None}
     text = " ".join(b["screens"][0].split()[:10]) if b["screens"] else ""
     return "headline", {"text": text, "mark": b["cmarks"][0] if b["cmarks"] else None, "icon": None, "sub": None}
+
+
+_TAKES_TITLE = set(_TITLED) | {"compose"}
+
+
+def _titled(scene: str, data: dict, b: dict) -> dict:
+    """The writer's takeaway is the scene's on-screen line when the director gave it no title (craft rule 7)."""
+    if scene in _TAKES_TITLE and isinstance(data, dict) and not data.get("title") and b.get("takeaway"):
+        setup, turn = b["takeaway"]
+        data = dict(data, title=f"{setup} {turn}".strip(), mark=turn)
+    return data
 
 
 def _picks(raw) -> dict[int, dict]:
@@ -373,13 +453,14 @@ def direct_story(raw, beats: list[dict], src: _Source, backup=None) -> tuple[lis
                 rescued += got is not None
                 e = e or spare[i]
             if got is None:
-                got = _plain_beat(b)
+                got = plain_beat(b)
                 fallbacks += 1
             scene, data = got
+            data = _titled(scene, data, b)
         out.append({"scene": scene, "kicker": b["kicker"] or (_words(e.get("kicker"), 3) or "").upper() or None,
                     "data": data, "stamp": _stamp(e.get("stamp"), src) if e.get("stamp") else None,
                     "lines": b["lines"], "screens": b["screens"], "cmarks": b["cmarks"], "part": None,
-                    "story_part": b["part"]})
+                    "story_part": b["part"], "takeaway": b.get("takeaway")})
         prev, prev_layout = scene, (data or {}).get("layout")
     stats = {"beats": len(out), "fallbacks": fallbacks, "rescued": rescued,
              "scenes": [b["scene"] + (":" + b["data"]["layout"] if b["scene"] == "compose" else "") for b in out]}
@@ -419,7 +500,7 @@ def write_story_first(llm, brief, article, *, brand: str, target_seconds: int = 
         beats, gaps = parse_story(raw, src, brand=brand, language=language, spoken_brand=spoken_brand)
         subject = raw.get("subject") if isinstance(raw, dict) else None
         if beats and (best is None or len(gaps) < len(best_gaps)):
-            best, best_gaps, best_subject = beats, gaps, subject
+            best, best_gaps, best_subject, best_raw = beats, gaps, subject, raw
         if not gaps:
             break
         logger.warning("story is incomplete: missing %s (attempt %d)", ", ".join(gaps), attempt + 1)
@@ -434,18 +515,34 @@ def write_story_first(llm, brief, article, *, brand: str, target_seconds: int = 
     while story_seconds(best) > HARD_SECONDS and any(b["part"] == "ask" for b in best):
         best.pop(max(i for i, b in enumerate(best) if b["part"] == "ask"))
     content = len([b for b in best if b["part"] not in ("ask", "cta")])
+    hero = parse_hero(best_raw, src)
+    story_q = quality.story_review(best, best_gaps or [], hero, story_seconds(best))
 
     def directed(raw):                                 # most pictures failing: ask the next model
         failed = direct_story(raw, best, src)[1]["fallbacks"]
         return f"{failed} of {content} pictures failed" if failed * 2 > content else None
 
-    try:
-        raw_dir = _ask(llm, _director_system_en(max_stamps), _director_user(best, brief, article), directed)
-    except Exception as exc:
-        logger.warning("director LLM call failed (%s); the local director pictures the story", exc)
-        raw_dir = {}
-    # a beat whose picture fails takes the local director's (no model call), and only then its words on a headline
-    beats, stats = direct_story(raw_dir, best, src, backup=local_direction(best, src, brief))
+    # Gate 2: the direction is reviewed (variety, fallbacks, the beats' verbs animated); a failed review goes back to
+    # the director once with the reviewer's notes. A beat whose picture fails takes the local director's (no model
+    # call), and only then its words on a headline.
+    backup = local_direction(best, src, brief)
+    chosen, notes = None, None
+    for attempt in range(2):
+        try:
+            raw_dir = _ask(llm, _director_system_en(max_stamps), _director_user(best, brief, article, hero, notes),
+                           directed)
+        except Exception as exc:
+            logger.warning("director LLM call failed (%s); the local director pictures the story", exc)
+            raw_dir = {}
+        got, stats = direct_story(raw_dir, best, src, backup=backup)
+        review = quality.direction_review(got, stats, hero)
+        if chosen is None or len(review["issues"]) < len(chosen[2]["issues"]):
+            chosen = (got, stats, review)
+        if review["ok"] or not raw_dir:
+            break
+        notes = review["issues"]
+        logger.warning("direction review failed (%s); asking the director again", "; ".join(notes))
+    beats, stats, direction_q = chosen
     beats = _place_asks(beats, max_asks)
     _cap_stamps(beats, max_stamps)
     logger.info("story-first: %d beats (~%.0fs), %d pictured locally, %d without a picture, scenes %s", len(beats),
@@ -454,4 +551,7 @@ def write_story_first(llm, brief, article, *, brand: str, target_seconds: int = 
     board = Storyboard(subject=clean_subject(best_subject), beats=beats, translated=language.translated)
     board.coverage_gaps = best_gaps or []
     board.signature = stats["scenes"]
+    board.hero = hero
+    board.quality = {"story": story_q, "direction": direction_q}
+    logger.info("story-first quality: %s", quality.summary(board.quality))
     return board

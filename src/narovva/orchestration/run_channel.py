@@ -32,8 +32,9 @@ from ..llm import LLMUnavailable, build_llm_chain
 from ..logsafe import redact
 from ..metrics.learn import choose_formulas, formula_stats
 from ..motion import render_motion_reel, slide_specs_from_assets, total_duration
+from ..motion.quality import summary as quality_summary
 from ..motion.slides import SCENE_OVERLAP_SECONDS, _trim, time_parts
-from ..motion.story_first import write_story_first
+from ..motion.story_first import plain_beat, write_story_first
 from ..motion.storyboard import BEAT_MIN, BEAT_TAIL, beat_specs, hook_board, write_storyboard
 from ..motion.style import category_label, deck_ui, direct_scenes, stamp_colors, story_subject
 from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
@@ -601,7 +602,7 @@ def _try_motion_reel(
         board = None
         if llm is not None and look.story.mode == "story_first" and lesson is None:
             # the complete story first, then a picture designed for each beat (narovva.motion.story_first)
-            board = write_story_first(
+            board = write_story_first(  # `llm` is the writer chain here (Opus first when configured)
                 llm, brief, article, brand=brand, target_seconds=look.story.target_seconds, max_stamps=stamps,
                 when=(when or datetime.now()).strftime("%d %b %Y"), hook=hook, audience=channel.audience,
                 max_asks=look.story.viewer_questions, said=said, language=language, spoken_brand=spoken_brand,
@@ -646,8 +647,11 @@ def _try_motion_reel(
         # The article's own photo, when poster-core found one (it is optional:
         # the reel renders on its generative background without it).
         photo = next((a for a in assets if getattr(a, "source_image_path", None)), None)
+        # Story-first reels go through the layout gate (and get its report); the older modes render as they did.
+        gated = board is not None and look.story.mode == "story_first" and lesson is None
+        report = dict(getattr(board, "quality", None) or {}) if gated else None
         path = render_motion_reel(
-            specs, audio, output_path,
+            specs, audio, output_path, heal=_layout_heal(board) if gated else None, report=report,
             accent=accent,
             handle=channel.brand.social_handle or "",
             brand=channel.brand.name,
@@ -657,10 +661,26 @@ def _try_motion_reel(
             seed=seed,
             ui=ui,
         )
+        if report:
+            logger.info("channel %s: reel quality -- %s", channel.id, quality_summary(report))
         return path, voice
     except Exception as exc:  # any failure (render, staging, bad data) must degrade, not skip the post
         logger.warning("channel %s: motion reel failed (%s); falling back to plain reel", channel.id, exc)
         return None, None
+
+
+def _layout_heal(board):
+    """Gate 3's fix: a scene the layout audit fails is replaced by its beat's words on a headline (the takeaway when
+    the writer gave one); its timing and voice are untouched."""
+    def heal(slides: list[dict], issues: dict[int, list[str]]) -> list[dict]:
+        out = list(slides)
+        for i in issues:
+            # the question bubble, the end card and a beat already on its words are left as they are
+            if 0 <= i < len(board.beats) and board.beats[i]["scene"] not in ("cta", "ask", "headline"):
+                _, data = plain_beat(board.beats[i])
+                out[i] = dict(slides[i], kind="headline", data=data, stamp=None)
+        return out
+    return heal
 
 
 def apply_hook(specs: list[dict], hook: str | None, headline: str, trending: bool = True) -> list[dict]:
