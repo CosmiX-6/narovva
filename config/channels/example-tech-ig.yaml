@@ -113,7 +113,9 @@ motion:
     # counting number, quote, log, checklist), with a world scene now and then.
     # Either falls back to "slides" (re-animated carousel slides) if the writer's reply doesn't
     # check out. Lessons are always animated.
-    mode: animated
+    # story_first: the complete story is written first, then a picture is designed for each beat
+    # from what it says, so the story never bends to fit a scene (news only; lessons stay animated).
+    mode: story_first
     max_beats: 10        # 5-14
     target_seconds: 45   # what the writer aims for
     flood: true          # full-frame accent wash behind headline numbers
