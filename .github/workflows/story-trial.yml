@@ -53,11 +53,19 @@ jobs:
           npx hyperframes telemetry disable
           npx hyperframes browser ensure
 
+      # Claude Code CLI for the claude-code: model (a claude.ai plan's token). Without it, or without
+      # the CLAUDE_CODE_OAUTH_TOKEN secret, that entry is skipped and the next model answers.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.328 --no-audit --no-fund
+        continue-on-error: true
+
       - name: Write and render
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           LESSON: ${{ inputs.lesson || 'tokens,attention' }}
           GENRE: ${{ inputs.genre || 'health' }}
         run: python -u -m narovva.motion.trial trial-out ${LESSON:+--lesson "$LESSON"} --genre "$GENRE"

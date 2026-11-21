@@ -33,6 +33,7 @@ from ..logsafe import redact
 from ..metrics.learn import choose_formulas, formula_stats
 from ..motion import render_motion_reel, slide_specs_from_assets, total_duration
 from ..motion.slides import SCENE_OVERLAP_SECONDS, _trim, time_parts
+from ..motion.story_first import write_story_first
 from ..motion.storyboard import BEAT_MIN, BEAT_TAIL, beat_specs, hook_board, write_storyboard
 from ..motion.style import category_label, deck_ui, direct_scenes, stamp_colors, story_subject
 from ..music import JamendoError, JamendoMusicClient, MusicTrack, music_tags_for
@@ -598,7 +599,14 @@ def _try_motion_reel(
                            "name in Latin letters (badly); give its %s spelling", channel.id, language.code,
                            language.name)
         board = None
-        if llm is not None and (look.story.mode in ("storyboard", "animated") or lesson is not None):
+        if llm is not None and look.story.mode == "story_first" and lesson is None:
+            # the complete story first, then a picture designed for each beat (narovva.motion.story_first)
+            board = write_story_first(
+                llm, brief, article, brand=brand, target_seconds=look.story.target_seconds, max_stamps=stamps,
+                when=(when or datetime.now()).strftime("%d %b %Y"), hook=hook, audience=channel.audience,
+                max_asks=look.story.viewer_questions, said=said, language=language, spoken_brand=spoken_brand,
+            )
+        elif llm is not None and (look.story.mode in ("storyboard", "animated", "story_first") or lesson is not None):
             board = write_storyboard(  # a lesson runs as long as its explanation needs (its own budget)
                 llm, brief, article, brand=brand, max_beats=lesson.max_beats if lesson else look.story.max_beats,
                 target_seconds=lesson.target_seconds if lesson else look.story.target_seconds, max_stamps=stamps,
@@ -713,6 +721,8 @@ def _llm_keys(channel: ChannelConfig) -> dict:
         "gemini": resolve_env(creds.gemini_api_key_env),
         "openai": resolve_env(creds.openai_api_key_env),
         "openrouter": resolve_env(creds.openrouter_api_key_env),
+        "anthropic": resolve_env(creds.anthropic_api_key_env),
+        "claude-code": resolve_env(creds.claude_code_oauth_token_env),
     }
 
 

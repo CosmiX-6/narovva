@@ -245,6 +245,8 @@ credentials:
   openai_api_key_env: "OPENAI_API_KEY"
   gemini_api_key_env: "GOOGLE_API_KEY"
   openrouter_api_key_env: "OPENROUTER_API_KEY"
+  anthropic_api_key_env: "ANTHROPIC_API_KEY"
+  claude_code_oauth_token_env: "CLAUDE_CODE_OAUTH_TOKEN"
   # Free client_id from https://devportal.jamendo.com -- used to pick
   # commercial-use-safe background music for Reels.
   jamendo_client_id_env: "JAMENDO_CLIENT_ID__example_tech_ig"
@@ -257,7 +259,16 @@ text_provider: gemini
 # secret; entries without a key are skipped). Free model names change: check
 # https://openrouter.ai/models?q=free and edit here, no code change needed. A retired or
 # misspelled model id (404) is skipped for the run; Google's 404 names the replacement.
+# Claude is the primary model, so the storyboard and director calls stop falling over by mid-day:
+#   claude-code: your claude.ai plan (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`), through
+#                the Claude Code CLI. Shares the plan's usage limit with your own Claude use; when
+#                the limit is hit, the next entry answers for the rest of the run.
+#   anthropic:   a Console API key (ANTHROPIC_API_KEY), billed per token.
+# Entries without their secret are skipped; the free models behind answer if Claude is unavailable.
+# claude-opus-5-5 writes better stories and uses the plan / the bill about twice as fast.
 llm_chain:
+  - claude-code:claude-sonnet-5-5
+  - anthropic:claude-sonnet-5-5
   - gemini:gemini-flash-latest
   - gemini:gemini-3.8-flash          # the newest Flash, its own free-tier pool
   - gemini:gemini-3.5-flash-lite

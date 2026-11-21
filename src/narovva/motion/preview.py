@@ -6,7 +6,7 @@ working on the template without the HyperFrames toolchain (Node 22):
                                              [--hud case_file|breakdown|brand|none]
                                              [--captions-style karaoke|pill|brighten]
                                              [--timeline cards|spine] [--no-stamps]
-                                             [--story animated|lesson|storyboard|slides|worlds]
+                                             [--story animated|lesson|storyboard|slides|worlds|story_first]
 
 Stages the sample deck, then for each timestamp loads the composition in
 headless Chrome, seeks its timeline there and saves a 1080x1920 PNG, plus a
@@ -120,7 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--captions-style", choices=["karaoke", "pill", "brighten", "boxed"])
     parser.add_argument("--timeline", choices=["cards", "spine"])
     parser.add_argument("--no-stamps", action="store_true")
-    parser.add_argument("--story", choices=["animated", "lesson", "storyboard", "slides", "worlds"], default="animated",
+    parser.add_argument("--story", choices=["animated", "lesson", "storyboard", "slides", "worlds", "story_first"],
+                        default="animated",
                         help="the animated news sample, the sample lesson, the motion-graphics storyboard sample, "
                              "the slide-based reel, or every 3D set piece")
     args = parser.parse_args(argv)
@@ -139,7 +140,10 @@ def main(argv: list[str] | None = None) -> int:
     if project.exists():
         shutil.rmtree(project)
     out.mkdir(parents=True, exist_ok=True)
-    if args.story == "worlds":
+    if args.story == "story_first":
+        from .sample import sample_story_first
+        slides, subject = sample_story_first(captions=not args.no_captions, look=look)
+    elif args.story == "worlds":
         from .sample import world_gallery
         slides, subject = world_gallery(look=look)
     elif args.story == "lesson":

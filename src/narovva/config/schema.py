@@ -82,6 +82,9 @@ class CredentialRefs(BaseModel):
     jamendo_client_id_env: str | None = None
     elevenlabs_api_key_env: str | None = None
     openrouter_api_key_env: str | None = None
+    anthropic_api_key_env: str | None = None
+    # A claude.ai plan's token from `claude setup-token` (the claude-code: provider; runs on the plan, not the API)
+    claude_code_oauth_token_env: str | None = None
 
 
 class NarrationConfig(BaseModel):
@@ -316,7 +319,9 @@ class StoryConfig(BaseModel):
     # animated: the whole video is one continuous 3D animation -- every beat a moment of a
     # small world where characters and objects act the story out, the camera flying from one
     # to the next. Falls back to "slides" when its reply doesn't validate. Lessons always use it.
-    mode: Literal["animated", "storyboard", "slides"] = "animated"
+    # story_first: the complete story is written first, then a picture is designed for each beat from what it says
+    # (narovva.motion.story_first) -- the story never bends to fit a scene, and its length follows the story.
+    mode: Literal["animated", "storyboard", "slides", "story_first"] = "animated"
     max_beats: int = Field(10, ge=5, le=14)
     # Length the writer aims for (Instagram accepts much longer Reels).
     target_seconds: int = Field(45, ge=20, le=90)
