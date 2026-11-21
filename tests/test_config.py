@@ -12,7 +12,8 @@ def test_load_example_channel():
     assert channel.platform == "instagram"
     # AI, tech, a lesson series, health and finance, in rotation order...
     assert [(g.genre, g.series) for g in channel.genres] == [
-        ("ai", None), ("tech", None), ("lessons", "how-ai-works"), ("health", None), ("finance", None)]
+        ("ai", None), ("tech", None), ("lessons", "how-ai-works"), ("health", None), ("finance", None),
+        ("gaming", None)]
     assert not channel.focus_on and channel.motion.story.mode == "story_first"
     # ...and the AI-practitioner focus is kept, ready to switch back on.
     import yaml

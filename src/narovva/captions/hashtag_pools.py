@@ -45,6 +45,11 @@ POOLS: dict[str, list[str]] = {
         "#Democracy", "#Geopolitics", "#International", "#CurrentEvents",
         "#BreakingNews", "#Diplomacy", "#PoliticalNews", "#WorldPolitics",
     ],
+    "gaming": [
+        "#Gaming", "#VideoGames", "#Gamer", "#GamingNews", "#PCGaming", "#PlayStation", "#PS5", "#Xbox",
+        "#NintendoSwitch", "#Nintendo", "#Steam", "#Esports", "#GameDev", "#IndieGames", "#NewGame",
+        "#GamingCommunity", "#ConsoleGaming", "#GameIndustry",
+    ],
     "health": [
         "#Health", "#Healthcare", "#Medicine", "#PublicHealth", "#Wellness",
         "#MedicalNews", "#Science", "#Research", "#NHS", "#GlobalHealth",
@@ -80,6 +85,10 @@ POOLS: dict[str, list[str]] = {
 }
 
 
-def pool_for(category: str) -> list[str]:
+def pool_for(category: str, genre: str | None = None) -> list[str]:
     """Return the pool for a brief category, falling back to 'general'."""
+    # A genre with its own pool (gaming) leads: poster-core's categories have no such topic, so a games story
+    # would otherwise get the technology tags.
+    if genre and str(genre).lower() in POOLS:
+        return POOLS[str(genre).lower()]
     return POOLS.get(str(category).lower(), POOLS["general"])

@@ -15,7 +15,7 @@ from poster_core.analysis.llm import LLMClient
 from ..config.schema import CaptionTone
 from ..language import ENGLISH, Language
 from ..platforms import PublishPlatform
-from .hashtag_pools import pool_for
+from .hashtag_pools import POOLS, pool_for
 from .rules import PLATFORM_CAPTION_RULES
 from .trending import trending_for_category
 
@@ -53,11 +53,12 @@ def generate_caption(
     tone: CaptionTone,
     llm: LLMClient,
     language: Language = ENGLISH,
+    genre: str | None = None,
 ) -> CaptionResult:
     """`language`: with a Hindi voice the caption is written in Hinglish (see narovva.language)."""
     rules = PLATFORM_CAPTION_RULES[publish_platform]
     max_hashtags = min(tone.max_hashtags, rules.max_hashtags)
-    user_prompt = _build_user_prompt(brief, tone, max_hashtags=max_hashtags)
+    user_prompt = _build_user_prompt(brief, tone, max_hashtags=max_hashtags, genre=genre)
     system = _SYSTEM_PROMPT if not language.caption_note else (
         _SYSTEM_PROMPT.replace("Respond as JSON", language.caption_note + " Respond as JSON"))
     raw = llm.complete_json(system, user_prompt)
@@ -77,11 +78,13 @@ def generate_caption(
     return CaptionResult(text=assembled, hashtags=hashtags, truncated=truncated)
 
 
-def _build_candidate_hashtags(brief: ContentBrief, max_candidates: int = 30) -> list[str]:
-    """Merge trending + curated pool into a ranked candidate list for the LLM."""
+def _build_candidate_hashtags(brief: ContentBrief, max_candidates: int = 30, genre: str | None = None) -> list[str]:
+    """Merge trending + curated pool into a ranked candidate list for the LLM. A genre with its own pool (gaming)
+    picks the pool and the trending topic; otherwise the brief's category does."""
     category = getattr(brief.category, "value", str(brief.category))
-    trending = trending_for_category(category)
-    pool = pool_for(category)
+    topic = genre if genre and genre.lower() in POOLS else category
+    trending = trending_for_category(topic)
+    pool = pool_for(category, genre)
     # Trending first (most timely), then curated pool. Deduplicate case-insensitively.
     seen: set[str] = set()
     candidates: list[str] = []
@@ -95,7 +98,7 @@ def _build_candidate_hashtags(brief: ContentBrief, max_candidates: int = 30) -> 
     return candidates
 
 
-def _build_user_prompt(brief: ContentBrief, tone: CaptionTone, max_hashtags: int = 8) -> str:
+def _build_user_prompt(brief: ContentBrief, tone: CaptionTone, max_hashtags: int = 8, genre: str | None = None) -> str:
     category = getattr(brief.category, "value", str(brief.category))
     lines = [
         f"Voice/tone: {tone.voice}",
@@ -114,7 +117,7 @@ def _build_user_prompt(brief: ContentBrief, tone: CaptionTone, max_hashtags: int
     if brief.closing_line:
         lines.append(f"Closing line: {brief.closing_line}")
     lines.append(f"Category: {category}")
-    candidates = _build_candidate_hashtags(brief)
+    candidates = _build_candidate_hashtags(brief, genre=genre)
     if candidates:
         lines.append(f"Candidate hashtags (trending + curated, pick up to {max_hashtags}): "
                      + " ".join(candidates))

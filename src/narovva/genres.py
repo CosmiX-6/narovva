@@ -81,3 +81,35 @@ register_genre(
     ),
     overwrite=True,
 )
+
+
+# Gaming: releases, platforms, studios and the business of games. Replaces info-snipe's built-in list (two of its
+# five unconfirmed) with feeds whose article pages open without a login, checked 2026-11-21. Left out because their
+# article pages answer 403: GameSpot, VGC, Gematsu, Push Square, Nintendo Life, Xbox Wire, Ars Technica Gaming.
+GAMING_FEEDS = [
+    "https://www.ign.com/rss/articles/feed",
+    "https://www.polygon.com/rss/index.xml",
+    "https://kotaku.com/rss",
+    "https://www.pcgamer.com/rss/",
+    "https://www.eurogamer.net/feed",
+    "https://www.theverge.com/rss/games/index.xml",
+    "https://www.rockpapershotgun.com/feed",
+    "https://www.gamesindustry.biz/feed",        # the business: sales, layoffs, deals
+    "https://www.gamedeveloper.com/rss.xml",
+    "https://blog.playstation.com/feed/",
+    "https://www.dexerto.com/feed/",             # esports and creators
+]
+
+register_genre(
+    GenreConfig(
+        key="gaming",
+        label="Gaming",
+        newsapi_query=(
+            '("video game" OR gaming OR esports OR PlayStation OR Xbox OR Nintendo OR Steam OR "game studio") '
+            'AND (launch OR release OR sales OR record OR layoffs OR acquisition OR price OR update OR delay)'
+        ),
+        rss_feeds=GAMING_FEEDS,
+    ),
+    overwrite=True,
+)
+

@@ -25,6 +25,7 @@ _CATEGORY_KEYWORDS: dict[str, str] = {
     "business":       "business news",
     "politics":       "world politics",
     "health":         "health news",
+    "gaming":         "video game news",
     "breaking":       "breaking news",
     "investigation":  "investigative journalism",
     "product_launch": "tech product launch",

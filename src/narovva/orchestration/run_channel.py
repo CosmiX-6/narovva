@@ -314,7 +314,7 @@ def _process_one(
         asset_type_values = [a.asset_type.value for a in assets]
         caption = generate_caption(
             brief, publish_platform=PublishPlatform(channel.platform), tone=channel.caption, llm=llm,
-            language=lang,
+            language=lang, genre=genre_setting.genre,
         )
         banned = channel.banned_words
         if banned:

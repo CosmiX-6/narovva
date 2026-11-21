@@ -159,7 +159,7 @@ genres:
     cadence_minutes: 60
     asset_types: [cover, carousel]
   # "How AI works": one lesson per turn, in the order of config/lessons/how-ai-works.yaml
-  # (each grounded in its Wikipedia article; never repeated). With 5 genres and a 2-hour
+  # (each grounded in its Wikipedia article; never repeated). With 6 genres and a 2-hour
   # rotation that is about 2 lessons a day, so the 60 lessons last about a month.
   - genre: lessons
     series: how-ai-works
@@ -173,6 +173,12 @@ genres:
     limit: 8
     cadence_minutes: 90
     asset_types: [cover, carousel]
+  # Gaming: releases, platforms, studios and the business of games (narovva.genres.GAMING_FEEDS).
+  - genre: gaming
+    limit: 8
+    cadence_minutes: 90
+    asset_types: [cover, carousel]
+    music_tags: [electronic, energetic]
 
 brand:
   name: "CONTEXT UNFILTERED"
