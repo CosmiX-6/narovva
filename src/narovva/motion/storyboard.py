@@ -1105,6 +1105,8 @@ def beat_specs(board: Storyboard, *, stamp_colors: dict[str, str], heading_marks
             spec["speaker"] = "viewer"  # read in the second voice; the captions show it as the viewer's
         if beat.get("story_part"):
             spec["tone"] = beat["story_part"]  # story-first: the background tone follows the part of the story
+        if beat.get("media"):
+            spec["media"] = dict(beat["media"])  # b-roll chosen for this beat (narovva.motion.broll)
         _colour_stamps(spec, beat.get("stamp"), stamp_colors)
         if not heading_marks:
             spec["data"].pop("mark", None)

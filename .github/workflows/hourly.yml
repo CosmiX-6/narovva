@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     # motion_reel renders ~3s of video per second of reel (~2-3 min per post);
     # the extra headroom is for the Node/Chrome setup and a fallback re-render.
-    timeout-minutes: 30
+    timeout-minutes: 45   # b-roll research adds a few minutes
     steps:
       - uses: actions/checkout@v4
 
@@ -94,6 +94,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}   # optional: stock photos/clips for b-roll
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           IG_ACCESS_TOKEN__example_tech_ig: ${{ secrets.IG_ACCESS_TOKEN__EXAMPLE_TECH_IG }}
           JAMENDO_CLIENT_ID__example_tech_ig: ${{ secrets.JAMENDO_CLIENT_ID__EXAMPLE_TECH_IG }}

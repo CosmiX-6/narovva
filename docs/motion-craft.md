@@ -32,6 +32,28 @@ reel, a tutorial's AI-made explainers). They're principles only: no layouts, bra
 8. **One hero object** at the centre of the story, in the hook, back in the middle, resolved at the verdict.
 9. **One idea per frame,** at most 5 actors, nothing on screen the voice doesn't say.
 
+## B-roll: real photos, footage, logos and cut-outs (`motion.broll`)
+
+With `motion.broll.enabled: true`, after the story is written and directed, Claude (Claude Code on the plan's token,
+`claude-opus-5-5` by default) finds real imagery for the beats and edits it in (narovva.motion.broll):
+
+| Step | Who | What happens |
+|---|---|---|
+| Scout | Claude with **web search and fetch only** | researches each beat's subject (who a person is, a product's exact name, the files Wikimedia Commons holds) and writes searches |
+| Gather | narovva | runs them on **openly licensed libraries only** -- Wikimedia Commons, Openverse, Pexels (with `PEXELS_API_KEY`); keeps CC0 / public domain / CC BY / CC BY-SA / Pexels-licence files, never NC or ND; downloads previews with size and type checks; one lettered contact sheet per want (a clip shows three frames from inside it) |
+| Edit | Claude with **Read only**, in the sheets' folder | looks at every sheet and directs the edit: which beat gets which picture, as a full-frame **backdrop** (photo or clip), a **cut-out** (a person standing at the side of the frame) or a **logo** badge; the spoken line it lands on, the crop's focus, the camera move, a clip's start. It rejects the wrong person, watermarks, text, anything graphic |
+| Finish | narovva | crops photos to the frame, streams and encodes the chosen seconds of a clip (ffmpeg), cuts people out (`hyperframes remove-background`) |
+| Render | the template | the backdrop fades in under a slow push or pan on the line that names its subject (the generated background steps back), a cut-out rises in, a logo pops; each leaves with its beat |
+
+Every credit goes into the caption ("Images & footage: ..."). Claude never downloads or runs anything: files come
+from the libraries' own APIs, and its replies are checked against the beats and candidates that exist. Any failure,
+no token, or no good match leaves the reel as it would be without b-roll.
+
+Cost: two Claude Code sessions per reel on the plan's usage (the scout's web searches are the larger one), a few
+minutes of Actions time, and a ~170 MB model download the first time a run cuts someone out.
+
+Try it: `python -m narovva.motion.preview out/ --story story_first --broll <a b-roll folder>`.
+
 ## Models
 
 - `writer.chain` (channel YAML) writes and directs: `claude-code:claude-opus-5-5` (a claude.ai plan's token), then

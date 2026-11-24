@@ -19,7 +19,7 @@ from pathlib import Path
 import imageio_ffmpeg
 
 from .photo import prepare_photo
-from .slides import VOICE_LEAD, total_duration
+from .slides import SCENE_OVERLAP_SECONDS, VOICE_LEAD, total_duration
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,52 @@ def _stage_photo(photo_path: str | None, credit: str | None, assets_dir: Path) -
     return photo
 
 
+_FREE = 'data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion'
+
+
+def _stage_media(slides: list[dict], assets: Path) -> tuple[list[dict], str, str]:
+    """Copy each beat's b-roll (narovva.motion.broll) into the project and write its element: backdrops (photos and
+    clips) go in the background layer, cut-outs and logo badges in front of it, under the scene graphics. Each gets
+    its exact window -- from the spoken line that names its subject to the end of the beat -- which the template
+    animates and HyperFrames uses to play a clip in step with the timeline."""
+    out, back, front, t = [], [], [], 0.0
+    for i, s in enumerate(slides):
+        start = t
+        t += s["duration"] - SCENE_OVERLAP_SECONDS
+        m = s.get("media")
+        src = Path(m["path"]) if m and m.get("path") else None
+        if not m or not src or not src.is_file():
+            out.append({k: v for k, v in s.items() if k != "media"})
+            continue
+        name = f"m{i}{src.suffix.lower()}"
+        shutil.copyfile(src, assets / name)
+        parts = s.get("parts") or []
+        line = min(int(m.get("line") or 0), max(len(parts) - 1, 0))
+        t0 = start + (parts[line]["at"] if parts else 0.0) - 0.12
+        t0 = max(start, round(t0, 3))
+        t1 = round(start + s["duration"], 3)
+        if m.get("type") == "video":
+            t1 = min(t1, round(t0 + float(m.get("seconds") or 0), 3))
+        if t1 - t0 < 1.0:
+            out.append({k: v for k, v in s.items() if k != "media"})
+            continue
+        mid = f"m{i}"
+        use = m.get("use") or "backdrop"
+        if m.get("type") == "video":
+            inner = (f'<video src="assets/{name}" muted playsinline data-start="{t0:.3f}" '
+                     f'data-duration="{t1 - t0:.3f}" data-track-index="3"></video>')
+        else:
+            inner = f'<img src="assets/{name}" alt="" />'
+        if use == "backdrop":
+            back.append(f'<div class="broll" id="{mid}" {_FREE}>{inner}</div>')
+        else:
+            side = "left" if m.get("side") == "left" else "right"
+            front.append(f'<div class="{use} {side}" id="{mid}" {_FREE}>{inner}</div>')
+        media = {"id": mid, "use": use, "move": m.get("move") or "in", "t0": t0, "t1": t1}
+        out.append(dict(s, media=media))
+    return out, "\n        ".join(back), "\n      ".join(front)
+
+
 def stage_project(
     stage_dir: Path, slides: list[dict], *, accent: str, handle: str, brand: str,
     logo_path: str, audio_bytes: bytes | None,
@@ -101,6 +147,7 @@ def stage_project(
     shutil.copyfile(logo_path, stage_dir / "assets" / "logo.png")
 
     total = total_duration([s["duration"] for s in slides])
+    slides, broll_tags, cutout_tags = _stage_media(slides, stage_dir / "assets")
     deck = {
         "slides": slides, "accent": accent, "handle": handle, "brand": brand,
         "photo": _stage_photo(photo_path, photo_credit, stage_dir / "assets"),
@@ -125,6 +172,7 @@ def stage_project(
         )
     html = (stage_dir / "index.html").read_text(encoding="utf-8")
     html = html.replace("{{TOTAL}}", f"{total:.3f}").replace("<!--HF_AUDIO-->", audio_tag)
+    html = html.replace("<!--HF_BROLL-->", broll_tags).replace("<!--HF_CUTOUTS-->", cutout_tags)
     (stage_dir / "index.html").write_text(html, encoding="utf-8")
     return total
 

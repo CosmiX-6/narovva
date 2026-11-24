@@ -167,10 +167,13 @@ class ClaudeCodeChat:
     reads as spent quota, and the next model answers for the rest of the run."""
 
     def __init__(self, model: str, token: str, *, effort: str | None = "medium", timeout: float = 600.0,
-                 binary: str | None = None, run=None):
+                 binary: str | None = None, run=None, tools: tuple[str, ...] = (), cwd: str | None = None):
         import shutil
 
         self.model, self.effort, self._token, self._timeout = model, effort, token, timeout
+        # tools: built-in Claude Code tools this call may use (and is pre-approved for), e.g. ("WebSearch",
+        # "WebFetch") or ("Read",). Nothing else is available -- no Bash, no writes. File tools only see `cwd`.
+        self.tools, self.cwd = tuple(tools), cwd
         self.binary = binary or os.environ.get("CLAUDE_BIN") or shutil.which("claude")
         if not self.binary:
             raise LLMHTTPError(401, "no api key: the claude CLI is not installed (npm i -g @anthropic-ai/claude-code)")
@@ -181,14 +184,18 @@ class ClaudeCodeChat:
             f.write(system + "\n\nReply with a single JSON object and nothing else.")
             sys_file = f.name
         cmd = [self.binary, "-p", "--output-format", "json", "--model", self.model, "--system-prompt-file", sys_file,
-               "--tools", "", "--no-session-persistence", "--strict-mcp-config", "--disable-slash-commands"]
+               "--tools", ",".join(self.tools), "--no-session-persistence", "--strict-mcp-config",
+               "--disable-slash-commands"]
+        if self.tools:
+            cmd += ["--allowedTools", *self.tools]
         if self.effort:
             cmd += ["--effort", self.effort]
         env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
-        env["CLAUDE_CODE_OAUTH_TOKEN"] = self._token
+        if self._token:   # (empty: the CLI's own sign-in, for local trials)
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = self._token
         try:
             proc = self._run(cmd, input=user, capture_output=True, text=True, encoding="utf-8", env=env,
-                             timeout=self._timeout)
+                             timeout=self._timeout, **({"cwd": self.cwd} if self.cwd else {}))
         except subprocess.TimeoutExpired as exc:
             raise LLMHTTPError(504, f"claude CLI timed out after {self._timeout:.0f}s") from exc
         finally:
