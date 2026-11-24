@@ -66,6 +66,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}   # optional: stock photos/clips for b-roll
           LESSON: ${{ inputs.lesson || 'tokens,attention' }}
           GENRE: ${{ inputs.genre || 'health' }}
         run: python -u -m narovva.motion.trial trial-out ${LESSON:+--lesson "$LESSON"} --genre "$GENRE"

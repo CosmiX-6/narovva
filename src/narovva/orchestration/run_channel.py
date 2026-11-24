@@ -32,6 +32,8 @@ from ..llm import LLMUnavailable, build_llm_chain
 from ..logsafe import redact
 from ..metrics.learn import choose_formulas, formula_stats
 from ..motion import render_motion_reel, slide_specs_from_assets, total_duration
+from ..motion.broll import add_broll, caption_credits
+from ..motion.broll import pexels_key as broll_pexels_key
 from ..motion.quality import summary as quality_summary
 from ..motion.slides import SCENE_OVERLAP_SECONDS, _trim, time_parts
 from ..motion.story_first import plain_beat, write_story_first
@@ -370,14 +372,17 @@ def _process_one(
             durations = [slide_duration(c) for c in _slide_char_counts(assets)]
             reel_path = f"/tmp/narovva/{channel.id}/{article.content_id}_reel.mp4"
             video_path = None
+            broll_credits: list[str] = []
             if channel.publish_format == "motion_reel":
                 video_path, narration_voice = _try_motion_reel(
                     channel, assets, brief, track, reel_path.replace("_reel.mp4", "_motion.mp4"),
                     llm=writer_llm(channel, llm, lesson, llm_cache), recent_voices=recent_voices,
                     seed=article.content_id, hook=hook, when=article.published_at, article=article_full,
                     trending=genre_setting.genre == "viral", lesson=lesson, language=lang,
-                    hook_said=package.spoken if package else None,
+                    hook_said=package.spoken if package else None, credits=broll_credits,
                 )
+            if video_path is not None and broll_credits:  # the b-roll's licences ask for credit
+                caption_text = f"{caption_text}\n\n{caption_credits(broll_credits)}"
             if video_path is None:  # plain reel, or motion render failed -> never skip the post
                 video_path = assemble_reel(image_paths, track.audio_bytes, reel_path, durations=durations)
             h = host.upload(
@@ -575,7 +580,7 @@ def _try_motion_reel(
     channel, assets, brief, track: MusicTrack, output_path: str, *,
     llm=None, recent_voices=frozenset(), seed: str = "", hook: str | None = None,
     when: datetime | None = None, article=None, trending: bool = False, lesson=None,
-    language: Language = ENGLISH, hook_said: str | None = None,
+    language: Language = ENGLISH, hook_said: str | None = None, credits: list[str] | None = None,
 ) -> tuple[str | None, str | None]:
     """Render the HyperFrames motion reel (optionally narrated). Returns
     (mp4 path, narration voice); path is None (after logging why) so the
@@ -615,6 +620,18 @@ def _try_motion_reel(
                 max_asks=look.story.viewer_questions, mode=look.story.mode, lesson=lesson,
                 said=said, language=language, spoken_brand=spoken_brand,
             )
+        if board is not None and look.story.mode == "story_first" and lesson is None and look.broll.enabled:
+            # real photos, footage, logos and cut-outs found and edited in by Claude (narovva.motion.broll)
+            try:
+                found = add_broll(
+                    board, getattr(article, "title", "") or brief.headline,
+                    Path(output_path).parent / (Path(output_path).stem + "_broll"), config=look.broll,
+                    token=resolve_env(channel.credentials.claude_code_oauth_token_env), pexels_key=broll_pexels_key(),
+                )
+                if credits is not None:
+                    credits.extend(found)
+            except Exception as exc:  # b-roll is a bonus: the reel goes on without it
+                logger.warning("channel %s: b-roll failed (%s); rendering without it", channel.id, exc)
         if board is not None:
             hook_board(board, hook, said, brief.headline, trending=trending)
             build = lambda: beat_specs(board, stamp_colors=stamp_colors(look), heading_marks=look.heading_marks)

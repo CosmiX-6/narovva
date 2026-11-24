@@ -106,6 +106,11 @@ window.CUScenes = function (K) {
       }
       return;
     }
+    if (s.media && s.media.use === "cutout") { // a person stands in the lower half (b-roll): the words sit up top
+      sc.parentElement.style.justifyContent = "flex-start";
+      kick(sc, s); heading(sc, d.text, 100, mh(330), d.mark); introHead(sc, a, D, true); barIn(sc, a, D, 0.2);
+      return;
+    }
     if (d.icon) badge(sc, d.icon, 132, a(0));
     kick(sc, s); heading(sc, d.text, 116, mh(d.sub ? 460 : 600), d.mark); introHead(sc, a, D, true); barIn(sc, a, D, 0.2);
     if (d.sub) {

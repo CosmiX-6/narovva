@@ -124,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
                         default="animated",
                         help="the animated news sample, the sample lesson, the motion-graphics storyboard sample, "
                              "the slide-based reel, or every 3D set piece")
+    parser.add_argument("--broll", help="a b-roll folder (media.json from narovva.motion.broll) to lay on the beats")
     args = parser.parse_args(argv)
     look = MotionStyleConfig()
     if args.hud:
@@ -153,6 +154,12 @@ def main(argv: list[str] | None = None) -> int:
         slides, subject = sample_story(captions=not args.no_captions, look=look)
     else:
         slides, subject = sample_deck(captions=not args.no_captions, look=look), SAMPLE_SUBJECT
+    if args.broll:
+        import json
+
+        for i, m in json.loads((Path(args.broll) / "media.json").read_text(encoding="utf-8")).items():
+            if int(i) < len(slides):
+                slides[int(i)]["media"] = m
     photo = None if args.photo == "none" else args.photo or write_sample_photo(out / "sample-photo.jpg")
     ui = deck_ui(look, subject=subject, category="AI", brand="CONTEXT UNFILTERED")
     stage_project(

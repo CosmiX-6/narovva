@@ -122,6 +122,16 @@ motion:
     # Beats where the viewer cuts in with the question they'd ask ("Wait, who pays for
     # this?"), answered by the next beat and read in a second voice. 0 = none.
     viewer_questions: 2
+  # Real photos, footage, logos and cut-outs for story-first reels: Claude researches each beat with web search,
+  # narovva searches openly licensed libraries (Wikimedia Commons, Openverse; Pexels with PEXELS_API_KEY), and
+  # Claude looks at the candidates and directs the edit (docs/motion-craft.md). Credits go in the caption.
+  # Spends the claude.ai plan's usage (two Claude Code sessions per reel); without the token it is skipped.
+  broll:
+    enabled: true
+    model: claude-opus-5-5
+    max_beats: 4         # beats that get real media
+    video: true          # clips as backdrops
+    cutouts: true        # people cut out of their photo
   hud:
     # case_file: "(rec dot) REC  CASE FILE: <SUBJECT> ..... 00:00:04:29"
     # breakdown: "(rec dot) <SUBJECT> BREAKDOWN ..... 24 OCT 2026" with the progress line under it

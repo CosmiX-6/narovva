@@ -35,6 +35,19 @@
       .photo-layer img { position: absolute; left: -54px; top: -96px; width: 1188px; height: 2112px; object-fit: cover; }
       #full::after { content: ""; position: absolute; inset: 0;
         background: linear-gradient(to top, rgba(10,14,26,.94) 0%, rgba(10,14,26,.68) 45%, rgba(10,14,26,.4) 100%); }
+      /* B-roll (narovva.motion.broll): a real photo or clip behind a beat, darkened toward the bottom where the
+         text and captions sit; a person cut out of their photo standing at the side; a logo badge. */
+      .broll { inset: 0; overflow: hidden; opacity: 0; }
+      .broll img, .broll video { position: absolute; left: -54px; top: -96px; width: 1188px; height: 2112px; object-fit: cover; }
+      .broll::after { content: ""; position: absolute; inset: 0;
+        background: linear-gradient(to top, rgba(10,14,26,.96) 0%, rgba(10,14,26,.78) 38%, rgba(10,14,26,.42) 70%, rgba(10,14,26,.62) 100%); }
+      .cutout { position: absolute; bottom: 470px; opacity: 0; pointer-events: none; }
+      .cutout.right { right: -20px; } .cutout.left { left: -20px; }
+      .cutout img { display: block; max-width: 620px; max-height: 760px; filter: drop-shadow(0 30px 50px rgba(0,0,0,.65)) drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 70%, white)); }
+      .logo { position: absolute; top: 1190px; width: 230px; height: 230px; padding: 30px; border-radius: 40px; opacity: 0;
+        background: #fff; box-shadow: 0 24px 60px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; }
+      .logo.right { right: 72px; } .logo.left { left: 72px; }
+      .logo img { max-width: 100%; max-height: 100%; display: block; }
       .glow { width: 1300px; height: 1300px; left: -110px; top: 380px; border-radius: 50%;
         background: radial-gradient(circle, var(--accent) 0%, rgba(10,14,26,0) 62%); opacity: .26; }
       #field { left: 0; top: 0; width: 1080px; height: 1920px; }
@@ -219,6 +232,7 @@
       <div class="bg">
         <div class="photo-layer" id="atmo" data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion></div>
         <div class="photo-layer" id="full" data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion></div>
+        <!--HF_BROLL-->
         <div class="glow" id="glow" data-layout-allow-overflow></div>
         <canvas id="field" width="540" height="960" data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion></canvas>
         <div class="grid" id="grid"></div>
@@ -233,6 +247,7 @@
       <div class="hud" id="hud" data-layout-allow-overflow><span class="rec" id="rec"></span><span class="rectxt" id="rectxt">REC</span><span class="label" id="hudlabel"></span><span class="meta" id="hudmeta"></span></div>
       <div class="hudline" id="hudline"><i id="hudprog"></i></div>
       <div class="topbar" id="topbar"><i id="topprog"></i></div>
+      <!--HF_CUTOUTS-->
       <div id="scenes"></div>
       <div id="captions" data-layout-allow-overlap></div>
       <div class="handle" id="handle"></div>
@@ -744,6 +759,32 @@
             tl.fromTo("#tone", { opacity: 0 }, { opacity: 0.85, duration: 0.6, ease: "power2.out", immediateRender: false }, T + (toneWas ? OV + 0.1 : 0));
           }
           toneWas = c;
+        });
+        // B-roll: each piece comes in on the line that names its subject and leaves with its beat. A backdrop fades
+        // in under a slow camera move (push in or out, or a pan); a cut-out rises into the frame and breathes; a logo
+        // badge pops. While a backdrop is up, the generated background behind it steps back.
+        const MOVES = { in: [{ scale: 1.0 }, { scale: 1.12 }], out: [{ scale: 1.14 }, { scale: 1.0 }],
+          left: [{ scale: 1.1, xPercent: 3 }, { scale: 1.1, xPercent: -3 }], right: [{ scale: 1.1, xPercent: -3 }, { scale: 1.1, xPercent: 3 }],
+          up: [{ scale: 1.1, yPercent: 3 }, { scale: 1.1, yPercent: -3 }] };
+        slides.forEach((s) => {
+          const m = s.media;
+          const box = m && document.getElementById(m.id);
+          if (!box) return;
+          const inner = box.firstElementChild, D = m.t1 - m.t0, out = Math.max(m.t0 + 0.4, m.t1 - 0.35);
+          if (m.use === "backdrop") {
+            tl.fromTo(box, { opacity: 0 }, { opacity: 1, duration: 0.45, ease: "power2.out", immediateRender: false }, m.t0);
+            const mv = MOVES[m.move] || MOVES.in;
+            tl.fromTo(inner, mv[0], { ...mv[1], duration: D, ease: "none", immediateRender: false }, m.t0);
+            tl.fromTo("#field", { opacity: 1 }, { opacity: 0.35, duration: 0.45, ease: "power2.out", immediateRender: false }, m.t0);
+            tl.fromTo("#field", { opacity: 0.35 }, { opacity: 1, duration: 0.35, ease: "power2.in", immediateRender: false }, out);
+          } else if (m.use === "cutout") {
+            const dx = box.classList.contains("left") ? -60 : 60;
+            tl.fromTo(box, { opacity: 0, y: 140, x: dx }, { opacity: 1, y: 0, x: 0, duration: 0.5, ease: "power4.out", immediateRender: false }, m.t0);
+            tl.fromTo(inner, { scale: 1 }, { scale: 1.04, transformOrigin: "50% 100%", duration: D, ease: "sine.inOut", immediateRender: false }, m.t0);
+          } else {
+            tl.fromTo(box, { opacity: 0, scale: 0.6, rotation: -6 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)", immediateRender: false }, m.t0);
+          }
+          tl.fromTo(box, { opacity: 1 }, { opacity: 0, duration: 0.35, ease: "power2.in", immediateRender: false }, out);
         });
         let floodWas = 0;
         slides.forEach((s, i) => {

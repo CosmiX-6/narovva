@@ -332,10 +332,32 @@ class StoryConfig(BaseModel):
     viewer_questions: int = Field(2, ge=0, le=3)
 
 
+class BrollConfig(BaseModel):
+    """Real footage, photos, logos and cut-outs found online for a story-first reel (narovva.motion.broll).
+
+    Claude (through Claude Code, on the plan's token) researches what each beat is about with web search and
+    writes the searches; narovva runs them against openly licensed libraries only, downloads and checks the
+    results itself, and Claude then looks at the candidates and directs the edit: which beat gets which picture,
+    as a full-frame backdrop or a cut-out, where it lands and how it moves. Off by default (it spends the plan's
+    usage); without the token or with no good match, the reel renders as it would without it."""
+
+    enabled: bool = False
+    model: str = "claude-opus-5-5"
+    # At most this many beats get real media (the rest keep their animated pictures).
+    max_beats: int = Field(4, ge=1, le=8)
+    # Licensed sources searched: Wikimedia Commons and Openverse need no key; Pexels (stock photos and video
+    # clips) needs PEXELS_API_KEY and is skipped without it.
+    sources: list[Literal["commons", "openverse", "pexels"]] = Field(
+        default_factory=lambda: ["commons", "openverse", "pexels"])
+    video: bool = True     # moving clips when a source has them (Commons, Pexels)
+    cutouts: bool = True   # people cut out of their photo (HyperFrames remove-background) to stand in the scene
+
+
 class MotionStyleConfig(BaseModel):
     """Look of the motion reel ("motion_reel" format); every part can be switched off."""
 
     story: StoryConfig = Field(default_factory=StoryConfig)
+    broll: BrollConfig = Field(default_factory=BrollConfig)
     hud: HudConfig = Field(default_factory=HudConfig)
     # Story progress: on the top edge, under the header, above the footer, or hidden.
     # auto = top for case_file, hud for breakdown, bottom otherwise.
